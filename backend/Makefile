@@ -1,4 +1,4 @@
-.PHONY: test setup shell coverage publish-build publish-test publish publish-clean
+.PHONY: test setup shell coverage publish-build publish-test publish publish-clean infra-up infra-down infra-status
 
 test:
 	uv run pytest
@@ -23,3 +23,12 @@ publish:
 
 publish-clean:
 	rm -r dist/
+
+infra-up:
+	docker compose -f ../docker-compose.yml up -d
+
+infra-down:
+	docker compose -f ../docker-compose.yml down
+
+infra-status:
+	docker compose -f ../docker-compose.yml ps
