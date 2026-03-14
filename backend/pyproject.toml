@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "codehive"
 description = "Multi-platform autonomous coding agent with sub-agent orchestration"
-readme = "README.md"
+readme = "../README.md"
 license = {text = "WTFPL"}
 requires-python = ">=3.10"
 dynamic = ["version"]
