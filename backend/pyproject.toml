@@ -40,6 +40,7 @@ codehive = "codehive.cli:main"
 
 [dependency-groups]
 dev = [
+    "aiosqlite>=0.22.1",
     "hatch",
     "httpx>=0.28.1",
     "pytest",
