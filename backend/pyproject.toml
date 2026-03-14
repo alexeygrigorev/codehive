@@ -11,9 +11,12 @@ requires-python = ">=3.10"
 dynamic = ["version"]
 
 dependencies = [
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
     # Add runtime dependencies here
     "fastapi>=0.135.1",
     "pydantic-settings>=2.13.1",
+    "sqlalchemy[asyncio]>=2.0",
     "uvicorn[standard]>=0.41.0",
 ]
 
