@@ -4,19 +4,51 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codehive"
-version = "0.0.1"
 description = "Multi-platform autonomous coding agent with sub-agent orchestration"
 readme = "README.md"
-license = "MIT"
-requires-python = ">=3.11"
-authors = [
-    { name = "Alexey" },
-]
-classifiers = [
-    "Development Status :: 1 - Planning",
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+license = {text = "WTFPL"}
+requires-python = ">=3.10"
+dynamic = ["version"]
+
+dependencies = [
+    # Add runtime dependencies here
 ]
 
-[project.urls]
-Homepage = "https://github.com/codehive"
+authors = [
+    {name = "Alexey"},
+]
+
+keywords = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+codehive = "codehive.cli:main"
+
+[dependency-groups]
+dev = [
+    "hatch",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["codehive"]
+
+[tool.hatch.version]
+path = "codehive/__version__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
