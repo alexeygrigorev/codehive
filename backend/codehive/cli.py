@@ -251,10 +251,15 @@ def main() -> None:
     sessions_chat_parser = sessions_sub.add_parser("chat", help="Chat with a session")
     sessions_chat_parser.add_argument("session_id", help="Session ID")
 
+    # tui subcommand
+    subparsers.add_parser("tui", help="Launch the interactive terminal dashboard")
+
     args = parser.parse_args()
 
     if args.command == "serve":
         _serve(args)
+    elif args.command == "tui":
+        _tui(args)
     elif args.command == "projects":
         if args.action == "list":
             _projects_list(args)
@@ -275,6 +280,14 @@ def main() -> None:
             sessions_parser.print_help()
     else:
         parser.print_help()
+
+
+def _tui(args: argparse.Namespace) -> None:
+    from codehive.clients.terminal.app import CodehiveApp
+
+    base_url = _get_base_url(args)
+    app = CodehiveApp(base_url=base_url)
+    app.run()
 
 
 def _serve(args: argparse.Namespace) -> None:
