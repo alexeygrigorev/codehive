@@ -6,6 +6,12 @@ from codehive.execution.git_ops import CommitInfo, FileStatus, GitOps, GitOpsErr
 from codehive.execution.policy import CommandPolicy, CommandPolicyViolation, PolicyVerdict
 from codehive.execution.sandbox import Sandbox
 from codehive.execution.shell import ShellResult, ShellRunner
+from codehive.execution.ssh import (
+    SSHConnectionError,
+    SSHConnectionManager,
+    SSHTargetConfig,
+    SSHTargetNotConnectedError,
+)
 
 __all__ = [
     "CommandPolicy",
@@ -19,6 +25,10 @@ __all__ = [
     "PolicyVerdict",
     "Sandbox",
     "SandboxViolationError",
+    "SSHConnectionError",
+    "SSHConnectionManager",
+    "SSHTargetConfig",
+    "SSHTargetNotConnectedError",
     "ShellResult",
     "ShellRunner",
 ]

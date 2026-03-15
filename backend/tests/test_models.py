@@ -183,6 +183,7 @@ class TestBaseMetadata:
             "pending_questions",
             "custom_roles",
             "custom_archetypes",
+            "remote_targets",
         }
         assert expected == set(Base.metadata.tables.keys())
 

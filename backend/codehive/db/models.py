@@ -178,6 +178,28 @@ class PendingQuestion(Base):
     session: Mapped["Session"] = relationship(back_populates="pending_questions")
 
 
+class RemoteTarget(Base):
+    __tablename__ = "remote_targets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
+    )
+    label: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    host: Mapped[str] = mapped_column(Unicode(500), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("22"))
+    username: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    key_path: Mapped[str | None] = mapped_column(Unicode(1024), nullable=True)
+    known_hosts_policy: Mapped[str] = mapped_column(
+        Unicode(50), nullable=False, server_default="auto"
+    )
+    last_connected_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(Unicode(50), nullable=False, server_default="disconnected")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
+
+    workspace: Mapped["Workspace"] = relationship()
+
+
 class CustomRole(Base):
     __tablename__ = "custom_roles"
 
