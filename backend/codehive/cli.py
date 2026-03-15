@@ -254,12 +254,17 @@ def main() -> None:
     # tui subcommand
     subparsers.add_parser("tui", help="Launch the interactive terminal dashboard")
 
+    # telegram subcommand
+    subparsers.add_parser("telegram", help="Start the Telegram bot")
+
     args = parser.parse_args()
 
     if args.command == "serve":
         _serve(args)
     elif args.command == "tui":
         _tui(args)
+    elif args.command == "telegram":
+        _telegram(args)
     elif args.command == "projects":
         if args.action == "list":
             _projects_list(args)
@@ -307,6 +312,24 @@ def _serve(args: argparse.Namespace) -> None:
         reload=reload,
         factory=True,
     )
+
+
+def _telegram(args: argparse.Namespace) -> None:
+    from codehive.clients.telegram.bot import create_bot
+    from codehive.config import Settings
+
+    settings = Settings()
+    token = settings.telegram_bot_token
+    if not token:
+        print(
+            "Error: CODEHIVE_TELEGRAM_BOT_TOKEN is not set. "
+            "Set it via environment variable or .env file.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    base_url = _get_base_url(args)
+    app = create_bot(token=token, base_url=base_url)
+    app.run_polling()
 
 
 if __name__ == "__main__":

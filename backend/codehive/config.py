@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     github_default_token: str = ""
 
+    telegram_bot_token: str = ""
+
     model_config = {
         "env_prefix": "CODEHIVE_",
         "env_file": ".env",
