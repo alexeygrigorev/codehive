@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
+from codehive.api.schemas.diff import DiffFileEntry, SessionDiffsResponse
 from codehive.api.schemas.session import MessageSend, SessionCreate, SessionRead, SessionUpdate
+from codehive.execution.diff import DiffService
 from codehive.core.session import (
     InvalidStatusTransitionError,
     IssueNotFoundError,
@@ -149,6 +151,53 @@ async def list_subagents_endpoint(
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     return [SessionRead.model_validate(c) for c in children]
+
+
+def _count_additions_deletions(diff_text: str) -> tuple[int, int]:
+    """Count addition and deletion lines in a unified diff text."""
+    additions = 0
+    deletions = 0
+    for line in diff_text.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            additions += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            deletions += 1
+    return additions, deletions
+
+
+# Module-level shared DiffService instance.
+_diff_service = DiffService()
+
+
+def get_diff_service() -> DiffService:
+    """Return the shared DiffService singleton."""
+    return _diff_service
+
+
+@sessions_router.get("/{session_id}/diffs", response_model=SessionDiffsResponse)
+async def get_session_diffs_endpoint(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    diff_service: DiffService = Depends(get_diff_service),
+) -> SessionDiffsResponse:
+    """Return all tracked file diffs for a session."""
+    session = await get_session(db, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    changes = diff_service.get_session_changes(str(session_id))
+    files: list[DiffFileEntry] = []
+    for path, diff_text in changes.items():
+        additions, deletions = _count_additions_deletions(diff_text)
+        files.append(
+            DiffFileEntry(
+                path=path,
+                diff_text=diff_text,
+                additions=additions,
+                deletions=deletions,
+            )
+        )
+    return SessionDiffsResponse(session_id=str(session_id), files=files)
 
 
 async def _build_engine(session_config: dict) -> Any:
