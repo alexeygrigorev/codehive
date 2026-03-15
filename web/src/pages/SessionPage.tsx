@@ -8,9 +8,11 @@ import SidebarTabs from "@/components/sidebar/SidebarTabs";
 import SessionModeIndicator from "@/components/SessionModeIndicator";
 import SessionModeSwitcher from "@/components/SessionModeSwitcher";
 import SessionApprovalBadge from "@/components/SessionApprovalBadge";
+import { useResponsive } from "@/hooks/useResponsive";
 
 export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const { isMobile } = useResponsive();
   const [session, setSession] = useState<SessionRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,12 +142,34 @@ export default function SessionPage() {
             />
           </div>
         )}
-        <div className="flex flex-1 min-h-0">
-          <div className="flex-1 min-w-0">
+        <div
+          className={
+            isMobile
+              ? "flex flex-col flex-1 min-h-0"
+              : "flex flex-1 min-h-0"
+          }
+          data-testid="session-content"
+        >
+          <div className={isMobile ? "" : "flex-1 min-w-0"}>
             <ChatPanel sessionId={sessionId} />
           </div>
-          <div className="w-80 border-l border-gray-200">
-            <SidebarTabs sessionId={sessionId} />
+          <div
+            className={
+              isMobile
+                ? "border-t border-gray-200"
+                : "w-80 border-l border-gray-200"
+            }
+          >
+            {isMobile ? (
+              <details className="session-sidebar-toggle">
+                <summary className="px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  Sidebar
+                </summary>
+                <SidebarTabs sessionId={sessionId} />
+              </details>
+            ) : (
+              <SidebarTabs sessionId={sessionId} />
+            )}
           </div>
         </div>
       </div>
