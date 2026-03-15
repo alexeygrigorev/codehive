@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     github_default_token: str = ""
 
     telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_notify_events: list[str] = [
+        "approval.required",
+        "session.completed",
+        "session.failed",
+        "subagent.report_ready",
+        "question.created",
+    ]
 
     model_config = {
         "env_prefix": "CODEHIVE_",

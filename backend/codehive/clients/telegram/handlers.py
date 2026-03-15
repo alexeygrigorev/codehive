@@ -290,3 +290,43 @@ async def stop_handler(update: Update, context: Ctx) -> None:
         await _reply_error(update, resp)
         return
     await update.message.reply_text("Session stopped.")  # type: ignore[union-attr]
+
+
+async def callback_query_handler(update: Update, context: Ctx) -> None:
+    """Handle inline keyboard button presses (approve/reject callbacks).
+
+    Expected callback_data format: ``approve:<action_id>`` or ``reject:<action_id>``.
+    """
+    query = update.callback_query
+    if query is None:
+        return
+    await query.answer()
+
+    data = query.data or ""
+    if ":" not in data:
+        await query.edit_message_text("Error: unrecognised callback data.")
+        return
+
+    action, action_id = data.split(":", 1)
+    if action not in ("approve", "reject"):
+        await query.edit_message_text("Error: unrecognised callback data.")
+        return
+
+    client: httpx.AsyncClient = context.bot_data["http_client"]  # type: ignore[index]
+    endpoint = f"/api/sessions/{action_id}/{action}"
+    try:
+        resp = await _api_request(client, "post", endpoint)
+    except httpx.ConnectError:
+        await query.edit_message_text("Error: cannot reach server.")
+        return
+
+    if resp.status_code >= 400:
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+        await query.edit_message_text(f"Error: {detail}")
+        return
+
+    label = "Approved" if action == "approve" else "Rejected"
+    await query.edit_message_text(f"{label} (action {action_id}).")

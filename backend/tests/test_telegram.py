@@ -473,8 +473,8 @@ class TestBotSetup:
 
             create_bot(token="test-token", base_url="http://localhost:8000")
 
-            # Verify all 11 commands were registered
-            assert mock_app.add_handler.call_count == 11
+            # Verify all 11 command handlers + 1 callback query handler
+            assert mock_app.add_handler.call_count == 12
             registered = set()
             for call in mock_app.add_handler.call_args_list:
                 handler = call[0][0]
