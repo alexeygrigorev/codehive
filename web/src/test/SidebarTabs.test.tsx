@@ -16,7 +16,11 @@ vi.mock("@/components/sidebar/TimelinePanel", () => ({
   default: () => <div data-testid="timeline-panel">TimelinePanel</div>,
 }));
 vi.mock("@/components/sidebar/SubAgentPanel", () => ({
-  default: () => <div data-testid="sub-agent-panel">SubAgentPanel</div>,
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="sub-agent-panel" data-session-id={sessionId ?? ""}>
+      SubAgentPanel
+    </div>
+  ),
 }));
 
 describe("SidebarTabs", () => {
@@ -60,6 +64,17 @@ describe("SidebarTabs", () => {
 
     expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
     expect(screen.getByTestId("changed-files-panel")).toBeInTheDocument();
+  });
+
+  it("passes sessionId to SubAgentPanel when sub-agents tab is active", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Sub-agents"));
+
+    const panel = screen.getByTestId("sub-agent-panel");
+    expect(panel).toBeInTheDocument();
+    expect(panel.getAttribute("data-session-id")).toBe("s1");
   });
 
   it("the active tab has a distinct CSS class", async () => {

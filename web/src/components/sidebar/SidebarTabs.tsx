@@ -67,7 +67,7 @@ export default function SidebarTabs({
           <ChangedFilesPanel sessionId={sessionId} />
         )}
         {activeTab === "timeline" && <TimelinePanel sessionId={sessionId} />}
-        {activeTab === "sub-agents" && <SubAgentPanel />}
+        {activeTab === "sub-agents" && <SubAgentPanel sessionId={sessionId} />}
       </div>
     </div>
   );
