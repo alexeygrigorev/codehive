@@ -54,7 +54,11 @@ async def configure_github(
         "repo": body.repo,
         "token": body.token,
         "last_import_at": None,
+        "trigger_mode": body.trigger_mode,
     }
+
+    if body.webhook_secret is not None:
+        config["webhook_secret"] = body.webhook_secret
 
     project.github_config = config
 
@@ -87,6 +91,7 @@ async def github_status(
         repo=config["repo"],
         token_masked=_mask_token(config["token"]),
         last_import_at=config.get("last_import_at"),
+        trigger_mode=config.get("trigger_mode", "manual"),
     )
 
 

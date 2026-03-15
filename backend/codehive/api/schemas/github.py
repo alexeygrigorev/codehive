@@ -11,6 +11,8 @@ class GitHubConfigureRequest(BaseModel):
     owner: str = Field(..., min_length=1)
     repo: str = Field(..., min_length=1)
     token: str = Field(..., min_length=1)
+    webhook_secret: str | None = None
+    trigger_mode: str = "manual"
 
 
 class GitHubConfigureResponse(BaseModel):
@@ -43,3 +45,4 @@ class GitHubStatusResponse(BaseModel):
     repo: str | None = None
     token_masked: str | None = None
     last_import_at: str | None = None
+    trigger_mode: str | None = None
