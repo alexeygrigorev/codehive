@@ -676,7 +676,7 @@ class TestMessagesEndpointIntegration:
         mock_engine = MagicMock()
         mock_engine.send_message = fake_send_message
 
-        async def mock_build_engine(session_config):
+        async def mock_build_engine(session_config, engine_type="native"):
             return mock_engine
 
         with patch(
@@ -706,7 +706,7 @@ class TestMessagesEndpointIntegration:
         mock_engine = MagicMock()
         mock_engine.send_message = failing_send
 
-        async def mock_build_engine(session_config):
+        async def mock_build_engine(session_config, engine_type="native"):
             return mock_engine
 
         with patch(

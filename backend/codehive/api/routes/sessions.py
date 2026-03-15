@@ -200,51 +200,67 @@ async def get_session_diffs_endpoint(
     return SessionDiffsResponse(session_id=str(session_id), files=files)
 
 
-async def _build_engine(session_config: dict) -> Any:
-    """Construct a NativeEngine with dependencies from config.
+async def _build_engine(session_config: dict, engine_type: str = "native") -> Any:
+    """Construct an engine adapter based on the engine type.
+
+    Returns a NativeEngine for ``"native"`` and a ClaudeCodeEngine for
+    ``"claude_code"``.  Raises 400 for unknown engine types.
 
     Separated into a helper so tests can override it easily.
     """
     from pathlib import Path
 
-    from anthropic import AsyncAnthropic
-
-    from codehive.config import Settings
-    from codehive.core.events import EventBus
-    from codehive.engine.native import NativeEngine
     from codehive.execution.diff import DiffService
-    from codehive.execution.file_ops import FileOps
-    from codehive.execution.git_ops import GitOps
-    from codehive.execution.shell import ShellRunner
 
-    settings = Settings()
-    if not settings.anthropic_api_key:
-        raise HTTPException(status_code=503, detail="Engine not configured")
-
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-    redis_client: Any = None
-    try:
-        from redis.asyncio import Redis
-
-        redis_client = Redis.from_url(settings.redis_url)
-    except Exception:
-        pass
-
-    event_bus = EventBus(redis_client) if redis_client else None  # type: ignore[arg-type]
     project_root = Path(session_config.get("project_root", "/tmp"))
-    file_ops = FileOps(project_root=project_root)
-    shell_runner = ShellRunner()
-    git_ops = GitOps(repo_path=project_root)
     diff_service = DiffService()
 
-    return NativeEngine(
-        client=client,
-        event_bus=event_bus,  # type: ignore[arg-type]
-        file_ops=file_ops,
-        shell_runner=shell_runner,
-        git_ops=git_ops,
-        diff_service=diff_service,
-    )
+    if engine_type == "claude_code":
+        from codehive.engine.claude_code_engine import ClaudeCodeEngine
+
+        return ClaudeCodeEngine(
+            diff_service=diff_service,
+            working_dir=str(project_root),
+        )
+
+    if engine_type == "native":
+        from anthropic import AsyncAnthropic
+
+        from codehive.config import Settings
+        from codehive.core.events import EventBus
+        from codehive.engine.native import NativeEngine
+        from codehive.execution.file_ops import FileOps
+        from codehive.execution.git_ops import GitOps
+        from codehive.execution.shell import ShellRunner
+
+        settings = Settings()
+        if not settings.anthropic_api_key:
+            raise HTTPException(status_code=503, detail="Engine not configured")
+
+        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        redis_client: Any = None
+        try:
+            from redis.asyncio import Redis
+
+            redis_client = Redis.from_url(settings.redis_url)
+        except Exception:
+            pass
+
+        event_bus = EventBus(redis_client) if redis_client else None  # type: ignore[arg-type]
+        file_ops = FileOps(project_root=project_root)
+        shell_runner = ShellRunner()
+        git_ops = GitOps(repo_path=project_root)
+
+        return NativeEngine(
+            client=client,
+            event_bus=event_bus,  # type: ignore[arg-type]
+            file_ops=file_ops,
+            shell_runner=shell_runner,
+            git_ops=git_ops,
+            diff_service=diff_service,
+        )
+
+    raise HTTPException(status_code=400, detail=f"Unknown engine type: {engine_type}")
 
 
 @sessions_router.post("/{session_id}/messages")
@@ -260,7 +276,7 @@ async def send_message_endpoint(
         raise HTTPException(status_code=404, detail="Session not found")
 
     try:
-        engine = await _build_engine(session.config)
+        engine = await _build_engine(session.config, engine_type=session.engine)
 
         events: list[dict[str, Any]] = []
         async for event in engine.send_message(session_id, body.content, db=db):
