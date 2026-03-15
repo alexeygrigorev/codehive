@@ -3,8 +3,11 @@ name: Tests
 on: [push, pull_request]
 
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
@@ -14,5 +17,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install uv
-      - run: uv sync
-      - run: uv run pytest
+      - run: uv sync --dev
+      - run: uv run ruff check
+      - run: uv run pytest tests/ -v --ignore=tests/test_models.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npx vitest run
