@@ -136,6 +136,41 @@ async def delete_session(
     await db.commit()
 
 
+async def list_child_sessions(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+) -> list[SessionModel]:
+    """Return all sessions where parent_session_id == session_id.
+
+    Raises SessionNotFoundError if the parent session does not exist.
+    """
+    parent = await db.get(SessionModel, session_id)
+    if parent is None:
+        raise SessionNotFoundError(f"Session {session_id} not found")
+
+    result = await db.execute(
+        select(SessionModel).where(SessionModel.parent_session_id == session_id)
+    )
+    return list(result.scalars().all())
+
+
+async def get_session_tree(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+) -> dict:
+    """Return the session plus all its direct children (one level deep).
+
+    Returns a dict with 'session' and 'children' keys.
+    Raises SessionNotFoundError if the session does not exist.
+    """
+    session = await db.get(SessionModel, session_id)
+    if session is None:
+        raise SessionNotFoundError(f"Session {session_id} not found")
+
+    children = await list_child_sessions(db, session_id)
+    return {"session": session, "children": children}
+
+
 async def pause_session(
     db: AsyncSession,
     session_id: uuid.UUID,

@@ -2,8 +2,9 @@
 
 import uuid
 from datetime import datetime
+from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SessionCreate(BaseModel):
@@ -40,6 +41,47 @@ class SessionRead(BaseModel):
     status: str
     config: dict
     created_at: datetime
+
+
+class SubAgentReportStatus(str, Enum):
+    """Allowed statuses for a sub-agent report."""
+
+    completed = "completed"
+    failed = "failed"
+    blocked = "blocked"
+
+
+class SubAgentReport(BaseModel):
+    """Structured report returned by a sub-agent upon completion."""
+
+    status: SubAgentReportStatus
+    summary: str
+    files_changed: list[str]
+    tests: dict[str, int]
+    warnings: list[str]
+
+    @field_validator("summary")
+    @classmethod
+    def summary_must_be_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("summary must be non-empty")
+        return v
+
+    @field_validator("tests")
+    @classmethod
+    def tests_must_have_required_keys(cls, v: dict[str, int]) -> dict[str, int]:
+        if "added" not in v or "passing" not in v:
+            raise ValueError("tests must have 'added' and 'passing' keys")
+        return v
+
+
+class SessionTreeRead(BaseModel):
+    """A session with its direct children."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    session: SessionRead
+    children: list[SessionRead]
 
 
 class MessageSend(BaseModel):

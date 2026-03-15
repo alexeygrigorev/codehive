@@ -9,6 +9,8 @@ from typing import Any, AsyncIterator
 from anthropic import AsyncAnthropic
 
 from codehive.core.events import EventBus
+from codehive.core.subagent import SubAgentManager
+from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -87,6 +89,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "required": ["pattern"],
         },
     },
+    SPAWN_SUBAGENT_TOOL,
 ]
 
 # Default model for the native engine
@@ -128,6 +131,7 @@ class NativeEngine:
         self._model = model
         self._sessions: dict[uuid.UUID, _SessionState] = {}
         self._task_fetcher: Any = None  # Optional callback for fetching tasks
+        self._subagent_manager = SubAgentManager(event_bus=event_bus)
 
     @property
     def tool_definitions(self) -> list[dict[str, Any]]:
@@ -234,7 +238,12 @@ class NativeEngine:
                     yield started_event
 
                     # Execute the tool
-                    result = await self._execute_tool(tool_block.name, tool_block.input)
+                    result = await self._execute_tool(
+                        tool_block.name,
+                        tool_block.input,
+                        session_id=session_id,
+                        db=db,
+                    )
 
                     # Emit tool.call.finished
                     finished_event = {
@@ -347,7 +356,14 @@ class NativeEngine:
     # Internal tool dispatch
     # ------------------------------------------------------------------
 
-    async def _execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    async def _execute_tool(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        session_id: uuid.UUID | None = None,
+        db: Any = None,
+    ) -> dict[str, Any]:
         """Dispatch a tool call to the appropriate execution layer component.
 
         Returns a dict with ``content`` (str) and optionally ``is_error`` (bool).
@@ -399,6 +415,22 @@ class NativeEngine:
                 path = tool_input.get("path", ".")
                 files = await self._file_ops.list_files(path, tool_input["pattern"])
                 return {"content": json.dumps(files)}
+
+            elif tool_name == "spawn_subagent":
+                if session_id is None or db is None:
+                    return {
+                        "content": "spawn_subagent requires an active session with DB access",
+                        "is_error": True,
+                    }
+                result = await self._subagent_manager.spawn_subagent(
+                    db,
+                    parent_session_id=session_id,
+                    mission=tool_input["mission"],
+                    role=tool_input["role"],
+                    scope=tool_input["scope"],
+                    config=tool_input.get("config"),
+                )
+                return {"content": json.dumps(result)}
 
             else:
                 return {"content": f"Unknown tool: {tool_name}", "is_error": True}

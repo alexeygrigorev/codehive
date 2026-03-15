@@ -17,6 +17,7 @@ from codehive.core.session import (
     create_session,
     delete_session,
     get_session,
+    list_child_sessions,
     list_sessions,
     pause_session,
     resume_session,
@@ -135,6 +136,19 @@ async def resume_session_endpoint(
     except InvalidStatusTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return SessionRead.model_validate(session)
+
+
+@sessions_router.get("/{session_id}/subagents", response_model=list[SessionRead])
+async def list_subagents_endpoint(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[SessionRead]:
+    """Return the list of child sessions (sub-agents) for a session."""
+    try:
+        children = await list_child_sessions(db, session_id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return [SessionRead.model_validate(c) for c in children]
 
 
 async def _build_engine(session_config: dict) -> Any:
