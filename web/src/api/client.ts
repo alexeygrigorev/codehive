@@ -6,6 +6,8 @@ interface ApiClient {
   get: (path: string) => Promise<Response>;
   post: (path: string, body: unknown) => Promise<Response>;
   patch: (path: string, body: unknown) => Promise<Response>;
+  put: (path: string, body: unknown) => Promise<Response>;
+  delete: (path: string) => Promise<Response>;
 }
 
 export const apiClient: ApiClient = {
@@ -25,6 +27,18 @@ export const apiClient: ApiClient = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    });
+  },
+  put(path: string, body: unknown): Promise<Response> {
+    return fetch(`${this.baseURL}${path}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+  delete(path: string): Promise<Response> {
+    return fetch(`${this.baseURL}${path}`, {
+      method: "DELETE",
     });
   },
 };

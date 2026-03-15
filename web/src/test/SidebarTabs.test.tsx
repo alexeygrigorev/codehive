@@ -29,9 +29,16 @@ vi.mock("@/components/sidebar/QuestionsPanel", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/sidebar/CheckpointPanel", () => ({
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="checkpoint-panel" data-session-id={sessionId ?? ""}>
+      CheckpointPanel
+    </div>
+  ),
+}));
 
 describe("SidebarTabs", () => {
-  it("renders all five tab labels", () => {
+  it("renders all six tab labels", () => {
     render(<SidebarTabs sessionId="s1" />);
 
     expect(screen.getByText("ToDo")).toBeInTheDocument();
@@ -39,6 +46,7 @@ describe("SidebarTabs", () => {
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getByText("Sub-agents")).toBeInTheDocument();
     expect(screen.getByText("Questions")).toBeInTheDocument();
+    expect(screen.getByText("Checkpoints")).toBeInTheDocument();
   });
 
   it("defaults to the ToDo tab being selected", () => {
@@ -117,6 +125,26 @@ describe("SidebarTabs", () => {
     await user.click(screen.getByText("Questions"));
 
     const panel = screen.getByTestId("questions-panel");
+    expect(panel.getAttribute("data-session-id")).toBe("s1");
+  });
+
+  it("clicking the Checkpoints tab renders CheckpointPanel", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Checkpoints"));
+
+    expect(screen.getByTestId("checkpoint-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
+  });
+
+  it("passes sessionId to CheckpointPanel when checkpoints tab is active", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Checkpoints"));
+
+    const panel = screen.getByTestId("checkpoint-panel");
     expect(panel.getAttribute("data-session-id")).toBe("s1");
   });
 });
