@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator
 
+from codehive.core.redaction import SecretRedactor
 from codehive.execution.policy import CommandPolicy, CommandPolicyViolation, PolicyVerdict
 
 
@@ -30,6 +31,7 @@ class ShellRunner:
         timeout_seconds: float = 30.0,
         env: dict[str, str] | None = None,
         policy: CommandPolicy | None = None,
+        redactor: SecretRedactor | None = None,
     ) -> ShellResult:
         """Run a command and return the collected result.
 
@@ -39,6 +41,7 @@ class ShellRunner:
             timeout_seconds: Maximum seconds before the process is killed.
             env: Optional environment variables (merged with system env if provided).
             policy: Optional command policy to check before execution.
+            redactor: Optional secret redactor to apply to stdout/stderr.
 
         Returns:
             ShellResult with exit_code, stdout, stderr, and timed_out flag.
@@ -89,10 +92,17 @@ class ShellRunner:
             stdout_bytes = b""
             stderr_bytes = b""
 
+        stdout_str = stdout_bytes.decode("utf-8", errors="replace")
+        stderr_str = stderr_bytes.decode("utf-8", errors="replace")
+
+        if redactor is not None:
+            stdout_str = redactor.redact(stdout_str)
+            stderr_str = redactor.redact(stderr_str)
+
         return ShellResult(
             exit_code=process.returncode if process.returncode is not None else -1,
-            stdout=stdout_bytes.decode("utf-8", errors="replace"),
-            stderr=stderr_bytes.decode("utf-8", errors="replace"),
+            stdout=stdout_str,
+            stderr=stderr_str,
             timed_out=timed_out,
         )
 
@@ -103,6 +113,7 @@ class ShellRunner:
         timeout_seconds: float = 30.0,
         env: dict[str, str] | None = None,
         policy: CommandPolicy | None = None,
+        redactor: SecretRedactor | None = None,
     ) -> AsyncIterator[str]:
         """Run a command and yield stdout lines as they are produced.
 
@@ -112,6 +123,7 @@ class ShellRunner:
             timeout_seconds: Maximum seconds before the process is killed.
             env: Optional environment variables.
             policy: Optional command policy to check before execution.
+            redactor: Optional secret redactor to apply to each yielded line.
 
         Yields:
             Lines from stdout as they become available.
@@ -156,7 +168,7 @@ class ShellRunner:
         try:
             async with asyncio.timeout(timeout_seconds):
                 async for line in _read_lines():
-                    yield line
+                    yield redactor.redact(line) if redactor is not None else line
         except TimeoutError:
             try:
                 process.kill()

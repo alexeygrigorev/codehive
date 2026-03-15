@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codehive.core.redaction import SecretRedactor
 from codehive.db.models import Event
 from codehive.db.models import Session as SessionModel
 
@@ -32,11 +33,18 @@ class EventBus:
         session_id: uuid.UUID,
         event_type: str,
         data: dict,
+        redactor: SecretRedactor | None = None,
     ) -> Event:
         """Persist an event to the DB and publish to Redis.
 
+        If a *redactor* is provided, all string values in *data* are
+        redacted before persisting to the DB and publishing to Redis.
+
         Returns the created Event model instance.
         """
+        if redactor is not None:
+            data = redactor.redact_dict(data)
+
         event = Event(
             session_id=session_id,
             type=event_type,
