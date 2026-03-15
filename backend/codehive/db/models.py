@@ -185,3 +185,13 @@ class CustomRole(Base):
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
+
+
+class CustomArchetype(Base):
+    __tablename__ = "custom_archetypes"
+
+    name: Mapped[str] = mapped_column(Unicode(255), primary_key=True)
+    definition: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))

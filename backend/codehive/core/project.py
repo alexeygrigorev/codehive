@@ -6,7 +6,15 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codehive.core.archetypes import (
+    ArchetypeNotFoundError,
+    apply_archetype_to_knowledge,
+)
 from codehive.db.models import Project, Workspace
+
+
+class InvalidArchetypeError(Exception):
+    """Raised when an invalid archetype name is provided."""
 
 
 class WorkspaceNotFoundError(Exception):
@@ -30,10 +38,21 @@ async def create_project(
     description: str | None = None,
     archetype: str | None = None,
 ) -> Project:
-    """Create a new project. Raises WorkspaceNotFoundError if workspace doesn't exist."""
+    """Create a new project. Raises WorkspaceNotFoundError if workspace doesn't exist.
+
+    If archetype is set, applies archetype roles and settings to the project knowledge.
+    Raises InvalidArchetypeError if the archetype name is not valid.
+    """
     workspace = await session.get(Workspace, workspace_id)
     if workspace is None:
         raise WorkspaceNotFoundError(f"Workspace {workspace_id} not found")
+
+    knowledge: dict = {}
+    if archetype is not None:
+        try:
+            knowledge = apply_archetype_to_knowledge(knowledge, archetype)
+        except ArchetypeNotFoundError:
+            raise InvalidArchetypeError(f"Archetype '{archetype}' not found")
 
     project = Project(
         workspace_id=workspace_id,
@@ -41,7 +60,7 @@ async def create_project(
         path=path,
         description=description,
         archetype=archetype,
-        knowledge={},
+        knowledge=knowledge,
         created_at=datetime.now(timezone.utc),
     )
     session.add(project)

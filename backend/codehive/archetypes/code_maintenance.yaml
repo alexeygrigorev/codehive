@@ -1,0 +1,16 @@
+name: code_maintenance
+display_name: Code Maintenance
+description: Maintenance workflow for bug fixes, refactoring, and code quality improvements.
+roles:
+  - bug_fixer
+  - refactor_engineer
+  - tester
+workflow:
+  - triage
+  - diagnosis
+  - fix
+  - verification
+default_settings:
+  auto_start_tasks: true
+  require_approval_destructive: false
+tech_stack: []

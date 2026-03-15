@@ -1,0 +1,16 @@
+name: software_development
+display_name: Software Development
+description: Full development workflow with PM, developer, and tester roles.
+roles:
+  - product_manager
+  - developer
+  - tester
+workflow:
+  - planning
+  - implementation
+  - testing
+  - review
+default_settings:
+  auto_start_tasks: true
+  require_approval_destructive: true
+tech_stack: []

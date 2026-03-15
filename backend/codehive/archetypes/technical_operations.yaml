@@ -1,0 +1,15 @@
+name: technical_operations
+display_name: Technical Operations
+description: Operations-focused workflow for infrastructure, deployment, and monitoring tasks.
+roles:
+  - developer
+  - tester
+workflow:
+  - assessment
+  - implementation
+  - validation
+  - deployment
+default_settings:
+  auto_start_tasks: false
+  require_approval_destructive: true
+tech_stack: []

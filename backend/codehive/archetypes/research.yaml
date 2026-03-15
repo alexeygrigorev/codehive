@@ -1,0 +1,14 @@
+name: research
+display_name: Research
+description: Research-oriented workflow with a research agent for investigation and analysis.
+roles:
+  - research_agent
+  - product_manager
+workflow:
+  - investigation
+  - analysis
+  - reporting
+default_settings:
+  auto_start_tasks: false
+  require_approval_destructive: false
+tech_stack: []

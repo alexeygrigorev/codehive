@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from codehive.api.deps import get_db
 from codehive.api.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 from codehive.core.project import (
+    InvalidArchetypeError,
     ProjectHasDependentsError,
     ProjectNotFoundError,
     WorkspaceNotFoundError,
@@ -37,6 +38,8 @@ async def create_project_endpoint(
         )
     except WorkspaceNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    except InvalidArchetypeError:
+        raise HTTPException(status_code=400, detail=f"Invalid archetype: '{body.archetype}'")
     return ProjectRead.model_validate(project)
 
 
