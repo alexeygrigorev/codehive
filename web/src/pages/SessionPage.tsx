@@ -4,6 +4,7 @@ import { WebSocketProvider } from "@/context/WebSocketContext";
 import { apiClient } from "@/api/client";
 import type { SessionRead } from "@/api/sessions";
 import ChatPanel from "@/components/ChatPanel";
+import SidebarTabs from "@/components/sidebar/SidebarTabs";
 import SessionModeIndicator from "@/components/SessionModeIndicator";
 import SessionModeSwitcher from "@/components/SessionModeSwitcher";
 import SessionApprovalBadge from "@/components/SessionApprovalBadge";
@@ -139,8 +140,13 @@ export default function SessionPage() {
             />
           </div>
         )}
-        <div className="flex-1 min-h-0">
-          <ChatPanel sessionId={sessionId} />
+        <div className="flex flex-1 min-h-0">
+          <div className="flex-1 min-w-0">
+            <ChatPanel sessionId={sessionId} />
+          </div>
+          <div className="w-80 border-l border-gray-200">
+            <SidebarTabs sessionId={sessionId} />
+          </div>
         </div>
       </div>
     </WebSocketProvider>

@@ -42,6 +42,15 @@ vi.mock("@/components/ChatPanel", () => ({
   ),
 }));
 
+// Mock SidebarTabs to isolate SessionPage tests
+vi.mock("@/components/sidebar/SidebarTabs", () => ({
+  default: ({ sessionId }: { sessionId: string }) => (
+    <div data-testid="sidebar-tabs" data-session-id={sessionId}>
+      SidebarTabs
+    </div>
+  ),
+}));
+
 import { apiClient } from "@/api/client";
 
 const mockGet = vi.mocked(apiClient.get);
@@ -124,6 +133,25 @@ describe("SessionPage", () => {
         "sess-123",
       );
     });
+  });
+
+  it("renders SidebarTabs alongside ChatPanel", async () => {
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(mockSession), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-tabs")).toHaveAttribute(
+        "data-session-id",
+        "sess-123",
+      );
+    });
+    expect(screen.getByTestId("chat-panel")).toBeInTheDocument();
   });
 
   it("renders ChatPanel with session ID", async () => {

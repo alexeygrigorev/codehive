@@ -40,6 +40,14 @@ vi.mock("@/components/ChatPanel", () => ({
   ),
 }));
 
+vi.mock("@/components/sidebar/SidebarTabs", () => ({
+  default: ({ sessionId }: { sessionId: string }) => (
+    <div data-testid="sidebar-tabs" data-session-id={sessionId}>
+      SidebarTabs
+    </div>
+  ),
+}));
+
 import { apiClient } from "@/api/client";
 
 const mockGet = vi.mocked(apiClient.get);
