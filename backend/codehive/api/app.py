@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from codehive.__version__ import __version__
 from codehive.api.routes.checkpoints import checkpoints_router, session_checkpoints_router
 from codehive.api.routes.events import router as events_router
+from codehive.api.routes.issues import issues_router, project_issues_router
 from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.questions import questions_router
 from codehive.api.routes.archetypes import router as archetypes_router
@@ -19,6 +20,8 @@ def create_app() -> FastAPI:
     app = FastAPI(title="codehive", version=__version__)
 
     app.include_router(projects_router)
+    app.include_router(project_issues_router)
+    app.include_router(issues_router)
     app.include_router(project_sessions_router)
     app.include_router(sessions_router)
     app.include_router(session_checkpoints_router)
