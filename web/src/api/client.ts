@@ -4,12 +4,20 @@ const baseURL: string =
 interface ApiClient {
   baseURL: string;
   get: (path: string) => Promise<Response>;
+  post: (path: string, body: unknown) => Promise<Response>;
 }
 
 export const apiClient: ApiClient = {
   baseURL,
   get(path: string): Promise<Response> {
     return fetch(`${this.baseURL}${path}`);
+  },
+  post(path: string, body: unknown): Promise<Response> {
+    return fetch(`${this.baseURL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
   },
 };
 

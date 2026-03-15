@@ -39,7 +39,8 @@ describe("App routing", () => {
   it("renders SessionPage at /sessions/:sessionId", () => {
     renderWithRouter("/sessions/xyz-789");
     expect(screen.getByRole("heading", { name: /session/i })).toBeInTheDocument();
-    expect(screen.getByText(/xyz-789/)).toBeInTheDocument();
+    // SessionPage now fetches data asynchronously, so it shows loading state initially
+    expect(screen.getByText(/loading session/i)).toBeInTheDocument();
   });
 
   it("renders NotFoundPage for unknown routes", () => {

@@ -6,6 +6,42 @@ describe("API client", () => {
     expect(apiClient.baseURL).toBe("http://localhost:8000");
   });
 
+  describe("post", () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("sends POST request with JSON body and correct Content-Type header", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      );
+
+      await apiClient.post("/api/test", { key: "value" });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "http://localhost:8000/api/test",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: "value" }),
+        },
+      );
+    });
+
+    it("constructs URL from baseURL + path", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response("", { status: 200 }),
+      );
+
+      await apiClient.post("/api/sessions/s1/messages", { content: "hi" });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "http://localhost:8000/api/sessions/s1/messages",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
+
   describe("healthCheck", () => {
     beforeEach(() => {
       vi.restoreAllMocks();
