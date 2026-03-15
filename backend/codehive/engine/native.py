@@ -10,6 +10,11 @@ from anthropic import AsyncAnthropic
 
 from codehive.core.events import EventBus
 from codehive.core.subagent import SubAgentManager
+from codehive.engine.orchestrator import (
+    ORCHESTRATOR_ALLOWED_TOOLS,
+    ORCHESTRATOR_SYSTEM_PROMPT,
+    filter_tools,
+)
 from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -152,15 +157,26 @@ class NativeEngine:
         message: str,
         *,
         db: Any = None,
+        mode: str | None = None,
     ) -> AsyncIterator[dict]:
         """Send a user message and run the conversation loop.
 
         Yields event dicts for every message exchange and tool call.
+
+        When *mode* is ``"orchestrator"``, the tool set is restricted to
+        read-only and spawn tools, and the orchestrator system prompt is
+        prepended.  Any tool call outside the allowed set is rejected with
+        an error result.
         """
         state = self._sessions.get(session_id)
         if state is None:
             state = _SessionState()
             self._sessions[session_id] = state
+
+        is_orchestrator = mode == "orchestrator"
+
+        # Resolve tool set based on mode
+        tools = filter_tools(TOOL_DEFINITIONS) if is_orchestrator else TOOL_DEFINITIONS
 
         # Check if paused before starting
         if state.paused:
@@ -185,6 +201,16 @@ class NativeEngine:
             "session_id": str(session_id),
         }
 
+        # Build API kwargs
+        api_kwargs: dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": 4096,
+            "tools": tools,
+            "messages": state.messages,
+        }
+        if is_orchestrator:
+            api_kwargs["system"] = ORCHESTRATOR_SYSTEM_PROMPT
+
         # Conversation loop
         while True:
             if state.paused:
@@ -192,12 +218,7 @@ class NativeEngine:
                 return
 
             # Call Anthropic API
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=4096,
-                tools=TOOL_DEFINITIONS,
-                messages=state.messages,
-            )
+            response = await self._client.messages.create(**api_kwargs)
 
             # Process content blocks
             tool_use_blocks = []
@@ -237,13 +258,24 @@ class NativeEngine:
                         )
                     yield started_event
 
-                    # Execute the tool
-                    result = await self._execute_tool(
-                        tool_block.name,
-                        tool_block.input,
-                        session_id=session_id,
-                        db=db,
-                    )
+                    # Defensive: reject disallowed tools in orchestrator mode
+                    if is_orchestrator and tool_block.name not in ORCHESTRATOR_ALLOWED_TOOLS:
+                        result = {
+                            "content": (
+                                f"Tool '{tool_block.name}' is not available in "
+                                f"orchestrator mode. Allowed tools: "
+                                f"{', '.join(sorted(ORCHESTRATOR_ALLOWED_TOOLS))}"
+                            ),
+                            "is_error": True,
+                        }
+                    else:
+                        # Execute the tool
+                        result = await self._execute_tool(
+                            tool_block.name,
+                            tool_block.input,
+                            session_id=session_id,
+                            db=db,
+                        )
 
                     # Emit tool.call.finished
                     finished_event = {
