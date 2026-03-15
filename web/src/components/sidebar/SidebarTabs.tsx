@@ -3,8 +3,14 @@ import TodoPanel from "./TodoPanel";
 import ChangedFilesPanel from "./ChangedFilesPanel";
 import TimelinePanel from "./TimelinePanel";
 import SubAgentPanel from "./SubAgentPanel";
+import QuestionsPanel from "./QuestionsPanel";
 
-export type TabKey = "todo" | "changed-files" | "timeline" | "sub-agents";
+export type TabKey =
+  | "todo"
+  | "changed-files"
+  | "timeline"
+  | "sub-agents"
+  | "questions";
 
 interface TabDef {
   key: TabKey;
@@ -16,6 +22,7 @@ const TABS: TabDef[] = [
   { key: "changed-files", label: "Changed Files" },
   { key: "timeline", label: "Timeline" },
   { key: "sub-agents", label: "Sub-agents" },
+  { key: "questions", label: "Questions" },
 ];
 
 interface SidebarTabsProps {
@@ -68,6 +75,7 @@ export default function SidebarTabs({
         )}
         {activeTab === "timeline" && <TimelinePanel sessionId={sessionId} />}
         {activeTab === "sub-agents" && <SubAgentPanel sessionId={sessionId} />}
+        {activeTab === "questions" && <QuestionsPanel sessionId={sessionId} />}
       </div>
     </div>
   );

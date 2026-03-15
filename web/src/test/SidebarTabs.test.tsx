@@ -22,15 +22,23 @@ vi.mock("@/components/sidebar/SubAgentPanel", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/sidebar/QuestionsPanel", () => ({
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="questions-panel" data-session-id={sessionId ?? ""}>
+      QuestionsPanel
+    </div>
+  ),
+}));
 
 describe("SidebarTabs", () => {
-  it("renders all four tab labels", () => {
+  it("renders all five tab labels", () => {
     render(<SidebarTabs sessionId="s1" />);
 
     expect(screen.getByText("ToDo")).toBeInTheDocument();
     expect(screen.getByText("Changed Files")).toBeInTheDocument();
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getByText("Sub-agents")).toBeInTheDocument();
+    expect(screen.getByText("Questions")).toBeInTheDocument();
   });
 
   it("defaults to the ToDo tab being selected", () => {
@@ -90,5 +98,25 @@ describe("SidebarTabs", () => {
     expect(screen.getByText("Timeline").className).toContain(
       "sidebar-tab-active",
     );
+  });
+
+  it("clicking the Questions tab renders QuestionsPanel", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Questions"));
+
+    expect(screen.getByTestId("questions-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
+  });
+
+  it("passes sessionId to QuestionsPanel when questions tab is active", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Questions"));
+
+    const panel = screen.getByTestId("questions-panel");
+    expect(panel.getAttribute("data-session-id")).toBe("s1");
   });
 });

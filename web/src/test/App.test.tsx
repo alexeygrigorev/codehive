@@ -6,6 +6,7 @@ import MainLayout from "@/layouts/MainLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import ProjectPage from "@/pages/ProjectPage";
 import SessionPage from "@/pages/SessionPage";
+import QuestionsPage from "@/pages/QuestionsPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 
 function renderWithRouter(initialEntry: string) {
@@ -16,6 +17,7 @@ function renderWithRouter(initialEntry: string) {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/projects/:projectId" element={<ProjectPage />} />
           <Route path="/sessions/:sessionId" element={<SessionPage />} />
+          <Route path="/questions" element={<QuestionsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
@@ -41,6 +43,13 @@ describe("App routing", () => {
     expect(screen.getByRole("heading", { name: /session/i })).toBeInTheDocument();
     // SessionPage now fetches data asynchronously, so it shows loading state initially
     expect(screen.getByText(/loading session/i)).toBeInTheDocument();
+  });
+
+  it("renders QuestionsPage at /questions", () => {
+    renderWithRouter("/questions");
+    expect(screen.getByRole("heading", { name: /pending questions/i })).toBeInTheDocument();
+    // QuestionsPage fetches data asynchronously, so it shows loading state initially
+    expect(screen.getByText(/loading questions/i)).toBeInTheDocument();
   });
 
   it("renders NotFoundPage for unknown routes", () => {
