@@ -84,6 +84,35 @@ class APIClient:
             json={"content": content},
         )
 
+    # -- rescue helpers ----------------------------------------------------
+
+    def pause_session(self, session_id: str) -> dict[str, Any]:
+        """POST to pause a session."""
+        return self.post(f"/api/sessions/{session_id}/pause")
+
+    def list_checkpoints(self, session_id: str) -> list[dict[str, Any]]:
+        """GET checkpoints for a session."""
+        return self.get(f"/api/sessions/{session_id}/checkpoints")
+
+    def rollback_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
+        """POST to rollback to a checkpoint."""
+        return self.post(f"/api/checkpoints/{checkpoint_id}/rollback")
+
+    def answer_question(self, session_id: str, question_id: str, answer: str) -> dict[str, Any]:
+        """POST an answer to a pending question."""
+        return self.post(
+            f"/api/sessions/{session_id}/questions/{question_id}/answer",
+            json={"answer": answer},
+        )
+
+    def get_system_health(self) -> dict[str, Any]:
+        """GET system health status."""
+        return self.get("/api/system/health")
+
+    def set_maintenance(self, enabled: bool) -> dict[str, Any]:
+        """POST to toggle maintenance mode."""
+        return self.post("/api/system/maintenance", json={"enabled": enabled})
+
     def build_url(self, path: str) -> str:
         """Return the full URL for a given API path."""
         return f"{self.base_url}{path}"

@@ -417,6 +417,9 @@ def main() -> None:
     # tui subcommand
     subparsers.add_parser("tui", help="Launch the interactive terminal dashboard")
 
+    # rescue subcommand
+    subparsers.add_parser("rescue", help="Launch rescue mode (emergency TUI)")
+
     # telegram subcommand
     subparsers.add_parser("telegram", help="Start the Telegram bot")
 
@@ -426,6 +429,8 @@ def main() -> None:
         _serve(args)
     elif args.command == "tui":
         _tui(args)
+    elif args.command == "rescue":
+        _rescue(args)
     elif args.command == "telegram":
         _telegram(args)
     elif args.command == "projects":
@@ -466,6 +471,14 @@ def main() -> None:
             system_parser.print_help()
     else:
         parser.print_help()
+
+
+def _rescue(args: argparse.Namespace) -> None:
+    from codehive.clients.terminal.screens.rescue import RescueApp
+
+    base_url = _get_base_url(args)
+    app = RescueApp(base_url=base_url)
+    app.run()
 
 
 def _tui(args: argparse.Namespace) -> None:
