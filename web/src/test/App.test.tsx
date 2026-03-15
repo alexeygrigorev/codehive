@@ -32,7 +32,8 @@ describe("App routing", () => {
   it("renders ProjectPage at /projects/:projectId", () => {
     renderWithRouter("/projects/abc-123");
     expect(screen.getByRole("heading", { name: /project/i })).toBeInTheDocument();
-    expect(screen.getByText(/abc-123/)).toBeInTheDocument();
+    // ProjectPage now fetches data asynchronously, so it shows loading state initially
+    expect(screen.getByText(/loading project/i)).toBeInTheDocument();
   });
 
   it("renders SessionPage at /sessions/:sessionId", () => {
