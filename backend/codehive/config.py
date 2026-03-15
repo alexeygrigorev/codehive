@@ -19,4 +19,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://codehive:codehive@localhost:5432/codehive"
     redis_url: str = "redis://localhost:6379/0"
 
-    model_config = {"env_prefix": "CODEHIVE_"}
+    anthropic_api_key: str = ""
+    anthropic_base_url: str = ""
+
+    model_config = {
+        "env_prefix": "CODEHIVE_",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+    }

@@ -1,5 +1,7 @@
 """Tests for codehive.config.Settings."""
 
+from pathlib import Path
+
 from codehive.config import Settings
 
 
@@ -62,3 +64,87 @@ class TestDatabaseSettings:
         monkeypatch.setenv("CODEHIVE_REDIS_URL", custom_url)
         settings = Settings()
         assert settings.redis_url == custom_url
+
+
+class TestAnthropicSettings:
+    """Tests for Anthropic API key and base URL fields (issue #13)."""
+
+    def test_anthropic_api_key_default(self):
+        """When no env var is set, anthropic_api_key defaults to empty string."""
+        settings = Settings()
+        assert settings.anthropic_api_key == ""
+
+    def test_anthropic_base_url_default(self):
+        """When no env var is set, anthropic_base_url defaults to empty string."""
+        settings = Settings()
+        assert settings.anthropic_base_url == ""
+
+    def test_anthropic_api_key_override(self, monkeypatch):
+        """Env var overrides the default for anthropic_api_key."""
+        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-ant-test-key-123")
+        settings = Settings()
+        assert settings.anthropic_api_key == "sk-ant-test-key-123"
+
+    def test_anthropic_base_url_override(self, monkeypatch):
+        """Env var overrides the default for anthropic_base_url."""
+        monkeypatch.setenv("CODEHIVE_ANTHROPIC_BASE_URL", "https://custom.api.example.com")
+        settings = Settings()
+        assert settings.anthropic_base_url == "https://custom.api.example.com"
+
+
+class TestEnvFileLoading:
+    """Tests for .env file loading (issue #13)."""
+
+    def test_settings_loads_from_env_file(self, tmp_path, monkeypatch):
+        """Settings picks up values from a .env file."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("CODEHIVE_HOST=10.0.0.1\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        settings = Settings(_env_file=env_file)
+        assert settings.host == "10.0.0.1"
+
+    def test_env_file_loads_anthropic_key(self, tmp_path, monkeypatch):
+        """Settings picks up anthropic_api_key from a .env file."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("CODEHIVE_ANTHROPIC_API_KEY=sk-test-123\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        settings = Settings(_env_file=env_file)
+        assert settings.anthropic_api_key == "sk-test-123"
+
+    def test_env_var_overrides_env_file(self, tmp_path, monkeypatch):
+        """Environment variables take precedence over .env file values."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("CODEHIVE_PORT=3000\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CODEHIVE_PORT", "4000")
+        settings = Settings(_env_file=env_file)
+        assert settings.port == 4000
+
+    def test_missing_env_file_uses_defaults(self, tmp_path, monkeypatch):
+        """When no .env file exists, defaults are used without error."""
+        monkeypatch.chdir(tmp_path)
+        settings = Settings(_env_file=tmp_path / "nonexistent.env")
+        assert settings.host == "127.0.0.1"
+        assert settings.anthropic_api_key == ""
+
+
+class TestEnvExampleCompleteness:
+    """Verify .env.example contains entries for all Settings fields."""
+
+    def test_env_example_contains_all_settings_fields(self):
+        """Every field in Settings should have a corresponding CODEHIVE_ entry in .env.example."""
+        env_example_path = Path(__file__).resolve().parents[2] / ".env.example"
+        content = env_example_path.read_text(encoding="utf-8")
+
+        # Fields that should appear with CODEHIVE_ prefix
+        expected_fields = [
+            "CODEHIVE_HOST",
+            "CODEHIVE_PORT",
+            "CODEHIVE_DEBUG",
+            "CODEHIVE_DATABASE_URL",
+            "CODEHIVE_REDIS_URL",
+            "CODEHIVE_ANTHROPIC_API_KEY",
+            "CODEHIVE_ANTHROPIC_BASE_URL",
+        ]
+        for field in expected_fields:
+            assert field in content, f"{field} missing from .env.example"
