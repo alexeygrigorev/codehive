@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
 from codehive.api.schemas.diff import DiffFileEntry, SessionDiffsResponse
-from codehive.api.schemas.session import MessageSend, SessionCreate, SessionRead, SessionUpdate
+from codehive.api.schemas.session import (
+    MessageSend,
+    ModeSwitchRequest,
+    SessionCreate,
+    SessionRead,
+    SessionUpdate,
+)
 from codehive.execution.diff import DiffService
 from codehive.core.session import (
     InvalidStatusTransitionError,
@@ -137,6 +143,20 @@ async def resume_session_endpoint(
         raise HTTPException(status_code=404, detail="Session not found")
     except InvalidStatusTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    return SessionRead.model_validate(session)
+
+
+@sessions_router.post("/{session_id}/switch-mode", response_model=SessionRead)
+async def switch_mode_endpoint(
+    session_id: uuid.UUID,
+    body: ModeSwitchRequest,
+    db: AsyncSession = Depends(get_db),
+) -> SessionRead:
+    """Switch a session's mode."""
+    try:
+        session = await update_session(db, session_id, mode=body.mode)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
     return SessionRead.model_validate(session)
 
 

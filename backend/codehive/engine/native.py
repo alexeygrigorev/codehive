@@ -12,6 +12,13 @@ from anthropic import AsyncAnthropic
 from codehive.core.checkpoint import create_checkpoint
 from codehive.core.events import EventBus
 from codehive.core.subagent import SubAgentManager
+from codehive.core.modes import (
+    VALID_MODES,
+    ModeNotFoundError,
+    build_mode_system_prompt,
+    filter_tools_for_mode,
+    get_mode,
+)
 from codehive.core.roles import (
     RoleDefinition,
     RoleNotFoundError,
@@ -194,6 +201,15 @@ class NativeEngine:
             self._sessions[session_id] = state
 
         is_orchestrator = mode == "orchestrator"
+        is_agent_mode = mode is not None and mode in VALID_MODES
+
+        # Resolve agent mode definition
+        mode_def = None
+        if is_agent_mode:
+            try:
+                mode_def = get_mode(mode)
+            except ModeNotFoundError:
+                logger.warning("Mode '%s' not found, ignoring", mode)
 
         # Resolve role definition
         role_def: RoleDefinition | None = None
@@ -209,13 +225,15 @@ class NativeEngine:
         tools: list[dict[str, Any]] = TOOL_DEFINITIONS
         if is_orchestrator:
             tools = filter_tools(tools)
+        elif mode_def is not None:
+            tools = filter_tools_for_mode(TOOL_DEFINITIONS, mode_def)
         if role_def is not None:
             role_filtered = filter_tools_for_role(TOOL_DEFINITIONS, role_def)
-            if is_orchestrator:
+            if is_orchestrator or mode_def is not None:
                 # Intersection: keep only tools that are in both sets
-                orchestrator_names = {t["name"] for t in tools}
+                current_names = {t["name"] for t in tools}
                 role_names = {t["name"] for t in role_filtered}
-                intersection = orchestrator_names & role_names
+                intersection = current_names & role_names
                 tools = [t for t in TOOL_DEFINITIONS if t["name"] in intersection]
             else:
                 tools = role_filtered
@@ -251,10 +269,15 @@ class NativeEngine:
             "messages": state.messages,
         }
 
-        # Build system prompt from orchestrator mode and/or role
+        # Build system prompt from mode and/or role
+        # Order: mode prompt first (cognitive frame), then role prompt (persona)
         system_parts: list[str] = []
         if is_orchestrator:
             system_parts.append(ORCHESTRATOR_SYSTEM_PROMPT)
+        elif mode_def is not None:
+            mode_prompt = build_mode_system_prompt(mode_def)
+            if mode_prompt:
+                system_parts.append(mode_prompt)
         if role_def is not None:
             role_prompt = build_role_system_prompt(role_def)
             if role_prompt:
@@ -309,16 +332,36 @@ class NativeEngine:
                         )
                     yield started_event
 
-                    # Defensive: reject disallowed tools in orchestrator mode
-                    if is_orchestrator and tool_block.name not in ORCHESTRATOR_ALLOWED_TOOLS:
-                        result = {
-                            "content": (
-                                f"Tool '{tool_block.name}' is not available in "
-                                f"orchestrator mode. Allowed tools: "
-                                f"{', '.join(sorted(ORCHESTRATOR_ALLOWED_TOOLS))}"
-                            ),
-                            "is_error": True,
-                        }
+                    # Defensive: reject disallowed tools based on mode
+                    allowed_tool_names = {t["name"] for t in tools}
+                    if tool_block.name not in allowed_tool_names:
+                        if is_orchestrator:
+                            result = {
+                                "content": (
+                                    f"Tool '{tool_block.name}' is not available in "
+                                    f"orchestrator mode. Allowed tools: "
+                                    f"{', '.join(sorted(ORCHESTRATOR_ALLOWED_TOOLS))}"
+                                ),
+                                "is_error": True,
+                            }
+                        elif mode_def is not None:
+                            result = {
+                                "content": (
+                                    f"Tool '{tool_block.name}' is not available in "
+                                    f"'{mode}' mode. Allowed tools: "
+                                    f"{', '.join(sorted(allowed_tool_names))}"
+                                ),
+                                "is_error": True,
+                            }
+                        else:
+                            result = {
+                                "content": (
+                                    f"Tool '{tool_block.name}' is not available. "
+                                    f"Allowed tools: "
+                                    f"{', '.join(sorted(allowed_tool_names))}"
+                                ),
+                                "is_error": True,
+                            }
                     else:
                         # Execute the tool
                         result = await self._execute_tool(
