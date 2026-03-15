@@ -1,14 +1,17 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 import type { SessionEvent } from "@/api/websocket";
+import { approveAction, rejectAction } from "@/api/approvals";
 import MessageBubble from "./MessageBubble";
 import ToolCallResult from "./ToolCallResult";
+import ApprovalPrompt from "./ApprovalPrompt";
+import type { ApprovalStatus } from "./ApprovalPrompt";
 import ChatInput from "./ChatInput";
 import { sendMessage } from "@/api/messages";
 
 interface ChatItem {
   id: string;
-  kind: "message" | "tool_call";
+  kind: "message" | "tool_call" | "approval";
   event: SessionEvent;
   finishEvent?: SessionEvent;
 }
@@ -21,6 +24,7 @@ const CHAT_EVENT_TYPES = [
   "message.created",
   "tool.call.started",
   "tool.call.finished",
+  "approval.required",
 ];
 
 export default function ChatPanel({ sessionId }: ChatPanelProps) {
@@ -29,6 +33,9 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
   const [sending, setSending] = useState(false);
+  const [approvalStates, setApprovalStates] = useState<
+    Record<string, { status: ApprovalStatus; loading: boolean }>
+  >({});
 
   const chatItems = useMemo(() => {
     const items: ChatItem[] = [];
@@ -55,6 +62,8 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
             finishEvent: event,
           });
         }
+      } else if (event.type === "approval.required") {
+        items.push({ id: event.id, kind: "approval", event });
       }
     }
 
@@ -86,6 +95,50 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
     [sessionId],
   );
 
+  const handleApprove = useCallback(
+    async (actionId: string) => {
+      setApprovalStates((prev) => ({
+        ...prev,
+        [actionId]: { status: "pending", loading: true },
+      }));
+      try {
+        await approveAction(sessionId, actionId);
+        setApprovalStates((prev) => ({
+          ...prev,
+          [actionId]: { status: "approved", loading: false },
+        }));
+      } catch {
+        setApprovalStates((prev) => ({
+          ...prev,
+          [actionId]: { status: "pending", loading: false },
+        }));
+      }
+    },
+    [sessionId],
+  );
+
+  const handleReject = useCallback(
+    async (actionId: string) => {
+      setApprovalStates((prev) => ({
+        ...prev,
+        [actionId]: { status: "pending", loading: true },
+      }));
+      try {
+        await rejectAction(sessionId, actionId);
+        setApprovalStates((prev) => ({
+          ...prev,
+          [actionId]: { status: "rejected", loading: false },
+        }));
+      } catch {
+        setApprovalStates((prev) => ({
+          ...prev,
+          [actionId]: { status: "pending", loading: false },
+        }));
+      }
+    },
+    [sessionId],
+  );
+
   return (
     <div className="chat-panel flex h-full flex-col">
       <div
@@ -105,6 +158,25 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
                 key={item.id}
                 role={item.event.data.role as string}
                 content={item.event.data.content as string}
+              />
+            );
+          }
+          if (item.kind === "approval") {
+            const actionId = (item.event.data.action_id as string) ?? item.id;
+            const description =
+              (item.event.data.description as string) ??
+              (item.event.data.tool_name as string) ??
+              "Unknown action";
+            const state = approvalStates[actionId];
+            return (
+              <ApprovalPrompt
+                key={item.id}
+                actionId={actionId}
+                description={description}
+                status={state?.status ?? "pending"}
+                loading={state?.loading ?? false}
+                onApprove={handleApprove}
+                onReject={handleReject}
               />
             );
           }

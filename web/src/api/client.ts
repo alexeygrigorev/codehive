@@ -5,6 +5,7 @@ interface ApiClient {
   baseURL: string;
   get: (path: string) => Promise<Response>;
   post: (path: string, body: unknown) => Promise<Response>;
+  patch: (path: string, body: unknown) => Promise<Response>;
 }
 
 export const apiClient: ApiClient = {
@@ -15,6 +16,13 @@ export const apiClient: ApiClient = {
   post(path: string, body: unknown): Promise<Response> {
     return fetch(`${this.baseURL}${path}`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+  patch(path: string, body: unknown): Promise<Response> {
+    return fetch(`${this.baseURL}${path}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });

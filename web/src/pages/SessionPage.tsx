@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { WebSocketProvider } from "@/context/WebSocketContext";
 import { apiClient } from "@/api/client";
 import type { SessionRead } from "@/api/sessions";
 import ChatPanel from "@/components/ChatPanel";
+import SessionModeIndicator from "@/components/SessionModeIndicator";
+import SessionModeSwitcher from "@/components/SessionModeSwitcher";
+import SessionApprovalBadge from "@/components/SessionApprovalBadge";
 
 export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<SessionRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modeLoading, setModeLoading] = useState(false);
+  const [showModeSwitcher, setShowModeSwitcher] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -43,6 +48,26 @@ export default function SessionPage() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  const handleModeChange = useCallback(
+    async (newMode: string) => {
+      if (!sessionId) return;
+      setModeLoading(true);
+      try {
+        const response = await apiClient.patch(`/api/sessions/${sessionId}`, {
+          mode: newMode,
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to update mode: ${response.status}`);
+        }
+        setSession((prev) => (prev ? { ...prev, mode: newMode } : prev));
+        setShowModeSwitcher(false);
+      } finally {
+        setModeLoading(false);
+      }
+    },
+    [sessionId],
+  );
 
   if (loading) {
     return (
@@ -87,13 +112,33 @@ export default function SessionPage() {
     <WebSocketProvider sessionId={sessionId}>
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h1 className="text-xl font-bold text-gray-900">{session.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-gray-900">{session.name}</h1>
+            <button
+              type="button"
+              className="mode-indicator-button"
+              onClick={() => setShowModeSwitcher((prev) => !prev)}
+              aria-label="Toggle mode switcher"
+            >
+              <SessionModeIndicator mode={session.mode} />
+            </button>
+            <SessionApprovalBadge />
+          </div>
           <span
             className={`session-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusClass}`}
           >
             {session.status}
           </span>
         </div>
+        {showModeSwitcher && (
+          <div className="border-b border-gray-200 px-4 py-2">
+            <SessionModeSwitcher
+              currentMode={session.mode}
+              onModeChange={handleModeChange}
+              loading={modeLoading}
+            />
+          </div>
+        )}
         <div className="flex-1 min-h-0">
           <ChatPanel sessionId={sessionId} />
         </div>
