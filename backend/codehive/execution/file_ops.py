@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from codehive.execution.sandbox import Sandbox
 
 
 class SandboxViolationError(Exception):
@@ -13,11 +17,19 @@ class FileOps:
     """File operations sandboxed to a project root directory.
 
     All path operations resolve symlinks and reject any resolved path
-    that is not under the project_root.
+    that is not under the project_root. Delegates path validation to a
+    ``Sandbox`` instance when provided.
     """
 
-    def __init__(self, project_root: Path) -> None:
+    def __init__(self, project_root: Path, sandbox: Sandbox | None = None) -> None:
         self._root = Path(project_root).resolve()
+        if sandbox is not None:
+            self._sandbox = sandbox
+        else:
+            # Lazy import to avoid circular dependency
+            from codehive.execution.sandbox import Sandbox
+
+            self._sandbox = Sandbox(self._root)
 
     def _resolve_and_check(self, path: str | Path) -> Path:
         """Resolve a path relative to project_root and enforce sandbox.
@@ -31,13 +43,7 @@ class FileOps:
         Raises:
             SandboxViolationError: If the resolved path escapes the sandbox.
         """
-        candidate = (self._root / path).resolve()
-        if not candidate.is_relative_to(self._root):
-            raise SandboxViolationError(
-                f"Path '{path}' resolves to '{candidate}' which is outside "
-                f"the sandbox root '{self._root}'"
-            )
-        return candidate
+        return self._sandbox.check(path)
 
     async def read_file(self, path: str | Path) -> str:
         """Read and return the contents of a file.

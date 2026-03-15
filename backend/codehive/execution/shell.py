@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator
 
+from codehive.execution.policy import CommandPolicy, CommandPolicyViolation, PolicyVerdict
+
 
 @dataclass
 class ShellResult:
@@ -27,6 +29,7 @@ class ShellRunner:
         working_dir: Path,
         timeout_seconds: float = 30.0,
         env: dict[str, str] | None = None,
+        policy: CommandPolicy | None = None,
     ) -> ShellResult:
         """Run a command and return the collected result.
 
@@ -35,13 +38,21 @@ class ShellRunner:
             working_dir: Directory to run the command in. Must exist.
             timeout_seconds: Maximum seconds before the process is killed.
             env: Optional environment variables (merged with system env if provided).
+            policy: Optional command policy to check before execution.
 
         Returns:
             ShellResult with exit_code, stdout, stderr, and timed_out flag.
 
         Raises:
             FileNotFoundError: If working_dir does not exist.
+            CommandPolicyViolation: If the command is denied or needs approval.
         """
+        if policy is not None:
+            cmd_str = " ".join(command) if isinstance(command, list) else command
+            verdict = policy.check(cmd_str)
+            if verdict in (PolicyVerdict.DENY, PolicyVerdict.ASK):
+                raise CommandPolicyViolation(cmd_str, verdict)
+
         working_dir = Path(working_dir)
         if not working_dir.exists():
             raise FileNotFoundError(f"Working directory does not exist: {working_dir}")
@@ -91,6 +102,7 @@ class ShellRunner:
         working_dir: Path,
         timeout_seconds: float = 30.0,
         env: dict[str, str] | None = None,
+        policy: CommandPolicy | None = None,
     ) -> AsyncIterator[str]:
         """Run a command and yield stdout lines as they are produced.
 
@@ -99,13 +111,21 @@ class ShellRunner:
             working_dir: Directory to run the command in. Must exist.
             timeout_seconds: Maximum seconds before the process is killed.
             env: Optional environment variables.
+            policy: Optional command policy to check before execution.
 
         Yields:
             Lines from stdout as they become available.
 
         Raises:
             FileNotFoundError: If working_dir does not exist.
+            CommandPolicyViolation: If the command is denied or needs approval.
         """
+        if policy is not None:
+            cmd_str = " ".join(command) if isinstance(command, list) else command
+            verdict = policy.check(cmd_str)
+            if verdict in (PolicyVerdict.DENY, PolicyVerdict.ASK):
+                raise CommandPolicyViolation(cmd_str, verdict)
+
         working_dir = Path(working_dir)
         if not working_dir.exists():
             raise FileNotFoundError(f"Working directory does not exist: {working_dir}")

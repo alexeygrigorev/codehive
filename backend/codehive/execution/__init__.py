@@ -3,15 +3,21 @@
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps, SandboxViolationError
 from codehive.execution.git_ops import CommitInfo, FileStatus, GitOps, GitOpsError
+from codehive.execution.policy import CommandPolicy, CommandPolicyViolation, PolicyVerdict
+from codehive.execution.sandbox import Sandbox
 from codehive.execution.shell import ShellResult, ShellRunner
 
 __all__ = [
+    "CommandPolicy",
+    "CommandPolicyViolation",
     "CommitInfo",
     "DiffService",
     "FileOps",
     "FileStatus",
     "GitOps",
     "GitOpsError",
+    "PolicyVerdict",
+    "Sandbox",
     "SandboxViolationError",
     "ShellResult",
     "ShellRunner",
