@@ -16,6 +16,7 @@ dependencies = [
     # Add runtime dependencies here
     "fastapi>=0.135.1",
     "pydantic-settings>=2.13.1",
+    "redis>=7.3.0",
     "sqlalchemy[asyncio]>=2.0",
     "uvicorn[standard]>=0.41.0",
 ]
