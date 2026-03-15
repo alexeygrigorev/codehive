@@ -3,8 +3,11 @@
 from fastapi import FastAPI
 
 from codehive.__version__ import __version__
+from codehive.api.routes.events import router as events_router
 from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.sessions import project_sessions_router, sessions_router
+from codehive.api.routes.tasks import session_tasks_router, tasks_router
+from codehive.api.ws import router as ws_router
 
 
 def create_app() -> FastAPI:
@@ -14,6 +17,10 @@ def create_app() -> FastAPI:
     app.include_router(projects_router)
     app.include_router(project_sessions_router)
     app.include_router(sessions_router)
+    app.include_router(session_tasks_router)
+    app.include_router(tasks_router)
+    app.include_router(events_router)
+    app.include_router(ws_router)
 
     @app.get("/api/health")
     async def health() -> dict:
