@@ -90,6 +90,10 @@ class APIClient:
         """POST to pause a session."""
         return self.post(f"/api/sessions/{session_id}/pause")
 
+    def resume_session(self, session_id: str) -> dict[str, Any]:
+        """POST to resume a paused session."""
+        return self.post(f"/api/sessions/{session_id}/resume")
+
     def list_checkpoints(self, session_id: str) -> list[dict[str, Any]]:
         """GET checkpoints for a session."""
         return self.get(f"/api/sessions/{session_id}/checkpoints")

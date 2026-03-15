@@ -42,6 +42,7 @@ class DashboardScreen(Screen):
 
     BINDINGS = [
         ("p", "show_projects", "Projects"),
+        ("exclamation_mark", "show_rescue", "Rescue"),
         ("q", "quit", "Quit"),
     ]
 
@@ -149,6 +150,11 @@ class DashboardScreen(Screen):
         from codehive.clients.terminal.screens.project_list import ProjectListScreen
 
         self.app.push_screen(ProjectListScreen())
+
+    def action_show_rescue(self) -> None:
+        from codehive.clients.terminal.screens.rescue import RescueScreen
+
+        self.app.push_screen(RescueScreen())
 
     def action_quit(self) -> None:
         self.app.exit()

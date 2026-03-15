@@ -55,6 +55,7 @@ class RescueScreen(Screen):
 
     BINDINGS = [
         ("s", "stop_session", "Stop"),
+        ("x", "restart_session", "Restart"),
         ("r", "rollback_session", "Rollback"),
         ("a", "answer_question", "Answer"),
         ("m", "toggle_maintenance", "Maint"),
@@ -275,6 +276,26 @@ class RescueScreen(Screen):
             self.app.call_from_thread(self._show_error, f"Pause failed: {exc}")
             return
         # Reload data after action
+        self._load_data()
+
+    def action_restart_session(self) -> None:
+        session_id = self._get_selected_session_id()
+        if session_id:
+            self._do_restart(session_id)
+
+    @work(thread=True)
+    def _do_restart(self, session_id: str) -> None:
+        api: APIClient = self.app.api_client  # type: ignore[attr-defined]
+        try:
+            api.pause_session(session_id)
+        except Exception as exc:
+            self.app.call_from_thread(self._show_error, f"Restart failed: {exc}")
+            return
+        try:
+            api.resume_session(session_id)
+        except Exception as exc:
+            self.app.call_from_thread(self._show_error, f"Restart failed: {exc}")
+            return
         self._load_data()
 
     def action_rollback_session(self) -> None:

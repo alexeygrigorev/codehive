@@ -118,6 +118,7 @@ def _build_rescue_api() -> MagicMock:
     api.list_questions.side_effect = _list_questions
     api.list_checkpoints.return_value = MOCK_CHECKPOINTS
     api.pause_session.return_value = {"status": "paused"}
+    api.resume_session.return_value = {"status": "running"}
     api.rollback_checkpoint.return_value = {"status": "rolled_back"}
     api.answer_question.return_value = {"status": "answered"}
     api.set_maintenance.return_value = {"maintenance": True}
@@ -215,6 +216,18 @@ class TestAPIClientRescueMethods:
         result = client.get_system_health()
         client._client.get.assert_called_once_with("/api/system/health", params=None)
         assert result["version"] == "0.1.0"
+
+    def test_resume_session_calls_correct_endpoint(self) -> None:
+        client = APIClient("http://localhost:8000")
+        client._client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"status": "running"}
+        mock_resp.raise_for_status = MagicMock()
+        client._client.post.return_value = mock_resp
+
+        result = client.resume_session("sess-123")
+        client._client.post.assert_called_once_with("/api/sessions/sess-123/resume", json=None)
+        assert result == {"status": "running"}
 
     def test_set_maintenance_calls_correct_endpoint(self) -> None:
         client = APIClient("http://localhost:8000")
@@ -426,6 +439,110 @@ class TestRescueScreenActions:
 
 
 # ---------------------------------------------------------------------------
+# Unit: RescueScreen restart action
+# ---------------------------------------------------------------------------
+
+
+class TestRescueScreenRestartAction:
+    @pytest.mark.asyncio
+    async def test_press_x_calls_pause_then_resume(self) -> None:
+        mock_api = _build_rescue_api()
+        call_order: list[str] = []
+        mock_api.pause_session.side_effect = lambda sid: (
+            call_order.append("pause"),
+            {"status": "paused"},
+        )[1]
+        mock_api.resume_session.side_effect = lambda sid: (
+            call_order.append("resume"),
+            {"status": "running"},
+        )[1]
+
+        app = RescueApp(base_url="http://test:8000")
+        app.api_client = mock_api  # type: ignore[assignment]
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            sessions_table = app.screen.query_one("#rescue-sessions-table", StyledDataTable)
+            sessions_table.focus()
+            sessions_table.move_cursor(row=0)
+            await pilot.pause()
+
+            await pilot.press("x")
+            await pilot.pause()
+
+            mock_api.pause_session.assert_called_once_with(_SESSION_FAILED_ID)
+            mock_api.resume_session.assert_called_once_with(_SESSION_FAILED_ID)
+            assert call_order == ["pause", "resume"]
+
+    @pytest.mark.asyncio
+    async def test_press_x_pause_fails_no_resume(self) -> None:
+        mock_api = _build_rescue_api()
+        mock_api.pause_session.side_effect = httpx.HTTPStatusError(
+            "Server Error", request=MagicMock(), response=MagicMock()
+        )
+
+        app = RescueApp(base_url="http://test:8000")
+        app.api_client = mock_api  # type: ignore[assignment]
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            sessions_table = app.screen.query_one("#rescue-sessions-table", StyledDataTable)
+            sessions_table.focus()
+            sessions_table.move_cursor(row=0)
+            await pilot.pause()
+
+            await pilot.press("x")
+            await pilot.pause()
+
+            mock_api.resume_session.assert_not_called()
+            from textual.widgets import Static
+
+            error_widget = app.screen.query_one("#rescue-error", Static)
+            assert error_widget.display is True
+            assert error_widget.content.startswith("Restart failed:")
+
+    @pytest.mark.asyncio
+    async def test_press_x_resume_fails_shows_error(self) -> None:
+        mock_api = _build_rescue_api()
+        mock_api.resume_session.side_effect = httpx.HTTPStatusError(
+            "Server Error", request=MagicMock(), response=MagicMock()
+        )
+
+        app = RescueApp(base_url="http://test:8000")
+        app.api_client = mock_api  # type: ignore[assignment]
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            sessions_table = app.screen.query_one("#rescue-sessions-table", StyledDataTable)
+            sessions_table.focus()
+            sessions_table.move_cursor(row=0)
+            await pilot.pause()
+
+            await pilot.press("x")
+            await pilot.pause()
+
+            mock_api.pause_session.assert_called_once()
+            from textual.widgets import Static
+
+            error_widget = app.screen.query_one("#rescue-error", Static)
+            assert error_widget.display is True
+
+    @pytest.mark.asyncio
+    async def test_press_x_no_sessions_is_noop(self) -> None:
+        mock_api = _build_empty_api()
+        app = RescueApp(base_url="http://test:8000")
+        app.api_client = mock_api  # type: ignore[assignment]
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            await pilot.press("x")
+            await pilot.pause()
+
+            mock_api.pause_session.assert_not_called()
+            mock_api.resume_session.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Integration: CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -497,3 +614,83 @@ class TestHealthBanner:
         banner = HealthBanner()
         banner.set_health(MOCK_HEALTH_DEGRADED)
         assert "degraded" in banner.classes
+
+
+# ---------------------------------------------------------------------------
+# Unit: Dashboard keybinding registration
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardRescueBinding:
+    def test_dashboard_bindings_include_rescue(self) -> None:
+        """DashboardScreen.BINDINGS contains exclamation_mark -> action_show_rescue."""
+        from codehive.clients.terminal.screens.dashboard import DashboardScreen
+
+        found = False
+        for binding in DashboardScreen.BINDINGS:
+            # Bindings can be tuples (key, action, description) or Binding objects
+            if isinstance(binding, tuple):
+                key, action, *_ = binding
+            else:
+                key = binding.key
+                action = binding.action
+            if key == "exclamation_mark" and action == "show_rescue":
+                found = True
+                break
+        assert found, "DashboardScreen.BINDINGS must include exclamation_mark -> show_rescue"
+
+
+# ---------------------------------------------------------------------------
+# Integration: Dashboard-to-Rescue navigation
+# ---------------------------------------------------------------------------
+
+
+def _build_codehive_app_with_rescue_api():  # type: ignore[no-untyped-def]
+    """Build a CodehiveApp with mocked API that supports rescue screen calls."""
+    from codehive.clients.terminal.app import CodehiveApp
+
+    api = MagicMock(spec=APIClient)
+    api.list_projects.return_value = MOCK_PROJECTS
+    api.list_sessions.return_value = MOCK_SESSIONS
+    api.list_questions.side_effect = lambda sid, answered=None: (
+        MOCK_QUESTIONS if sid == _SESSION_WAITING_ID and answered is False else []
+    )
+    api.get_system_health.return_value = MOCK_HEALTH
+    app = CodehiveApp(base_url="http://test:8000")
+    app.api_client = api  # type: ignore[assignment]
+    return app
+
+
+class TestDashboardToRescueNavigation:
+    @pytest.mark.asyncio
+    async def test_press_exclamation_pushes_rescue_screen(self) -> None:
+        """Pressing ! on the dashboard pushes RescueScreen."""
+        from codehive.clients.terminal.screens.dashboard import DashboardScreen
+
+        app = _build_codehive_app_with_rescue_api()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("!")
+            await pilot.pause()
+
+            assert isinstance(app.screen, RescueScreen)
+
+    @pytest.mark.asyncio
+    async def test_rescue_escape_returns_to_dashboard(self) -> None:
+        """Pressing ! then escape returns to the dashboard (round-trip)."""
+        from codehive.clients.terminal.screens.dashboard import DashboardScreen
+
+        app = _build_codehive_app_with_rescue_api()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("!")
+            await pilot.pause()
+            assert isinstance(app.screen, RescueScreen)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
