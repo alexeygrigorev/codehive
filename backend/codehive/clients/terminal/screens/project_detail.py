@@ -79,6 +79,11 @@ class ProjectDetailScreen(Screen):
                 key=sess["id"],
             )
 
+    def on_data_table_row_selected(self, event: StyledDataTable.RowSelected) -> None:
+        from codehive.clients.terminal.screens.session import SessionScreen
+
+        self.app.push_screen(SessionScreen(str(event.row_key.value)))
+
     def action_go_back(self) -> None:
         self.app.pop_screen()
 
