@@ -51,6 +51,12 @@ The orchestrator NEVER writes or modifies code (backend/, web/). It only touches
 - Task panel items
 - Git commits (after PM accepts)
 
+**NEVER wait for user input.** The pipeline runs autonomously. If something needs user action (e.g. configuring a secret, testing on their machine, confirming a deployment), note it in the issue file as a "USER ACTION REQUIRED" item and keep moving to the next issue. Do not stop the pipeline.
+
+**NEVER block on dependencies within a batch.** If issue A is groomed but issue B is still grooming, launch the SWE agent for A immediately. Don't wait for B. Each issue's pipeline is independent — launch agents as soon as their predecessor step completes, regardless of the other issue in the batch.
+
+**Always have a "Pull next" task.** The pipeline never stops. After committing a batch, immediately pick the next 2 issues and continue.
+
 ## Agent Workflow
 
 1. PM Grooms: Pick `.todo.md` issues, add acceptance criteria and test scenarios, rename to `.groomed.md`
