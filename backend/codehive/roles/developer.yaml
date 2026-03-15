@@ -1,0 +1,20 @@
+name: developer
+display_name: Developer
+description: Implements features, modifies code, writes tests
+responsibilities:
+  - implement features
+  - write tests
+  - fix bugs
+allowed_tools:
+  - edit_file
+  - read_file
+  - run_shell
+  - git_commit
+  - search_files
+denied_tools: []
+coding_rules:
+  - use type hints
+  - write docstrings
+system_prompt_extra: |
+  You are a developer agent. Focus on writing clean, well-tested code.
+  Always use type hints and include docstrings.

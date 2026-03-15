@@ -12,6 +12,13 @@ from anthropic import AsyncAnthropic
 from codehive.core.checkpoint import create_checkpoint
 from codehive.core.events import EventBus
 from codehive.core.subagent import SubAgentManager
+from codehive.core.roles import (
+    RoleDefinition,
+    RoleNotFoundError,
+    build_role_system_prompt,
+    filter_tools_for_role,
+    load_role,
+)
 from codehive.engine.orchestrator import (
     ORCHESTRATOR_ALLOWED_TOOLS,
     ORCHESTRATOR_SYSTEM_PROMPT,
@@ -165,6 +172,7 @@ class NativeEngine:
         *,
         db: Any = None,
         mode: str | None = None,
+        role: str | RoleDefinition | None = None,
     ) -> AsyncIterator[dict]:
         """Send a user message and run the conversation loop.
 
@@ -174,6 +182,11 @@ class NativeEngine:
         read-only and spawn tools, and the orchestrator system prompt is
         prepended.  Any tool call outside the allowed set is rejected with
         an error result.
+
+        When *role* is provided (name string or RoleDefinition), tool
+        filtering and system prompt injection are applied based on the
+        role definition.  If both orchestrator mode and a role are active,
+        the tool set is the intersection.
         """
         state = self._sessions.get(session_id)
         if state is None:
@@ -182,8 +195,30 @@ class NativeEngine:
 
         is_orchestrator = mode == "orchestrator"
 
-        # Resolve tool set based on mode
-        tools = filter_tools(TOOL_DEFINITIONS) if is_orchestrator else TOOL_DEFINITIONS
+        # Resolve role definition
+        role_def: RoleDefinition | None = None
+        if isinstance(role, RoleDefinition):
+            role_def = role
+        elif isinstance(role, str):
+            try:
+                role_def = load_role(role)
+            except RoleNotFoundError:
+                logger.warning("Role '%s' not found, ignoring", role)
+
+        # Resolve tool set based on mode and role
+        tools: list[dict[str, Any]] = TOOL_DEFINITIONS
+        if is_orchestrator:
+            tools = filter_tools(tools)
+        if role_def is not None:
+            role_filtered = filter_tools_for_role(TOOL_DEFINITIONS, role_def)
+            if is_orchestrator:
+                # Intersection: keep only tools that are in both sets
+                orchestrator_names = {t["name"] for t in tools}
+                role_names = {t["name"] for t in role_filtered}
+                intersection = orchestrator_names & role_names
+                tools = [t for t in TOOL_DEFINITIONS if t["name"] in intersection]
+            else:
+                tools = role_filtered
 
         # Check if paused before starting
         if state.paused:
@@ -215,8 +250,17 @@ class NativeEngine:
             "tools": tools,
             "messages": state.messages,
         }
+
+        # Build system prompt from orchestrator mode and/or role
+        system_parts: list[str] = []
         if is_orchestrator:
-            api_kwargs["system"] = ORCHESTRATOR_SYSTEM_PROMPT
+            system_parts.append(ORCHESTRATOR_SYSTEM_PROMPT)
+        if role_def is not None:
+            role_prompt = build_role_system_prompt(role_def)
+            if role_prompt:
+                system_parts.append(role_prompt)
+        if system_parts:
+            api_kwargs["system"] = "\n\n".join(system_parts)
 
         # Conversation loop
         while True:

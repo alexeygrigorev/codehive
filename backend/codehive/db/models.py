@@ -175,3 +175,13 @@ class PendingQuestion(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
 
     session: Mapped["Session"] = relationship(back_populates="pending_questions")
+
+
+class CustomRole(Base):
+    __tablename__ = "custom_roles"
+
+    name: Mapped[str] = mapped_column(Unicode(255), primary_key=True)
+    definition: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))

@@ -181,6 +181,7 @@ class TestBaseMetadata:
             "events",
             "checkpoints",
             "pending_questions",
+            "custom_roles",
         }
         assert expected == set(Base.metadata.tables.keys())
 
