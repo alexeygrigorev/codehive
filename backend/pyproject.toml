@@ -12,6 +12,7 @@ dynamic = ["version"]
 
 dependencies = [
     "alembic>=1.18.4",
+    "anthropic>=0.84.0",
     "asyncpg>=0.31.0",
     # Add runtime dependencies here
     "fastapi>=0.135.1",
