@@ -34,6 +34,16 @@ class Settings(BaseSettings):
         "question.created",
     ]
 
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_mailto: str = "mailto:admin@codehive.dev"
+    push_notify_events: list[str] = [
+        "approval.required",
+        "session.completed",
+        "session.failed",
+        "session.waiting",
+    ]
+
     model_config = {
         "env_prefix": "CODEHIVE_",
         "env_file": ".env",

@@ -10,6 +10,22 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        "service-worker": path.resolve(__dirname, "src/service-worker.ts"),
+      },
+      output: {
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === "service-worker") {
+            return "service-worker.js";
+          }
+          return "assets/[name]-[hash].js";
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",

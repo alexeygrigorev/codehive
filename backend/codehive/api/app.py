@@ -10,6 +10,7 @@ from codehive.api.routes.github import github_router
 from codehive.api.routes.issues import issues_router, project_issues_router
 from codehive.api.routes.knowledge import router as knowledge_router
 from codehive.api.routes.logs import logs_router
+from codehive.api.routes.notifications import router as push_router
 from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.remote import router as remote_router
 from codehive.api.routes.replay import replay_router
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(remote_router)
     app.include_router(webhooks_router)
     app.include_router(replay_router)
+    app.include_router(push_router)
 
     @app.get("/api/health")
     async def health() -> dict:
