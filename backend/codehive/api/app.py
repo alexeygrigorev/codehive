@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from codehive.__version__ import __version__
+from codehive.api.routes.approvals import approvals_router
 from codehive.api.routes.checkpoints import checkpoints_router, session_checkpoints_router
 from codehive.api.routes.events import router as events_router
 from codehive.api.routes.issues import issues_router, project_issues_router
@@ -20,6 +21,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(title="codehive", version=__version__)
 
+    app.include_router(approvals_router)
     app.include_router(workspaces_router)
     app.include_router(projects_router)
     app.include_router(project_issues_router)

@@ -9,6 +9,13 @@ from typing import Any, AsyncIterator
 
 from anthropic import AsyncAnthropic
 
+from codehive.core.approval import (
+    ApprovalPolicy,
+    check_action,
+    create_approval_request,
+    get_default_policy,
+    resolve_request as resolve_approval_request,
+)
 from codehive.core.checkpoint import create_checkpoint
 from codehive.core.events import EventBus
 from codehive.core.subagent import SubAgentManager
@@ -158,6 +165,7 @@ class NativeEngine:
         self._sessions: dict[uuid.UUID, _SessionState] = {}
         self._task_fetcher: Any = None  # Optional callback for fetching tasks
         self._subagent_manager = SubAgentManager(event_bus=event_bus)
+        self._approval_policies: dict[uuid.UUID, ApprovalPolicy] = {}
 
     @property
     def tool_definitions(self) -> list[dict[str, Any]]:
@@ -462,17 +470,70 @@ class NativeEngine:
         if state is not None:
             state.paused = False
 
-    async def approve_action(self, session_id: uuid.UUID, action_id: str) -> None:
-        """Approve a pending action."""
-        state = self._sessions.get(session_id)
-        if state is not None and action_id in state.pending_actions:
-            state.pending_actions[action_id]["approved"] = True
+    def get_approval_policy(self, session_id: uuid.UUID) -> ApprovalPolicy:
+        """Return the approval policy for a session."""
+        if session_id not in self._approval_policies:
+            self._approval_policies[session_id] = get_default_policy()
+        return self._approval_policies[session_id]
 
-    async def reject_action(self, session_id: uuid.UUID, action_id: str) -> None:
-        """Reject a pending action."""
+    def set_approval_policy(self, session_id: uuid.UUID, policy: ApprovalPolicy) -> None:
+        """Set the approval policy for a session."""
+        self._approval_policies[session_id] = policy
+
+    async def approve_action(self, session_id: uuid.UUID, action_id: str) -> dict[str, Any] | None:
+        """Approve a pending action and execute the deferred tool call.
+
+        Returns the tool execution result, or None if action not found.
+        """
         state = self._sessions.get(session_id)
-        if state is not None and action_id in state.pending_actions:
-            state.pending_actions[action_id]["rejected"] = True
+        if state is None or action_id not in state.pending_actions:
+            return None
+
+        action = state.pending_actions[action_id]
+        action["approved"] = True
+
+        # Resolve the approval request if stored
+        if "approval_request" in action:
+            resolve_approval_request(action["approval_request"], approved=True)
+
+        # Execute the deferred tool call
+        result = await self._execute_tool_direct(
+            action["tool_name"],
+            action["tool_input"],
+            session_id=session_id,
+        )
+
+        # Clean up
+        del state.pending_actions[action_id]
+        return result
+
+    async def reject_action(
+        self, session_id: uuid.UUID, action_id: str, *, reason: str = ""
+    ) -> dict[str, Any] | None:
+        """Reject a pending action.
+
+        Returns an error result dict, or None if action not found.
+        """
+        state = self._sessions.get(session_id)
+        if state is None or action_id not in state.pending_actions:
+            return None
+
+        action = state.pending_actions[action_id]
+        action["rejected"] = True
+
+        # Resolve the approval request if stored
+        if "approval_request" in action:
+            resolve_approval_request(action["approval_request"], approved=False)
+
+        reason_text = f": {reason}" if reason else ""
+        result: dict[str, Any] = {
+            "content": f"Action rejected{reason_text}. Tool '{action['tool_name']}' was not executed.",
+            "is_error": True,
+        }
+
+        # Clean up
+        del state.pending_actions[action_id]
+        return result
 
     async def get_diff(self, session_id: uuid.UUID) -> dict[str, str]:
         """Return the accumulated diff for the session via DiffService."""
@@ -491,6 +552,77 @@ class NativeEngine:
         db: Any = None,
     ) -> dict[str, Any]:
         """Dispatch a tool call to the appropriate execution layer component.
+
+        Returns a dict with ``content`` (str) and optionally ``is_error`` (bool).
+        If the tool requires approval, returns a pending-approval result and
+        emits an ``approval.required`` event.
+        """
+        # Check approval policy for destructive tools
+        if tool_name in DESTRUCTIVE_TOOLS and session_id is not None:
+            policy = self.get_approval_policy(session_id)
+            rule = check_action(policy, tool_name, tool_input)
+            if rule is not None:
+                # Create an approval request
+                from codehive.api.routes.approvals import add_request
+
+                approval_req = create_approval_request(
+                    session_id=str(session_id),
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                    rule=rule,
+                )
+
+                # Store in session state
+                state = self._sessions.get(session_id)
+                if state is None:
+                    state = _SessionState()
+                    self._sessions[session_id] = state
+                state.pending_actions[approval_req.id] = {
+                    "tool_name": tool_name,
+                    "tool_input": tool_input,
+                    "approved": False,
+                    "rejected": False,
+                    "approval_request": approval_req,
+                }
+
+                # Register in the API-level store
+                add_request(approval_req)
+
+                # Emit approval.required event
+                event_data = {
+                    "action_id": approval_req.id,
+                    "tool_name": tool_name,
+                    "tool_input": tool_input,
+                    "description": rule.description,
+                    "rule_id": rule.id,
+                }
+                if db is not None and self._event_bus is not None:
+                    await self._event_bus.publish(
+                        db,
+                        session_id,
+                        "approval.required",
+                        event_data,
+                    )
+
+                return {
+                    "content": (
+                        f"Action requires approval: {rule.description}. "
+                        f"Waiting for user confirmation."
+                    ),
+                    "is_pending_approval": True,
+                }
+
+        return await self._execute_tool_direct(tool_name, tool_input, session_id=session_id, db=db)
+
+    async def _execute_tool_direct(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        session_id: uuid.UUID | None = None,
+        db: Any = None,
+    ) -> dict[str, Any]:
+        """Execute a tool call without approval checks.
 
         Returns a dict with ``content`` (str) and optionally ``is_error`` (bool).
         """
