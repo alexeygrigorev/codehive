@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from typing import Any, AsyncIterator
 
 from anthropic import AsyncAnthropic
 
+from codehive.core.checkpoint import create_checkpoint
 from codehive.core.events import EventBus
 from codehive.core.subagent import SubAgentManager
 from codehive.engine.orchestrator import (
@@ -99,6 +101,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 
 # Default model for the native engine
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
+
+# Tools that trigger an auto-checkpoint before execution
+DESTRUCTIVE_TOOLS = {"edit_file", "run_shell", "git_commit"}
+
+logger = logging.getLogger(__name__)
 
 
 class _SessionState:
@@ -400,6 +407,33 @@ class NativeEngine:
 
         Returns a dict with ``content`` (str) and optionally ``is_error`` (bool).
         """
+        # Auto-checkpoint before destructive tools (best-effort)
+        if tool_name in DESTRUCTIVE_TOOLS and session_id is not None and db is not None:
+            try:
+                tool_desc = tool_name
+                if tool_name == "edit_file" and "path" in tool_input:
+                    tool_desc = f"{tool_name} {tool_input['path']}"
+                elif tool_name == "run_shell" and "command" in tool_input:
+                    cmd = tool_input["command"]
+                    tool_desc = f"{tool_name} {cmd[:80]}"
+                elif tool_name == "git_commit" and "message" in tool_input:
+                    tool_desc = f"{tool_name} {tool_input['message'][:80]}"
+
+                label = f"auto: before {tool_desc}"
+                await create_checkpoint(
+                    db,
+                    self._git_ops,
+                    session_id=session_id,
+                    label=label,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Auto-checkpoint failed before %s (session %s): %s",
+                    tool_name,
+                    session_id,
+                    exc,
+                )
+
         try:
             if tool_name == "read_file":
                 content = await self._file_ops.read_file(tool_input["path"])
