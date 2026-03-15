@@ -1,12 +1,13 @@
 """CRUD + state transition endpoints for sessions."""
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
-from codehive.api.schemas.session import SessionCreate, SessionRead, SessionUpdate
+from codehive.api.schemas.session import MessageSend, SessionCreate, SessionRead, SessionUpdate
 from codehive.core.session import (
     InvalidStatusTransitionError,
     IssueNotFoundError,
@@ -134,3 +135,76 @@ async def resume_session_endpoint(
     except InvalidStatusTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return SessionRead.model_validate(session)
+
+
+async def _build_engine(session_config: dict) -> Any:
+    """Construct a NativeEngine with dependencies from config.
+
+    Separated into a helper so tests can override it easily.
+    """
+    from pathlib import Path
+
+    from anthropic import AsyncAnthropic
+
+    from codehive.config import Settings
+    from codehive.core.events import EventBus
+    from codehive.engine.native import NativeEngine
+    from codehive.execution.diff import DiffService
+    from codehive.execution.file_ops import FileOps
+    from codehive.execution.git_ops import GitOps
+    from codehive.execution.shell import ShellRunner
+
+    settings = Settings()
+    if not settings.anthropic_api_key:
+        raise HTTPException(status_code=503, detail="Engine not configured")
+
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    redis_client: Any = None
+    try:
+        from redis.asyncio import Redis
+
+        redis_client = Redis.from_url(settings.redis_url)
+    except Exception:
+        pass
+
+    event_bus = EventBus(redis_client) if redis_client else None  # type: ignore[arg-type]
+    project_root = Path(session_config.get("project_root", "/tmp"))
+    file_ops = FileOps(project_root=project_root)
+    shell_runner = ShellRunner()
+    git_ops = GitOps(repo_path=project_root)
+    diff_service = DiffService()
+
+    return NativeEngine(
+        client=client,
+        event_bus=event_bus,  # type: ignore[arg-type]
+        file_ops=file_ops,
+        shell_runner=shell_runner,
+        git_ops=git_ops,
+        diff_service=diff_service,
+    )
+
+
+@sessions_router.post("/{session_id}/messages")
+async def send_message_endpoint(
+    session_id: uuid.UUID,
+    body: MessageSend,
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Send a message to a session and return engine events as a batch."""
+    # Verify session exists
+    session = await get_session(db, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        engine = await _build_engine(session.config)
+
+        events: list[dict[str, Any]] = []
+        async for event in engine.send_message(session_id, body.content, db=db):
+            events.append(event)
+
+        return events
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

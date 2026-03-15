@@ -40,3 +40,16 @@ class SessionRead(BaseModel):
     status: str
     config: dict
     created_at: datetime
+
+
+class MessageSend(BaseModel):
+    """Request body for POST /api/sessions/{session_id}/messages."""
+
+    content: str
+
+
+class MessageEvent(BaseModel):
+    """A single event dict returned from the engine."""
+
+    type: str
+    data: dict = Field(default_factory=dict)
