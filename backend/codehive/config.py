@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
 
+    github_default_token: str = ""
+
     model_config = {
         "env_prefix": "CODEHIVE_",
         "env_file": ".env",

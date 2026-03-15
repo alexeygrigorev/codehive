@@ -40,6 +40,7 @@ class Project(Base):
     knowledge: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    github_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
 
     workspace: Mapped["Workspace"] = relationship(back_populates="projects")

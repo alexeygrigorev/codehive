@@ -6,6 +6,7 @@ from codehive.__version__ import __version__
 from codehive.api.routes.approvals import approvals_router
 from codehive.api.routes.checkpoints import checkpoints_router, session_checkpoints_router
 from codehive.api.routes.events import router as events_router
+from codehive.api.routes.github import github_router
 from codehive.api.routes.issues import issues_router, project_issues_router
 from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.questions import questions_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(project_roles_router)
     app.include_router(archetypes_router)
     app.include_router(ws_router)
+    app.include_router(github_router)
 
     @app.get("/api/health")
     async def health() -> dict:
