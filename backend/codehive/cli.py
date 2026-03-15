@@ -154,6 +154,40 @@ def _sessions_status(args: argparse.Namespace) -> None:
     print(f"Created:    {s.get('created_at', '')}")
 
 
+def _sessions_pause(args: argparse.Namespace) -> None:
+    base_url = _get_base_url(args)
+    client = _make_client(base_url)
+    _request(client, "post", f"/api/sessions/{args.session_id}/pause", base_url)
+    print(f"Session {args.session_id} paused.")
+
+
+def _sessions_rollback(args: argparse.Namespace) -> None:
+    base_url = _get_base_url(args)
+    client = _make_client(base_url)
+    # Verify checkpoint belongs to session
+    resp = _request(
+        client,
+        "get",
+        f"/api/sessions/{args.session_id}/checkpoints",
+        base_url,
+    )
+    checkpoints = resp.json()
+    checkpoint_ids = [c["id"] for c in checkpoints]
+    if args.checkpoint not in checkpoint_ids:
+        print(
+            f"Error: Checkpoint {args.checkpoint} does not belong to session {args.session_id}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    _request(
+        client,
+        "post",
+        f"/api/checkpoints/{args.checkpoint}/rollback",
+        base_url,
+    )
+    print(f"Rolled back session {args.session_id} to checkpoint {args.checkpoint}.")
+
+
 def _sessions_chat(args: argparse.Namespace) -> None:
     base_url = _get_base_url(args)
     client = _make_client(base_url)
@@ -186,6 +220,98 @@ def _sessions_chat(args: argparse.Namespace) -> None:
         for event in events:
             if event.get("type") == "message.created" and event.get("role") == "assistant":
                 print(event.get("content", ""))
+
+
+# ---------------------------------------------------------------------------
+# Questions commands
+# ---------------------------------------------------------------------------
+
+
+def _questions_list(args: argparse.Namespace) -> None:
+    base_url = _get_base_url(args)
+    client = _make_client(base_url)
+    if hasattr(args, "session") and args.session:
+        resp = _request(
+            client,
+            "get",
+            f"/api/sessions/{args.session}/questions",
+            base_url,
+            params={"answered": "false"},
+        )
+    else:
+        resp = _request(
+            client,
+            "get",
+            "/api/questions",
+            base_url,
+            params={"answered": "false"},
+        )
+    questions = resp.json()
+    if not questions:
+        print("No pending questions.")
+        return
+    print(f"{'ID':<38} {'Session':<38} {'Question':<40} {'Created'}")
+    print("-" * 140)
+    for q in questions:
+        question_text = q["question"][:37] + "..." if len(q["question"]) > 40 else q["question"]
+        print(f"{q['id']:<38} {q['session_id']:<38} {question_text:<40} {q.get('created_at', '')}")
+
+
+def _questions_answer(args: argparse.Namespace) -> None:
+    base_url = _get_base_url(args)
+    client = _make_client(base_url)
+    # Resolve session_id from question
+    resp = _request(
+        client,
+        "get",
+        f"/api/questions/{args.question_id}",
+        base_url,
+    )
+    question = resp.json()
+    session_id = question["session_id"]
+    _request(
+        client,
+        "post",
+        f"/api/sessions/{session_id}/questions/{args.question_id}/answer",
+        base_url,
+        json={"answer": args.answer},
+    )
+    print(f"Answered question {args.question_id}.")
+
+
+# ---------------------------------------------------------------------------
+# System commands
+# ---------------------------------------------------------------------------
+
+
+def _system_health(args: argparse.Namespace) -> None:
+    base_url = _get_base_url(args)
+    client = _make_client(base_url)
+    resp = _request(client, "get", "/api/system/health", base_url)
+    data = resp.json()
+    maint = "on" if data.get("maintenance") else "off"
+    print(f"Version:         {data['version']}")
+    print(f"Database:        {data['database']}")
+    print(f"Redis:           {data['redis']}")
+    print(f"Active sessions: {data['active_sessions']}")
+    print(f"Maintenance:     {maint}")
+
+
+def _system_maintenance(args: argparse.Namespace) -> None:
+    base_url = _get_base_url(args)
+    client = _make_client(base_url)
+    enabled = args.state == "on"
+    _request(
+        client,
+        "post",
+        "/api/system/maintenance",
+        base_url,
+        json={"enabled": enabled},
+    )
+    if enabled:
+        print("Maintenance mode enabled.")
+    else:
+        print("Maintenance mode disabled.")
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +377,43 @@ def main() -> None:
     sessions_chat_parser = sessions_sub.add_parser("chat", help="Chat with a session")
     sessions_chat_parser.add_argument("session_id", help="Session ID")
 
+    # sessions pause
+    sessions_pause_parser = sessions_sub.add_parser("pause", help="Pause a session")
+    sessions_pause_parser.add_argument("session_id", help="Session ID")
+
+    # sessions rollback
+    sessions_rollback_parser = sessions_sub.add_parser(
+        "rollback", help="Rollback a session to a checkpoint"
+    )
+    sessions_rollback_parser.add_argument("session_id", help="Session ID")
+    sessions_rollback_parser.add_argument("--checkpoint", required=True, help="Checkpoint ID")
+
+    # questions subcommand group
+    questions_parser = subparsers.add_parser("questions", help="Manage pending questions")
+    questions_sub = questions_parser.add_subparsers(dest="action")
+
+    # questions list
+    questions_list_parser = questions_sub.add_parser("list", help="List pending questions")
+    questions_list_parser.add_argument("--session", default=None, help="Filter by session ID")
+
+    # questions answer
+    questions_answer_parser = questions_sub.add_parser("answer", help="Answer a pending question")
+    questions_answer_parser.add_argument("question_id", help="Question ID")
+    questions_answer_parser.add_argument("answer", help="Answer text")
+
+    # system subcommand group
+    system_parser = subparsers.add_parser("system", help="System management")
+    system_sub = system_parser.add_subparsers(dest="action")
+
+    # system health
+    system_sub.add_parser("health", help="Show system health")
+
+    # system maintenance
+    system_maintenance_parser = system_sub.add_parser("maintenance", help="Toggle maintenance mode")
+    system_maintenance_parser.add_argument(
+        "state", choices=["on", "off"], help="Enable or disable maintenance mode"
+    )
+
     # tui subcommand
     subparsers.add_parser("tui", help="Launch the interactive terminal dashboard")
 
@@ -281,8 +444,26 @@ def main() -> None:
             _sessions_status(args)
         elif args.action == "chat":
             _sessions_chat(args)
+        elif args.action == "pause":
+            _sessions_pause(args)
+        elif args.action == "rollback":
+            _sessions_rollback(args)
         else:
             sessions_parser.print_help()
+    elif args.command == "questions":
+        if args.action == "list":
+            _questions_list(args)
+        elif args.action == "answer":
+            _questions_answer(args)
+        else:
+            questions_parser.print_help()
+    elif args.command == "system":
+        if args.action == "health":
+            _system_health(args)
+        elif args.action == "maintenance":
+            _system_maintenance(args)
+        else:
+            system_parser.print_help()
     else:
         parser.print_help()
 

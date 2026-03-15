@@ -13,6 +13,8 @@ from codehive.api.routes.logs import logs_router
 from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.remote import router as remote_router
 from codehive.api.routes.questions import questions_router
+from codehive.api.routes.questions_global import global_questions_router
+from codehive.api.routes.system import system_router
 from codehive.api.routes.archetypes import router as archetypes_router
 from codehive.api.routes.roles import project_roles_router, router as roles_router
 from codehive.api.routes.sessions import project_sessions_router, sessions_router
@@ -39,6 +41,8 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(logs_router)
     app.include_router(questions_router)
+    app.include_router(global_questions_router)
+    app.include_router(system_router)
     app.include_router(roles_router)
     app.include_router(project_roles_router)
     app.include_router(archetypes_router)
