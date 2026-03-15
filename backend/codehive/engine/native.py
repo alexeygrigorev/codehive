@@ -9,6 +9,7 @@ from typing import Any, AsyncIterator
 
 from anthropic import AsyncAnthropic
 
+from codehive.core.knowledge import build_knowledge_context
 from codehive.core.approval import (
     ApprovalPolicy,
     check_action,
@@ -290,6 +291,28 @@ class NativeEngine:
             role_prompt = build_role_system_prompt(role_def)
             if role_prompt:
                 system_parts.append(role_prompt)
+
+        # Inject project knowledge context if available
+        if db is not None:
+            try:
+                from codehive.db.models import Session as SessionModel
+
+                session_row = await db.get(SessionModel, session_id)
+                if session_row is not None:
+                    from codehive.core.project import get_project
+
+                    project = await get_project(db, session_row.project_id)
+                    if project is not None and project.knowledge:
+                        knowledge_block = build_knowledge_context(project.knowledge)
+                        if knowledge_block:
+                            system_parts.append(knowledge_block)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to load knowledge context for session %s: %s",
+                    session_id,
+                    exc,
+                )
+
         if system_parts:
             api_kwargs["system"] = "\n\n".join(system_parts)
 
@@ -664,6 +687,14 @@ class NativeEngine:
                     tool_input["old_text"],
                     tool_input["new_text"],
                 )
+                # Emit file.changed event for successful edits
+                if session_id is not None and db is not None and self._event_bus is not None:
+                    await self._event_bus.publish(
+                        db,
+                        session_id,
+                        "file.changed",
+                        {"path": tool_input["path"], "action": "edit"},
+                    )
                 return {"content": result}
 
             elif tool_name == "run_shell":
@@ -681,6 +712,19 @@ class NativeEngine:
                     output += f"\nSTDERR:\n{shell_result.stderr}"
                 if shell_result.timed_out:
                     output += "\n[TIMED OUT]"
+                # Emit terminal.output event
+                if session_id is not None and db is not None and self._event_bus is not None:
+                    await self._event_bus.publish(
+                        db,
+                        session_id,
+                        "terminal.output",
+                        {
+                            "command": tool_input["command"],
+                            "exit_code": shell_result.exit_code,
+                            "stdout": shell_result.stdout[:10000],
+                            "stderr": shell_result.stderr[:10000],
+                        },
+                    )
                 return {
                     "content": json.dumps(
                         {
