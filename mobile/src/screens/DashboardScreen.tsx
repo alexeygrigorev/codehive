@@ -5,6 +5,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
   StyleSheet,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -50,6 +51,19 @@ export default function DashboardScreen({ navigation }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => navigation.navigate("NewProject")}
+          testID="new-project-button"
+        >
+          <Text style={{ color: "#2196F3", fontSize: 16 }}>New Project</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   const fetchProjects = useCallback(async () => {
     try {
