@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 // Stack param lists for each tab
 export type DashboardStackParamList = {
   DashboardHome: undefined;
+  ProjectSessions: { projectId: string; projectName: string };
 };
 
 export type SessionsStackParamList = {
