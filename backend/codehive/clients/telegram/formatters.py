@@ -4,6 +4,81 @@ from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+# Maximum items per keyboard page before showing "More..." button
+PAGE_SIZE = 8
+
+
+# ---------------------------------------------------------------------------
+# Inline keyboard builders
+# ---------------------------------------------------------------------------
+
+
+def build_project_keyboard(
+    projects: list[dict],
+    action: str = "project",
+    offset: int = 0,
+) -> InlineKeyboardMarkup | None:
+    """Build an inline keyboard with one button per project.
+
+    *action* controls the callback_data prefix (e.g. ``project``,
+    ``sessions_for``, ``status_project``, ``todo_project``,
+    ``questions_project``, ``stop_project``).
+
+    Returns ``None`` when *projects* is empty so callers can fall back to text.
+    """
+    if not projects:
+        return None
+    page = projects[offset : offset + PAGE_SIZE]
+    rows: list[list[InlineKeyboardButton]] = []
+    for p in page:
+        name = p.get("name", "unnamed")
+        pid = p.get("id", "?")
+        rows.append([InlineKeyboardButton(name, callback_data=f"{action}:{pid}")])
+    if offset + PAGE_SIZE < len(projects):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "More...",
+                    callback_data=f"more:{action}:{offset + PAGE_SIZE}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(rows)
+
+
+def build_session_keyboard(
+    sessions: list[dict],
+    action: str = "status",
+    offset: int = 0,
+) -> InlineKeyboardMarkup | None:
+    """Build an inline keyboard with one button per session.
+
+    *action* controls the callback_data prefix (e.g. ``status``, ``todo``,
+    ``questions``, ``stop``).
+
+    Returns ``None`` when *sessions* is empty so callers can fall back to text.
+    """
+    if not sessions:
+        return None
+    page = sessions[offset : offset + PAGE_SIZE]
+    rows: list[list[InlineKeyboardButton]] = []
+    for s in page:
+        name = s.get("name", "unnamed")
+        sid = s.get("id", "?")
+        status = s.get("status", "")
+        label = f"{name} [{status}]" if status else name
+        rows.append([InlineKeyboardButton(label, callback_data=f"{action}:{sid}")])
+    if offset + PAGE_SIZE < len(sessions):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "More...",
+                    callback_data=f"more:{action}:{offset + PAGE_SIZE}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(rows)
+
 
 def format_project_list(projects: list[dict]) -> str:
     """Format a list of project dicts into a readable string."""

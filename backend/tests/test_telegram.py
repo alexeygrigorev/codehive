@@ -8,10 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from telegram import InlineKeyboardMarkup
 from telegram.ext import CommandHandler
 
 from codehive.clients.telegram.bot import COMMAND_HANDLERS, create_bot
 from codehive.clients.telegram.formatters import (
+    PAGE_SIZE,
+    build_project_keyboard,
+    build_session_keyboard,
     format_project_list,
     format_question_list,
     format_session_status,
@@ -20,6 +24,7 @@ from codehive.clients.telegram.formatters import (
 from codehive.clients.telegram.handlers import (
     answer_handler,
     approve_handler,
+    callback_query_handler,
     projects_handler,
     questions_handler,
     reject_handler,
@@ -42,6 +47,19 @@ def _make_update() -> MagicMock:
     update = MagicMock()
     update.message = MagicMock()
     update.message.reply_text = AsyncMock()
+    update.callback_query = None
+    return update
+
+
+def _make_callback_update(callback_data: str) -> MagicMock:
+    """Create a mocked Telegram Update with a callback_query."""
+    update = MagicMock()
+    update.message = None
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    query.data = callback_data
+    update.callback_query = query
     return update
 
 
@@ -65,6 +83,19 @@ def _mock_response(status_code: int = 200, json_data: object = None) -> MagicMoc
     resp.json.return_value = json_data if json_data is not None else {}
     resp.text = str(json_data)
     return resp
+
+
+def _make_projects(n: int = 2) -> list[dict]:
+    """Create a list of n project dicts."""
+    return [{"id": f"p{i}", "name": f"Project {i}"} for i in range(n)]
+
+
+def _make_sessions(n: int = 2) -> list[dict]:
+    """Create a list of n session dicts."""
+    return [
+        {"id": f"s{i}", "name": f"Session {i}", "status": "idle", "engine": "native"}
+        for i in range(n)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +172,86 @@ class TestFormatQuestionList:
 
 
 # ---------------------------------------------------------------------------
+# Inline keyboard builder tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildProjectKeyboard:
+    def test_returns_keyboard_with_buttons(self) -> None:
+        projects = _make_projects(3)
+        kb = build_project_keyboard(projects, action="project")
+        assert kb is not None
+        assert isinstance(kb, InlineKeyboardMarkup)
+        # 3 rows, one button each
+        assert len(kb.inline_keyboard) == 3
+        assert kb.inline_keyboard[0][0].text == "Project 0"
+        assert kb.inline_keyboard[0][0].callback_data == "project:p0"
+
+    def test_empty_returns_none(self) -> None:
+        assert build_project_keyboard([]) is None
+
+    def test_custom_action(self) -> None:
+        projects = [{"id": "x1", "name": "X"}]
+        kb = build_project_keyboard(projects, action="sessions_for")
+        assert kb is not None
+        assert kb.inline_keyboard[0][0].callback_data == "sessions_for:x1"
+
+    def test_pagination_more_button(self) -> None:
+        projects = _make_projects(10)
+        kb = build_project_keyboard(projects, action="project", offset=0)
+        assert kb is not None
+        # 8 project rows + 1 More row
+        assert len(kb.inline_keyboard) == PAGE_SIZE + 1
+        more_btn = kb.inline_keyboard[-1][0]
+        assert more_btn.text == "More..."
+        assert more_btn.callback_data == "more:project:8"
+
+    def test_pagination_offset(self) -> None:
+        projects = _make_projects(10)
+        kb = build_project_keyboard(projects, action="project", offset=8)
+        assert kb is not None
+        # 2 remaining projects, no More button
+        assert len(kb.inline_keyboard) == 2
+        assert kb.inline_keyboard[0][0].text == "Project 8"
+
+    def test_exact_page_size_no_more_button(self) -> None:
+        projects = _make_projects(PAGE_SIZE)
+        kb = build_project_keyboard(projects, action="project", offset=0)
+        assert kb is not None
+        assert len(kb.inline_keyboard) == PAGE_SIZE
+        # No More button
+        assert kb.inline_keyboard[-1][0].text.startswith("Project")
+
+
+class TestBuildSessionKeyboard:
+    def test_returns_keyboard_with_buttons(self) -> None:
+        sessions = _make_sessions(2)
+        kb = build_session_keyboard(sessions, action="status")
+        assert kb is not None
+        assert len(kb.inline_keyboard) == 2
+        assert "Session 0" in kb.inline_keyboard[0][0].text
+        assert kb.inline_keyboard[0][0].callback_data == "status:s0"
+
+    def test_empty_returns_none(self) -> None:
+        assert build_session_keyboard([]) is None
+
+    def test_pagination_more_button(self) -> None:
+        sessions = _make_sessions(10)
+        kb = build_session_keyboard(sessions, action="status", offset=0)
+        assert kb is not None
+        assert len(kb.inline_keyboard) == PAGE_SIZE + 1
+        more_btn = kb.inline_keyboard[-1][0]
+        assert more_btn.text == "More..."
+        assert more_btn.callback_data == "more:status:8"
+
+    def test_session_label_includes_status(self) -> None:
+        sessions = [{"id": "s1", "name": "Coding", "status": "running"}]
+        kb = build_session_keyboard(sessions, action="status")
+        assert kb is not None
+        assert "Coding [running]" == kb.inline_keyboard[0][0].text
+
+
+# ---------------------------------------------------------------------------
 # Handler tests
 # ---------------------------------------------------------------------------
 
@@ -167,7 +278,7 @@ class TestStartHandler:
 
 class TestProjectsHandler:
     @pytest.mark.asyncio
-    async def test_lists_projects(self) -> None:
+    async def test_lists_projects_as_keyboard(self) -> None:
         projects = [{"id": "p1", "name": "Project One"}]
         mock_resp = _mock_response(200, projects)
 
@@ -179,13 +290,30 @@ class TestProjectsHandler:
         await projects_handler(update, context)
 
         http_client.get.assert_called_once_with("/api/projects")
+        call_kwargs = update.message.reply_text.call_args
+        assert call_kwargs[0][0] == "Select a project:"
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].text == "Project One"
+        assert markup.inline_keyboard[0][0].callback_data == "project:p1"
+
+    @pytest.mark.asyncio
+    async def test_empty_projects_shows_text(self) -> None:
+        mock_resp = _mock_response(200, [])
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_update()
+        context = _make_context(http_client=http_client)
+        await projects_handler(update, context)
+
         reply = update.message.reply_text.call_args[0][0]
-        assert "Project One" in reply
+        assert "No projects found" in reply
 
 
 class TestSessionsHandler:
     @pytest.mark.asyncio
-    async def test_lists_sessions(self) -> None:
+    async def test_lists_sessions_as_keyboard(self) -> None:
         pid = str(uuid.uuid4())
         sessions = [{"id": "s1", "name": "Session One", "status": "idle", "engine": "native"}]
         mock_resp = _mock_response(200, sessions)
@@ -198,16 +326,29 @@ class TestSessionsHandler:
         await sessions_handler(update, context)
 
         http_client.get.assert_called_once_with(f"/api/projects/{pid}/sessions")
-        reply = update.message.reply_text.call_args[0][0]
-        assert "Session One" in reply
+        call_kwargs = update.message.reply_text.call_args
+        assert call_kwargs[0][0] == "Select a session:"
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "status:s1"
 
     @pytest.mark.asyncio
-    async def test_missing_arg_shows_usage(self) -> None:
+    async def test_no_arg_shows_project_keyboard(self) -> None:
+        projects = [{"id": "p1", "name": "My Project"}]
+        mock_resp = _mock_response(200, projects)
+
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
         update = _make_update()
-        context = _make_context(args=[])
+        context = _make_context(args=[], http_client=http_client)
         await sessions_handler(update, context)
-        reply = update.message.reply_text.call_args[0][0]
-        assert "Usage" in reply
+
+        call_kwargs = update.message.reply_text.call_args
+        assert "project" in call_kwargs[0][0].lower()
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "sessions_for:p1"
 
 
 class TestStatusHandler:
@@ -237,12 +378,21 @@ class TestStatusHandler:
         assert "idle" in reply
 
     @pytest.mark.asyncio
-    async def test_missing_arg_shows_usage(self) -> None:
+    async def test_no_arg_shows_project_keyboard(self) -> None:
+        projects = [{"id": "p1", "name": "Proj"}]
+        mock_resp = _mock_response(200, projects)
+
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
         update = _make_update()
-        context = _make_context(args=[])
+        context = _make_context(args=[], http_client=http_client)
         await status_handler(update, context)
-        reply = update.message.reply_text.call_args[0][0]
-        assert "Usage" in reply
+
+        call_kwargs = update.message.reply_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "status_project:p1"
 
 
 class TestTodoHandler:
@@ -266,6 +416,23 @@ class TestTodoHandler:
         reply = update.message.reply_text.call_args[0][0]
         assert "Task A" in reply
         assert "Task B" in reply
+
+    @pytest.mark.asyncio
+    async def test_no_arg_shows_project_keyboard(self) -> None:
+        projects = [{"id": "p1", "name": "Proj"}]
+        mock_resp = _mock_response(200, projects)
+
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_update()
+        context = _make_context(args=[], http_client=http_client)
+        await todo_handler(update, context)
+
+        call_kwargs = update.message.reply_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "todo_project:p1"
 
 
 class TestSendHandler:
@@ -366,6 +533,23 @@ class TestQuestionsHandler:
         reply = update.message.reply_text.call_args[0][0]
         assert "Which DB?" in reply
 
+    @pytest.mark.asyncio
+    async def test_no_arg_shows_project_keyboard(self) -> None:
+        projects = [{"id": "p1", "name": "Proj"}]
+        mock_resp = _mock_response(200, projects)
+
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_update()
+        context = _make_context(args=[], http_client=http_client)
+        await questions_handler(update, context)
+
+        call_kwargs = update.message.reply_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "questions_project:p1"
+
 
 class TestAnswerHandler:
     @pytest.mark.asyncio
@@ -413,12 +597,293 @@ class TestStopHandler:
         assert "Session stopped" in reply
 
     @pytest.mark.asyncio
-    async def test_missing_arg_shows_usage(self) -> None:
+    async def test_no_arg_shows_project_keyboard(self) -> None:
+        projects = [{"id": "p1", "name": "Proj"}]
+        mock_resp = _mock_response(200, projects)
+
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
         update = _make_update()
-        context = _make_context(args=[])
+        context = _make_context(args=[], http_client=http_client)
         await stop_handler(update, context)
-        reply = update.message.reply_text.call_args[0][0]
-        assert "Usage" in reply
+
+        call_kwargs = update.message.reply_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "stop_project:p1"
+
+
+# ---------------------------------------------------------------------------
+# Callback query handler tests
+# ---------------------------------------------------------------------------
+
+
+class TestCallbackQueryHandler:
+    @pytest.mark.asyncio
+    async def test_approve_callback(self) -> None:
+        action_id = "act-123"
+        mock_resp = _mock_response(200)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.post = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update(f"approve:{action_id}")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        http_client.post.assert_called_once_with(f"/api/sessions/{action_id}/approve")
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "Approved" in text
+
+    @pytest.mark.asyncio
+    async def test_reject_callback(self) -> None:
+        action_id = "act-456"
+        mock_resp = _mock_response(200)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.post = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update(f"reject:{action_id}")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "Rejected" in text
+
+    @pytest.mark.asyncio
+    async def test_project_callback_shows_sessions(self) -> None:
+        sessions = _make_sessions(2)
+        mock_resp = _mock_response(200, sessions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("project:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        http_client.get.assert_called_once_with("/api/projects/p1/sessions")
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "status:s0"
+
+    @pytest.mark.asyncio
+    async def test_sessions_for_callback_shows_sessions(self) -> None:
+        sessions = _make_sessions(1)
+        mock_resp = _mock_response(200, sessions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("sessions_for:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard[0][0].callback_data == "status:s0"
+
+    @pytest.mark.asyncio
+    async def test_status_project_callback_shows_session_keyboard(self) -> None:
+        sessions = _make_sessions(1)
+        mock_resp = _mock_response(200, sessions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("status_project:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert markup.inline_keyboard[0][0].callback_data == "status:s0"
+
+    @pytest.mark.asyncio
+    async def test_todo_project_callback_shows_session_keyboard(self) -> None:
+        sessions = _make_sessions(1)
+        mock_resp = _mock_response(200, sessions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("todo_project:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert markup.inline_keyboard[0][0].callback_data == "todo:s0"
+
+    @pytest.mark.asyncio
+    async def test_questions_project_callback_shows_session_keyboard(self) -> None:
+        sessions = _make_sessions(1)
+        mock_resp = _mock_response(200, sessions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("questions_project:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert markup.inline_keyboard[0][0].callback_data == "questions:s0"
+
+    @pytest.mark.asyncio
+    async def test_stop_project_callback_shows_session_keyboard(self) -> None:
+        sessions = _make_sessions(1)
+        mock_resp = _mock_response(200, sessions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("stop_project:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert markup.inline_keyboard[0][0].callback_data == "stop:s0"
+
+    @pytest.mark.asyncio
+    async def test_status_callback_shows_session_status(self) -> None:
+        session = {
+            "id": "s1",
+            "name": "my-session",
+            "engine": "native",
+            "mode": "execution",
+            "status": "idle",
+            "created_at": "2026-01-01",
+        }
+        mock_resp = _mock_response(200, session)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("status:s1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        http_client.get.assert_called_once_with("/api/sessions/s1")
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "my-session" in text
+
+    @pytest.mark.asyncio
+    async def test_todo_callback_shows_tasks(self) -> None:
+        tasks = [{"title": "Do stuff", "status": "pending"}]
+        mock_resp = _mock_response(200, tasks)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("todo:s1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        http_client.get.assert_called_once_with("/api/sessions/s1/tasks")
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "Do stuff" in text
+
+    @pytest.mark.asyncio
+    async def test_questions_callback_shows_questions(self) -> None:
+        questions = [{"id": "q1", "text": "Which DB?", "session_id": "s1"}]
+        mock_resp = _mock_response(200, questions)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("questions:s1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        http_client.get.assert_called_once_with(
+            "/api/sessions/s1/questions", params={"answered": "false"}
+        )
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "Which DB?" in text
+
+    @pytest.mark.asyncio
+    async def test_stop_callback_stops_session(self) -> None:
+        mock_resp = _mock_response(200)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.post = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("stop:s1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        http_client.post.assert_called_once_with("/api/sessions/s1/pause")
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "Session stopped" in text
+
+    @pytest.mark.asyncio
+    async def test_unknown_action_shows_error(self) -> None:
+        update = _make_callback_update("bogus:123")
+        context = _make_context()
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "unrecognised" in text.lower()
+
+    @pytest.mark.asyncio
+    async def test_no_colon_shows_error(self) -> None:
+        update = _make_callback_update("nocolon")
+        context = _make_context()
+        await callback_query_handler(update, context)
+
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "unrecognised" in text.lower()
+
+    @pytest.mark.asyncio
+    async def test_all_callbacks_call_answer(self) -> None:
+        """Every callback query must call query.answer()."""
+        update = _make_callback_update("bogus:123")
+        context = _make_context()
+        await callback_query_handler(update, context)
+        update.callback_query.answer.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_project_callback_empty_sessions(self) -> None:
+        mock_resp = _mock_response(200, [])
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("project:p1")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "No sessions" in text
+
+    @pytest.mark.asyncio
+    async def test_more_pagination_callback(self) -> None:
+        """Callback data `more:project:8` fetches projects and shows next page."""
+        projects = _make_projects(10)
+        mock_resp = _mock_response(200, projects)
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(return_value=mock_resp)
+
+        update = _make_callback_update("more:project:8")
+        context = _make_context(http_client=http_client)
+        await callback_query_handler(update, context)
+
+        update.callback_query.answer.assert_called_once()
+        call_kwargs = update.callback_query.edit_message_text.call_args
+        markup = call_kwargs[1]["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        # Should show projects 8 and 9
+        assert len(markup.inline_keyboard) == 2
+        assert markup.inline_keyboard[0][0].text == "Project 8"
+
+    @pytest.mark.asyncio
+    async def test_more_invalid_offset_shows_error(self) -> None:
+        update = _make_callback_update("more:project:abc")
+        context = _make_context()
+        await callback_query_handler(update, context)
+
+        text = update.callback_query.edit_message_text.call_args[0][0]
+        assert "invalid" in text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +919,54 @@ class TestErrorHandling:
 
         reply = update.message.reply_text.call_args[0][0]
         assert "Cannot reach server" in reply
+
+
+# ---------------------------------------------------------------------------
+# Integration: End-to-end flow (mocked API)
+# ---------------------------------------------------------------------------
+
+
+class TestEndToEndFlow:
+    @pytest.mark.asyncio
+    async def test_projects_to_sessions_to_status(self) -> None:
+        """Simulate: /projects -> tap project -> tap session -> see status."""
+        projects = [{"id": "p1", "name": "My Project"}]
+        sessions = [{"id": "s1", "name": "Session A", "status": "idle", "engine": "native"}]
+        session_detail = {
+            "id": "s1",
+            "name": "Session A",
+            "engine": "native",
+            "mode": "execution",
+            "status": "idle",
+            "created_at": "2026-01-01",
+        }
+
+        projects_resp = _mock_response(200, projects)
+        sessions_resp = _mock_response(200, sessions)
+        status_resp = _mock_response(200, session_detail)
+
+        http_client = AsyncMock(spec=httpx.AsyncClient)
+        http_client.get = AsyncMock(side_effect=[projects_resp, sessions_resp, status_resp])
+
+        # Step 1: /projects
+        update1 = _make_update()
+        context = _make_context(http_client=http_client)
+        await projects_handler(update1, context)
+        markup1 = update1.message.reply_text.call_args[1]["reply_markup"]
+        assert markup1.inline_keyboard[0][0].callback_data == "project:p1"
+
+        # Step 2: tap project button
+        update2 = _make_callback_update("project:p1")
+        await callback_query_handler(update2, context)
+        markup2 = update2.callback_query.edit_message_text.call_args[1]["reply_markup"]
+        assert markup2.inline_keyboard[0][0].callback_data == "status:s1"
+
+        # Step 3: tap session button
+        update3 = _make_callback_update("status:s1")
+        await callback_query_handler(update3, context)
+        text = update3.callback_query.edit_message_text.call_args[0][0]
+        assert "Session A" in text
+        assert "idle" in text
 
 
 # ---------------------------------------------------------------------------
