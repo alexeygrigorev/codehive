@@ -6,13 +6,18 @@ import type {
   RootTabParamList,
   DashboardStackParamList,
   SessionsStackParamList,
+  SearchStackParamList,
 } from "./types";
 
 import DashboardScreen from "../screens/DashboardScreen";
+import NewProjectScreen from "../screens/NewProjectScreen";
+import FlowChatScreen from "../screens/FlowChatScreen";
+import BriefReviewScreen from "../screens/BriefReviewScreen";
 import ProjectSessionsScreen from "../screens/ProjectSessionsScreen";
 import ProjectIssuesScreen from "../screens/ProjectIssuesScreen";
 import SessionsScreen from "../screens/SessionsScreen";
 import SessionDetailScreen from "../screens/SessionDetailScreen";
+import SearchScreen from "../screens/SearchScreen";
 import QuestionsScreen from "../screens/QuestionsScreen";
 import ApprovalsScreen from "../screens/ApprovalsScreen";
 import SettingsScreen from "../screens/SettingsScreen";
@@ -24,6 +29,8 @@ const DashboardStackNav =
   createNativeStackNavigator<DashboardStackParamList>();
 const SessionsStackNav =
   createNativeStackNavigator<SessionsStackParamList>();
+const SearchStackNav =
+  createNativeStackNavigator<SearchStackParamList>();
 
 const BADGE_POLL_INTERVAL = 30000;
 
@@ -34,6 +41,21 @@ function DashboardStackNavigator() {
         name="DashboardHome"
         component={DashboardScreen}
         options={{ title: "Dashboard" }}
+      />
+      <DashboardStackNav.Screen
+        name="NewProject"
+        component={NewProjectScreen}
+        options={{ title: "New Project" }}
+      />
+      <DashboardStackNav.Screen
+        name="FlowChat"
+        component={FlowChatScreen}
+        options={{ title: "Project Setup" }}
+      />
+      <DashboardStackNav.Screen
+        name="BriefReview"
+        component={BriefReviewScreen}
+        options={{ title: "Review Brief" }}
       />
       <DashboardStackNav.Screen
         name="ProjectSessions"
@@ -68,6 +90,28 @@ function SessionsStackNavigator() {
         options={{ headerShown: false }}
       />
     </SessionsStackNav.Navigator>
+  );
+}
+
+function SearchStackNavigator() {
+  return (
+    <SearchStackNav.Navigator>
+      <SearchStackNav.Screen
+        name="SearchHome"
+        component={SearchScreen}
+        options={{ title: "Search" }}
+      />
+      <SearchStackNav.Screen
+        name="SessionDetail"
+        component={SessionDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <SearchStackNav.Screen
+        name="ProjectIssues"
+        component={ProjectIssuesScreen}
+        options={{ title: "Issues" }}
+      />
+    </SearchStackNav.Navigator>
   );
 }
 
@@ -110,6 +154,7 @@ export default function RootNavigator() {
       <Tab.Navigator screenOptions={{ headerShown: false }}>
         <Tab.Screen name="Dashboard" component={DashboardStackNavigator} />
         <Tab.Screen name="Sessions" component={SessionsStackNavigator} />
+        <Tab.Screen name="Search" component={SearchStackNavigator} />
         <Tab.Screen
           name="Questions"
           component={QuestionsScreen}

@@ -472,6 +472,44 @@ class TestErrorRateMonitor:
         channel = call_args[0][0]
         assert "events" in channel
 
+    async def test_spike_event_includes_ratio(
+        self, db_session, session_model, system_session, session_factory
+    ):
+        """The published spike event data must include spike_ratio and previous_window_errors."""
+        import json
+
+        now = datetime.now(timezone.utc)
+        settings = _make_settings(
+            error_window_minutes=15,
+            error_spike_threshold=2.0,
+            error_spike_min_count=3,
+            error_spike_cooldown_seconds=300,
+        )
+        # Previous window: 2 errors
+        for i in range(2):
+            await _insert_error(
+                db_session, session_model.id, created_at=now - timedelta(minutes=20 + i)
+            )
+        # Current window: 7 errors (ratio = 3.5)
+        for i in range(7):
+            await _insert_error(db_session, session_model.id, created_at=now - timedelta(minutes=i))
+
+        mock_redis = AsyncMock()
+        mock_redis.publish = AsyncMock(return_value=1)
+        event_bus = EventBus(redis=mock_redis)
+
+        monitor = ErrorRateMonitor(event_bus, session_factory, settings=settings)
+        await monitor._check()
+
+        mock_redis.publish.assert_called_once()
+        call_args = mock_redis.publish.call_args
+        payload = json.loads(call_args[0][1])
+        event_data = payload["data"]
+        assert "spike_ratio" in event_data
+        assert event_data["spike_ratio"] == 3.5
+        assert "previous_window_errors" in event_data
+        assert event_data["previous_window_errors"] == 2
+
     async def test_no_spike_below_min_count(
         self, db_session, session_model, system_session, session_factory
     ):
@@ -717,12 +755,24 @@ class TestTelegramErrorFormatter:
             "window_errors": 15,
             "window_minutes": 10,
             "errors_per_minute": 1.5,
+            "spike_ratio": 3.5,
         }
         text = format_error_rate_spike_notification(data)
         assert "15" in text
         assert "10" in text
         assert "1.50" in text
         assert "spike" in text.lower()
+        assert "3.5x normal" in text
+
+    def test_format_error_rate_spike_without_ratio(self):
+        data = {
+            "window_errors": 15,
+            "window_minutes": 10,
+            "errors_per_minute": 1.5,
+        }
+        text = format_error_rate_spike_notification(data)
+        assert "15" in text
+        assert "ratio" not in text.lower()
 
 
 # ---------------------------------------------------------------------------

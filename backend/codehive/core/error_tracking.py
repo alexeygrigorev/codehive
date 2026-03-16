@@ -230,6 +230,29 @@ class ErrorRateMonitor:
             window_errors = summary["window_errors"]
             errors_per_minute = summary["errors_per_minute"]
 
+            # Compute spike ratio for the notification
+            now_dt = datetime.now(timezone.utc)
+            window_start = now_dt - timedelta(minutes=self._settings.error_window_minutes)
+            prev_window_start = window_start - timedelta(
+                minutes=self._settings.error_window_minutes
+            )
+            prev_stmt = (
+                select(func.count())
+                .select_from(Event)
+                .where(
+                    _error_filter(),
+                    Event.created_at >= prev_window_start,
+                    Event.created_at < window_start,
+                )
+            )
+            prev_result = await db.execute(prev_stmt)
+            previous_window_errors = prev_result.scalar() or 0
+            spike_ratio = (
+                round(window_errors / previous_window_errors, 2)
+                if previous_window_errors > 0
+                else float(window_errors)
+            )
+
             await self._event_bus.publish(
                 db,
                 SYSTEM_SESSION_ID,
@@ -238,10 +261,12 @@ class ErrorRateMonitor:
                     "window_errors": window_errors,
                     "window_minutes": summary["window_minutes"],
                     "errors_per_minute": errors_per_minute,
+                    "spike_ratio": spike_ratio,
+                    "previous_window_errors": previous_window_errors,
                     "message": (
                         f"Error rate spike detected: {window_errors} errors "
                         f"in the last {summary['window_minutes']} minutes "
-                        f"({errors_per_minute:.2f}/min)"
+                        f"({errors_per_minute:.2f}/min, {spike_ratio}x normal)"
                     ),
                 },
             )

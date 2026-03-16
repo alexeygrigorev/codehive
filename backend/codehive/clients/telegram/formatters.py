@@ -236,8 +236,12 @@ def format_error_rate_spike_notification(data: dict) -> str:
     window_errors = data.get("window_errors", 0)
     window_minutes = data.get("window_minutes", 0)
     errors_per_minute = data.get("errors_per_minute", 0.0)
-    return (
-        f"Error rate spike detected\n\n"
-        f"Errors in last {window_minutes} minutes: {window_errors}\n"
-        f"Rate: {errors_per_minute:.2f} errors/minute"
-    )
+    spike_ratio = data.get("spike_ratio")
+    lines = [
+        "Error rate spike detected\n",
+        f"Errors in last {window_minutes} minutes: {window_errors}",
+        f"Rate: {errors_per_minute:.2f} errors/minute",
+    ]
+    if spike_ratio is not None:
+        lines.append(f"Spike ratio: {spike_ratio}x normal")
+    return "\n".join(lines)
