@@ -71,6 +71,10 @@ class Settings(BaseSettings):
 
     firebase_credentials_json: str = ""
 
+    log_level: str = "INFO"
+    log_file: str = ""
+    log_json: bool = True
+
     model_config = {
         "env_prefix": "CODEHIVE_",
         "env_file": ".env",

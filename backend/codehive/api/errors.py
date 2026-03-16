@@ -5,6 +5,8 @@ import traceback
 import uuid
 
 from fastapi import FastAPI, Request
+
+from codehive.logging import request_id_var
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -71,10 +73,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = _get_request_id(request)
         request.state.request_id = request_id
-
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
+        token = request_id_var.set(request_id)
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            request_id_var.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +145,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         "Unhandled exception (request_id=%s):\n%s",
         request_id,
         traceback.format_exc(),
+        extra={"request_id": request_id},
     )
     body = ErrorResponse(
         error="internal_error",

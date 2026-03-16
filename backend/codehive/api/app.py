@@ -10,6 +10,7 @@ from codehive.__version__ import __version__
 from codehive.config import Settings
 from codehive.api.deps import get_current_user
 from codehive.api.errors import register_error_handling
+from codehive.logging import configure_logging
 from codehive.core.first_run import print_credentials, seed_first_run
 from codehive.db.session import async_session_factory
 from codehive.api.routes.approvals import approvals_router
@@ -53,11 +54,12 @@ def create_app() -> FastAPI:
                 print_credentials(credentials)
         yield
 
+    settings = Settings()
+    configure_logging(settings)
+
     app = FastAPI(title="codehive", version=__version__, lifespan=lifespan)
 
     register_error_handling(app)
-
-    settings = Settings()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -68,6 +70,8 @@ def create_app() -> FastAPI:
 
     # ---- Public routes (no auth required) ----
     app.include_router(auth_router)
+    # WebSocket router handles its own JWT auth (query param or first message)
+    app.include_router(ws_router)
 
     @app.get("/api/health")
     async def health() -> dict:
@@ -96,7 +100,6 @@ def create_app() -> FastAPI:
     app.include_router(roles_router, dependencies=_auth)
     app.include_router(project_roles_router, dependencies=_auth)
     app.include_router(archetypes_router, dependencies=_auth)
-    app.include_router(ws_router, dependencies=_auth)
     app.include_router(knowledge_router, dependencies=_auth)
     app.include_router(github_router, dependencies=_auth)
     app.include_router(remote_router, dependencies=_auth)
