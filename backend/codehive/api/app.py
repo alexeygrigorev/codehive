@@ -17,6 +17,7 @@ from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.remote import router as remote_router
 from codehive.api.routes.tunnels import router as tunnels_router
 from codehive.api.routes.replay import replay_router
+from codehive.api.routes.search import search_router, session_history_router
 from codehive.api.routes.webhooks import webhooks_router
 from codehive.api.routes.questions import questions_router
 from codehive.api.routes.questions_global import global_questions_router
@@ -70,5 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(webhooks_router, dependencies=_auth)
     app.include_router(replay_router, dependencies=_auth)
     app.include_router(push_router, dependencies=_auth)
+    app.include_router(search_router, dependencies=_auth)
+    app.include_router(session_history_router, dependencies=_auth)
 
     return app
