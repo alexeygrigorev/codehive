@@ -132,6 +132,22 @@ class GitOps:
         """
         await self._run("branch", name)
 
+    async def push(self, remote: str = "origin", branch: str = "main") -> str:
+        """Push commits to a remote.
+
+        Args:
+            remote: Remote name (default ``origin``).
+            branch: Branch name (default ``main``).
+
+        Returns:
+            stdout from the git push command.
+
+        Raises:
+            GitOpsError: If the push fails.
+        """
+        stdout, _ = await self._run("push", remote, branch)
+        return stdout
+
     async def log(self, n: int = 10) -> list[CommitInfo]:
         """Return the last N commits.
 

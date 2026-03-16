@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from codehive.core.session import create_session
 from codehive.db.models import Issue
 from codehive.integrations.github.mapper import map_github_issue
+from codehive.integrations.github.solver import solve_issue
 from codehive.integrations.github.webhook import WebhookEvent
 
 # Actions that should trigger session creation in auto mode
@@ -80,6 +83,8 @@ async def handle_issue_event(
     project_id: uuid.UUID,
     event: WebhookEvent,
     trigger_mode: str = "manual",
+    *,
+    solver_deps: dict[str, Any] | None = None,
 ) -> TriggerResult:
     """Handle an issue webhook event.
 
@@ -119,6 +124,22 @@ async def handle_issue_event(
                 mode="execution",
                 issue_id=issue.id,
             )
+
+            # Launch solver as a background task (fire-and-forget)
+            if solver_deps is not None:
+                asyncio.create_task(
+                    solve_issue(
+                        db=solver_deps["db"],
+                        project_id=project_id,
+                        issue_id=issue.id,
+                        session_id=session.id,
+                        engine=solver_deps["engine"],
+                        git_ops=solver_deps["git_ops"],
+                        shell_runner=solver_deps["shell_runner"],
+                        test_command=solver_deps.get("test_command"),
+                    )
+                )
+
             return TriggerResult(
                 issue_id=issue.id,
                 session_id=session.id,
