@@ -69,6 +69,9 @@ class Settings(BaseSettings):
         "question.created",
     ]
 
+    backup_dir: str = "./backups"
+    backup_retention: int = 7
+
     firebase_credentials_json: str = ""
 
     log_level: str = "INFO"

@@ -414,6 +414,23 @@ def main() -> None:
         "state", choices=["on", "off"], help="Enable or disable maintenance mode"
     )
 
+    # backup subcommand group
+    backup_parser = subparsers.add_parser("backup", help="Database backup management")
+    backup_sub = backup_parser.add_subparsers(dest="action")
+
+    # backup create (also the default when no action given)
+    backup_sub.add_parser("create", help="Create a new database backup")
+
+    # backup list
+    backup_sub.add_parser("list", help="List available backups")
+
+    # backup restore
+    backup_restore_parser = backup_sub.add_parser("restore", help="Restore database from backup")
+    backup_restore_parser.add_argument("file", help="Backup file path to restore from")
+    backup_restore_parser.add_argument(
+        "--yes", "-y", action="store_true", help="Skip confirmation prompt"
+    )
+
     # tui subcommand
     subparsers.add_parser("tui", help="Launch the interactive terminal dashboard")
 
@@ -427,6 +444,15 @@ def main() -> None:
 
     if args.command == "serve":
         _serve(args)
+    elif args.command == "backup":
+        if args.action == "create" or args.action is None:
+            _backup_create(args)
+        elif args.action == "list":
+            _backup_list(args)
+        elif args.action == "restore":
+            _backup_restore(args)
+        else:
+            backup_parser.print_help()
     elif args.command == "tui":
         _tui(args)
     elif args.command == "rescue":
@@ -471,6 +497,63 @@ def main() -> None:
             system_parser.print_help()
     else:
         parser.print_help()
+
+
+def _backup_create(args: argparse.Namespace) -> None:
+    from codehive.config import Settings
+    from codehive.core.backup import create_backup, prune_backups
+
+    settings = Settings()
+    try:
+        filepath = create_backup(settings.database_url, settings.backup_dir)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Backup created: {filepath}")
+
+    deleted = prune_backups(settings.backup_dir, settings.backup_retention)
+    if deleted:
+        print(f"Pruned {len(deleted)} old backup(s): {', '.join(deleted)}")
+
+
+def _backup_list(args: argparse.Namespace) -> None:
+    from codehive.config import Settings
+    from codehive.core.backup import format_age, format_size, list_backups
+
+    settings = Settings()
+    backups = list_backups(settings.backup_dir)
+    if not backups:
+        print("No backups found.")
+        return
+    print(f"{'Filename':<45} {'Size':<12} {'Age'}")
+    print("-" * 70)
+    for b in backups:
+        print(f"{b['filename']:<45} {format_size(b['size']):<12} {format_age(b['age_seconds'])}")
+    print(f"\n{len(backups)} backup(s) in {settings.backup_dir}")
+
+
+def _backup_restore(args: argparse.Namespace) -> None:
+    from codehive.config import Settings
+    from codehive.core.backup import restore_backup
+
+    settings = Settings()
+
+    if not args.yes:
+        print("WARNING: This will overwrite the current database with the backup data.")
+        try:
+            answer = input("Continue? [y/N] ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print("Aborted.")
+            sys.exit(0)
+
+    try:
+        restore_backup(settings.database_url, args.file)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Database restored from {args.file}")
 
 
 def _rescue(args: argparse.Namespace) -> None:
