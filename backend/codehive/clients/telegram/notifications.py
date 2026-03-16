@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from codehive.clients.telegram.formatters import (
     format_approval_notification,
+    format_error_rate_spike_notification,
     format_question_notification,
     format_session_completed_notification,
     format_session_failed_notification,
@@ -122,4 +123,7 @@ class NotificationDispatcher:
             await self._bot.send_message(chat_id=self.chat_id, text=text)
         elif event_type == "question.created":
             text = format_question_notification(data)
+            await self._bot.send_message(chat_id=self.chat_id, text=text)
+        elif event_type == "error.rate_spike":
+            text = format_error_rate_spike_notification(data)
             await self._bot.send_message(chat_id=self.chat_id, text=text)

@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     backup_dir: str = "./backups"
     backup_retention: int = 7
 
+    error_window_minutes: int = 15
+    error_spike_threshold: float = 3.0
+    error_spike_min_count: int = 5
+    error_spike_cooldown_seconds: int = 300
+    error_monitor_interval_seconds: int = 60
+
     firebase_credentials_json: str = ""
 
     log_level: str = "INFO"

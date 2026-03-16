@@ -154,3 +154,15 @@ def format_question_notification(data: dict) -> str:
         f"Question: {question_text}\n"
         f"Answer with: /answer {question_id} <your answer>"
     )
+
+
+def format_error_rate_spike_notification(data: dict) -> str:
+    """Format an error.rate_spike event into a notification message."""
+    window_errors = data.get("window_errors", 0)
+    window_minutes = data.get("window_minutes", 0)
+    errors_per_minute = data.get("errors_per_minute", 0.0)
+    return (
+        f"Error rate spike detected\n\n"
+        f"Errors in last {window_minutes} minutes: {window_errors}\n"
+        f"Rate: {errors_per_minute:.2f} errors/minute"
+    )
