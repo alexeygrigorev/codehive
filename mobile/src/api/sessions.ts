@@ -12,6 +12,11 @@ export async function getSession(id: string) {
   return response.data;
 }
 
+export async function getMessages(id: string) {
+  const response = await apiClient.get(`/api/sessions/${id}/messages`);
+  return response.data;
+}
+
 export async function sendMessage(id: string, text: string) {
   const response = await apiClient.post(`/api/sessions/${id}/messages`, {
     content: text,

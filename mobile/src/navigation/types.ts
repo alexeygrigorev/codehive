@@ -4,6 +4,7 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 export type DashboardStackParamList = {
   DashboardHome: undefined;
   ProjectSessions: { projectId: string; projectName: string };
+  SessionDetail: { sessionId: string };
 };
 
 export type SessionsStackParamList = {

@@ -1,6 +1,11 @@
 import apiClient from "../src/api/client";
 import { listProjects, getProject } from "../src/api/projects";
-import { listSessions, getSession, sendMessage } from "../src/api/sessions";
+import {
+  listSessions,
+  getSession,
+  getMessages,
+  sendMessage,
+} from "../src/api/sessions";
 import { listQuestions, answerQuestion } from "../src/api/questions";
 import {
   listPendingApprovals,
@@ -60,6 +65,17 @@ describe("api/sessions", () => {
     mockGet.mockResolvedValue({ data: { id: "s1" } });
     await getSession("s1");
     expect(mockGet).toHaveBeenCalledWith("/api/sessions/s1");
+  });
+
+  it("getMessages calls GET /api/sessions/{id}/messages", async () => {
+    mockGet.mockResolvedValue({
+      data: [{ id: "m1", role: "user", content: "hello" }],
+    });
+    const result = await getMessages("session-uuid");
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/sessions/session-uuid/messages"
+    );
+    expect(result).toEqual([{ id: "m1", role: "user", content: "hello" }]);
   });
 
   it("sendMessage calls POST /api/sessions/{id}/messages with content", async () => {

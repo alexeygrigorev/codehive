@@ -78,7 +78,7 @@ export default function ProjectSessionsScreen({ route, navigation }: Props) {
           status={item.status}
           updatedAt={item.updated_at}
           onPress={() => {
-            // SessionDetail navigation will be added in 53c
+            navigation.navigate("SessionDetail", { sessionId: item.id });
           }}
         />
       )}
