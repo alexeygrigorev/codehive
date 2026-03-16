@@ -2,6 +2,15 @@
 
 Persistent AI coding agent workspace with sub-agent orchestration, accessible from web, mobile, Telegram, and terminal.
 
+## Deployment Model
+
+Codehive is a self-hosted personal tool, not a SaaS product.
+
+- **Self-hosted:** You install and run codehive on your own server or computer. There is no hosted version.
+- **Access:** Connect via SSH tunnel, local network, or any method you prefer. The server binds to localhost by default.
+- **Single-user by default:** Authentication exists to protect the interface, but there is no multi-tenant hosting or user management. One instance per user.
+- **You own everything:** Your code, agent logs, secrets, and data stay on your machine.
+
 ## Vision
 
 A platform for managing AI coding agents that live in projects, execute tasks autonomously, create sub-agents, and are accessible from multiple interfaces. Not a chat — an operating system for agent sessions.

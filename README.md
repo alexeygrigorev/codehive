@@ -2,6 +2,16 @@
 
 Persistent AI coding agent workspace with sub-agent orchestration. Agents live in projects, execute tasks autonomously, create sub-agents, and are accessible from web, mobile, Telegram, and terminal. Not a chat -- an operating system for agent sessions.
 
+## How It Works
+
+Codehive is a self-hosted tool that runs on your own server or computer. There is no hosted version -- you own your instance entirely.
+
+1. Install codehive on your server (or laptop, or home machine)
+2. SSH in and run `codehive serve` to start the backend
+3. Connect from your browser, phone, Telegram, or terminal over SSH tunnel or local network
+
+One user, one instance. Your code and agent data never leave your machine.
+
 ## Architecture
 
 Monorepo with three top-level directories:
