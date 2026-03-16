@@ -45,6 +45,10 @@ def _sqlite_compatible_metadata() -> MetaData:
                     col_copy.server_default = text("'{}'")
                 elif "now()" in default_text:
                     col_copy.server_default = text("(datetime('now'))")
+                elif default_text == "true":
+                    col_copy.server_default = text("1")
+                elif default_text == "false":
+                    col_copy.server_default = text("0")
             columns.append(col_copy)
         from sqlalchemy import Table
 
@@ -97,6 +101,13 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = _override_get_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Register a test user and include auth headers
+        resp = await ac.post(
+            "/api/auth/register",
+            json={"email": "test@test.com", "username": "testuser", "password": "testpass"},
+        )
+        token = resp.json()["access_token"]
+        ac.headers["Authorization"] = f"Bearer {token}"
         yield ac
 
 

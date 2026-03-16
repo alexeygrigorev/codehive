@@ -14,6 +14,29 @@ class Base(DeclarativeBase):
     """Shared declarative base for all models."""
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(Unicode(255), unique=True, nullable=False)
+    username: Mapped[str] = mapped_column(Unicode(255), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(Unicode(1024), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("now()"),
+        default=lambda: datetime.now(tz.utc),
+    )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True
+    )
+
+
 class Workspace(Base):
     __tablename__ = "workspaces"
 

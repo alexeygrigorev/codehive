@@ -172,6 +172,7 @@ class TestIssueStatusValues:
 class TestBaseMetadata:
     def test_all_tables_registered(self):
         expected = {
+            "users",
             "workspaces",
             "projects",
             "issues",

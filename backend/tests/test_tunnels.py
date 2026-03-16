@@ -279,8 +279,11 @@ def _make_app_with_mocked_managers(
     from codehive.api.routes.remote import get_ssh_manager
     from codehive.api.routes.tunnels import get_tunnel_manager
 
+    from codehive.api.deps import get_current_user
+
     app.dependency_overrides[get_ssh_manager] = lambda: ssh
     app.dependency_overrides[get_tunnel_manager] = lambda: tm
+    app.dependency_overrides[get_current_user] = lambda: None
 
     return app, ssh, tm
 

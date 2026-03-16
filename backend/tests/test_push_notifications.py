@@ -44,6 +44,10 @@ def _sqlite_compatible_metadata() -> MetaData:
                     col_copy.server_default = text("'{}'")
                 elif "now()" in default_text:
                     col_copy.server_default = text("(datetime('now'))")
+                elif default_text == "true":
+                    col_copy.server_default = text("1")
+                elif default_text == "false":
+                    col_copy.server_default = text("0")
 
             columns.append(col_copy)
 
@@ -104,6 +108,13 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
+        # Register a test user and include auth headers
+        resp = await c.post(
+            "/api/auth/register",
+            json={"email": "test@test.com", "username": "testuser", "password": "testpass"},
+        )
+        token = resp.json()["access_token"]
+        c.headers["Authorization"] = f"Bearer {token}"
         yield c
 
 

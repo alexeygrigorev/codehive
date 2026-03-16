@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         "question.created",
     ]
 
+    secret_key: str = "change-me-in-production"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+
     vapid_private_key: str = ""
     vapid_public_key: str = ""
     vapid_mailto: str = "mailto:admin@codehive.dev"

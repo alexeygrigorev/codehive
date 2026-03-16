@@ -439,6 +439,10 @@ class TestTriggerLaunchesSolver:
                         col_copy.server_default = text("'{}'")
                     elif "now()" in default_text:
                         col_copy.server_default = text("(datetime('now'))")
+                    elif default_text == "true":
+                        col_copy.server_default = text("1")
+                    elif default_text == "false":
+                        col_copy.server_default = text("0")
                 columns.append(col_copy)
             from sqlalchemy import Table
 
@@ -537,6 +541,10 @@ class TestTriggerLaunchesSolver:
                         col_copy.server_default = text("'{}'")
                     elif "now()" in default_text:
                         col_copy.server_default = text("(datetime('now'))")
+                    elif default_text == "true":
+                        col_copy.server_default = text("1")
+                    elif default_text == "false":
+                        col_copy.server_default = text("0")
                 columns.append(col_copy)
             from sqlalchemy import Table
 
@@ -619,6 +627,10 @@ class TestTriggerLaunchesSolver:
                         col_copy.server_default = text("'{}'")
                     elif "now()" in default_text:
                         col_copy.server_default = text("(datetime('now'))")
+                    elif default_text == "true":
+                        col_copy.server_default = text("1")
+                    elif default_text == "false":
+                        col_copy.server_default = text("0")
                 columns.append(col_copy)
             from sqlalchemy import Table
 

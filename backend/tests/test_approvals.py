@@ -430,6 +430,9 @@ class TestApprovalsAPI:
     def setup_method(self):
         clear_stores()
         self.app = create_app()
+        from codehive.api.deps import get_current_user
+
+        self.app.dependency_overrides[get_current_user] = lambda: None
         self.client = TestClient(self.app)
 
     def test_list_approvals_empty(self):
