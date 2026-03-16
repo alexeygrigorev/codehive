@@ -10,13 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
 from codehive.api.schemas.push import (
+    DeviceRegisterRequest,
+    DeviceUnregisterRequest,
     PushSendRequest,
     PushSendResponse,
     PushSubscribeRequest,
     PushUnsubscribeRequest,
 )
 from codehive.config import Settings
-from codehive.db.models import PushSubscription
+from codehive.db.models import DeviceToken, PushSubscription
 
 logger = logging.getLogger(__name__)
 
@@ -108,3 +110,40 @@ async def send_push(
         await db.commit()
 
     return PushSendResponse(delivered=delivered)
+
+
+@router.post("/register-device", status_code=status.HTTP_201_CREATED)
+async def register_device(
+    payload: DeviceRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Register an FCM device token. Upserts on duplicate token."""
+    stmt = select(DeviceToken).where(DeviceToken.token == payload.token)
+    result = await db.execute(stmt)
+    existing = result.scalar_one_or_none()
+
+    if existing is not None:
+        existing.platform = payload.platform
+        existing.device_id = payload.device_id
+    else:
+        device = DeviceToken(
+            token=payload.token,
+            platform=payload.platform,
+            device_id=payload.device_id,
+        )
+        db.add(device)
+
+    await db.commit()
+    return {"status": "registered"}
+
+
+@router.post("/unregister-device", status_code=status.HTTP_200_OK)
+async def unregister_device(
+    payload: DeviceUnregisterRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Remove an FCM device token. Idempotent."""
+    stmt = delete(DeviceToken).where(DeviceToken.token == payload.token)
+    await db.execute(stmt)
+    await db.commit()
+    return {"status": "unregistered"}

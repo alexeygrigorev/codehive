@@ -46,7 +46,10 @@ class Settings(BaseSettings):
         "session.completed",
         "session.failed",
         "session.waiting",
+        "question.created",
     ]
+
+    firebase_credentials_json: str = ""
 
     model_config = {
         "env_prefix": "CODEHIVE_",

@@ -186,6 +186,7 @@ class TestBaseMetadata:
             "custom_archetypes",
             "remote_targets",
             "push_subscriptions",
+            "device_tokens",
         }
         assert expected == set(Base.metadata.tables.keys())
 

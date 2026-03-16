@@ -257,3 +257,20 @@ class PushSubscription(Base):
         server_default=text("now()"),
         default=lambda: datetime.now(tz.utc),
     )
+
+
+class DeviceToken(Base):
+    __tablename__ = "device_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    token: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    platform: Mapped[str] = mapped_column(Text, nullable=False)
+    device_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("now()"),
+        default=lambda: datetime.now(tz.utc),
+    )

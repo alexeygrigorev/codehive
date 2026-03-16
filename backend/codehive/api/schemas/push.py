@@ -25,3 +25,17 @@ class PushSendRequest(BaseModel):
 
 class PushSendResponse(BaseModel):
     delivered: int
+
+
+class DeviceRegisterRequest(BaseModel):
+    token: str
+    platform: str
+    device_id: str | None = None
+
+
+class DeviceRegisterResponse(BaseModel):
+    status: str
+
+
+class DeviceUnregisterRequest(BaseModel):
+    token: str

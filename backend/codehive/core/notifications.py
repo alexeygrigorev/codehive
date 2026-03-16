@@ -12,7 +12,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from codehive.config import Settings
-from codehive.db.models import PushSubscription
+from codehive.core.fcm import send_fcm_push
+from codehive.db.models import DeviceToken, PushSubscription
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -25,6 +26,7 @@ _EVENT_TITLES: dict[str, str] = {
     "session.completed": "Session Completed",
     "session.failed": "Session Failed",
     "session.waiting": "Session Waiting",
+    "question.created": "New Question",
 }
 
 
@@ -42,6 +44,8 @@ def _build_payload(event_type: str, data: dict) -> dict:
         body = f"{session_name}: {data.get('error', 'Session failed')}"
     elif event_type == "session.waiting":
         body = f"{session_name}: {data.get('reason', 'Waiting for input')}"
+    elif event_type == "question.created":
+        body = f"{session_name}: {data.get('question', 'New question')}"
     else:
         body = f"{session_name}: {event_type}"
 
@@ -135,6 +139,7 @@ class PushDispatcher:
 
         payload = _build_payload(event_type, data)
         await self._send_to_all(payload)
+        await self._send_fcm_to_all(payload)
 
     async def _send_to_all(self, payload: dict) -> None:
         """Send a push notification to all stored subscriptions."""
@@ -177,5 +182,44 @@ class PushDispatcher:
             # Clean up stale subscriptions
             if stale_ids:
                 stmt_del = delete(PushSubscription).where(PushSubscription.id.in_(stale_ids))
+                await db.execute(stmt_del)
+                await db.commit()
+
+    async def _send_fcm_to_all(self, payload: dict) -> None:
+        """Send an FCM push notification to all registered device tokens."""
+        async with self._session_factory() as db:
+            stmt = select(DeviceToken)
+            result = await db.execute(stmt)
+            devices = list(result.scalars().all())
+
+            if not devices:
+                return
+
+            title = payload.get("title", "")
+            body = payload.get("body", "")
+            data = {
+                "event_type": payload.get("event_type", ""),
+                "url": payload.get("url", ""),
+                "session_id": payload.get("url", "").split("/")[-1]
+                if payload.get("url", "").startswith("/sessions/")
+                else "",
+            }
+
+            stale_tokens: list[str] = []
+
+            for device in devices:
+                try:
+                    send_fcm_push(token=device.token, title=title, body=body, data=data)
+                except Exception as exc:
+                    exc_type = type(exc).__name__
+                    if exc_type in ("UnregisteredError", "InvalidArgumentError", "NotFoundError"):
+                        stale_tokens.append(device.token)
+                        logger.info("Removing stale FCM device token: %s", device.token[:20])
+                    else:
+                        logger.warning("FCM send failed for device %s: %s", device.token[:20], exc)
+
+            # Clean up stale device tokens
+            if stale_tokens:
+                stmt_del = delete(DeviceToken).where(DeviceToken.token.in_(stale_tokens))
                 await db.execute(stmt_del)
                 await db.commit()
