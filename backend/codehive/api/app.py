@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from codehive.__version__ import __version__
 from codehive.config import Settings
 from codehive.api.deps import get_current_user
+from codehive.api.errors import register_error_handling
 from codehive.core.first_run import print_credentials, seed_first_run
 from codehive.db.session import async_session_factory
 from codehive.api.routes.approvals import approvals_router
@@ -53,6 +54,8 @@ def create_app() -> FastAPI:
         yield
 
     app = FastAPI(title="codehive", version=__version__, lifespan=lifespan)
+
+    register_error_handling(app)
 
     settings = Settings()
     app.add_middleware(
