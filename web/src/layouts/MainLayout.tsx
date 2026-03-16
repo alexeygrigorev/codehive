@@ -1,11 +1,14 @@
 import { NavLink, Outlet } from "react-router-dom";
+import SearchBar from "@/components/SearchBar";
+import UserMenu from "@/components/UserMenu";
 
 export default function MainLayout() {
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-64 bg-gray-900 text-white flex-shrink-0">
-        <div className="p-4">
+      <aside className="w-64 bg-gray-900 text-white flex-shrink-0 flex flex-col">
+        <div className="p-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Codehive</h2>
+          <UserMenu />
         </div>
         <nav className="mt-4">
           <ul className="space-y-1">
@@ -27,9 +30,14 @@ export default function MainLayout() {
           </ul>
         </nav>
       </aside>
-      <main className="flex-1 p-6">
-        <Outlet />
-      </main>
+      <div className="flex-1 flex flex-col">
+        <header className="flex items-center justify-end border-b border-gray-200 bg-white px-6 py-3">
+          <SearchBar />
+        </header>
+        <main className="flex-1 p-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

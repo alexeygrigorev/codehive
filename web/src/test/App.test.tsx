@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Routes, Route } from "react-router-dom";
 import MainLayout from "@/layouts/MainLayout";
 import DashboardPage from "@/pages/DashboardPage";
@@ -8,6 +8,25 @@ import ProjectPage from "@/pages/ProjectPage";
 import SessionPage from "@/pages/SessionPage";
 import QuestionsPage from "@/pages/QuestionsPage";
 import NotFoundPage from "@/pages/NotFoundPage";
+
+// Mock the AuthContext since MainLayout now includes UserMenu
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({
+    user: {
+      id: "u1",
+      email: "test@example.com",
+      username: "testuser",
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z",
+    },
+    isAuthenticated: true,
+    isLoading: false,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refreshAccessToken: vi.fn(),
+  }),
+}));
 
 function renderWithRouter(initialEntry: string) {
   return render(
