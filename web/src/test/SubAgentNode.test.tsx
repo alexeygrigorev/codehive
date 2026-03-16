@@ -60,6 +60,60 @@ describe("SubAgentNode", () => {
     expect(indicator!.getAttribute("data-status")).toBe("failed");
   });
 
+  it("renders a message count badge when messageCount > 0", () => {
+    const session = makeSession("sub-4", "Chat Agent", "executing", "s1");
+    render(
+      <MemoryRouter>
+        <ul>
+          <SubAgentNode
+            session={session}
+            allSessions={[session]}
+            messageCount={3}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    const badge = document.querySelector(".message-count-badge");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toBe("3");
+  });
+
+  it("does not render a message count badge when messageCount is 0", () => {
+    const session = makeSession("sub-5", "Quiet Agent", "idle", "s1");
+    render(
+      <MemoryRouter>
+        <ul>
+          <SubAgentNode
+            session={session}
+            allSessions={[session]}
+            messageCount={0}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    const badge = document.querySelector(".message-count-badge");
+    expect(badge).toBeNull();
+  });
+
+  it("does not render a message count badge when messageCount is undefined", () => {
+    const session = makeSession("sub-6", "Default Agent", "idle", "s1");
+    render(
+      <MemoryRouter>
+        <ul>
+          <SubAgentNode
+            session={session}
+            allSessions={[session]}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    const badge = document.querySelector(".message-count-badge");
+    expect(badge).toBeNull();
+  });
+
   it("renders a link pointing to the correct session URL", () => {
     const session = makeSession("sub-3", "Test Agent", "idle", "s1");
     render(

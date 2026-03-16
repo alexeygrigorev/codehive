@@ -15,12 +15,14 @@ interface SubAgentNodeProps {
   session: SessionRead;
   children?: SessionRead[];
   allSessions: SessionRead[];
+  messageCount?: number;
 }
 
 export default function SubAgentNode({
   session,
   children,
   allSessions,
+  messageCount,
 }: SubAgentNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = children !== undefined && children.length > 0;
@@ -51,6 +53,11 @@ export default function SubAgentNode({
         >
           {session.name}
         </Link>
+        {messageCount !== undefined && messageCount > 0 && (
+          <span className="message-count-badge inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-xs text-white">
+            {messageCount}
+          </span>
+        )}
         <span className="text-xs text-gray-400">{session.status}</span>
       </div>
       {hasChildren && expanded && (

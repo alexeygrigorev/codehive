@@ -39,15 +39,23 @@ vi.mock("@/components/sidebar/CheckpointPanel", () => ({
 vi.mock("@/components/TunnelPanel", () => ({
   default: () => <div data-testid="tunnel-panel">TunnelPanel</div>,
 }));
+vi.mock("@/components/sidebar/AgentCommPanel", () => ({
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="agent-comm-panel" data-session-id={sessionId ?? ""}>
+      AgentCommPanel
+    </div>
+  ),
+}));
 
 describe("SidebarTabs", () => {
-  it("renders all seven tab labels", () => {
+  it("renders all eight tab labels", () => {
     render(<SidebarTabs sessionId="s1" />);
 
     expect(screen.getByText("ToDo")).toBeInTheDocument();
     expect(screen.getByText("Changed Files")).toBeInTheDocument();
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getByText("Sub-agents")).toBeInTheDocument();
+    expect(screen.getByText("Comms")).toBeInTheDocument();
     expect(screen.getByText("Questions")).toBeInTheDocument();
     expect(screen.getByText("Checkpoints")).toBeInTheDocument();
     expect(screen.getByText("Tunnels")).toBeInTheDocument();
@@ -159,6 +167,18 @@ describe("SidebarTabs", () => {
     await user.click(screen.getByText("Tunnels"));
 
     expect(screen.getByTestId("tunnel-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
+  });
+
+  it("clicking the Comms tab renders AgentCommPanel with sessionId", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Comms"));
+
+    const panel = screen.getByTestId("agent-comm-panel");
+    expect(panel).toBeInTheDocument();
+    expect(panel.getAttribute("data-session-id")).toBe("s1");
     expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
   });
 
