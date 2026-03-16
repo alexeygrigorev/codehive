@@ -34,3 +34,23 @@ jobs:
       - run: npm ci
       - run: npx tsc -b
       - run: npx vitest run
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npx jest --ci
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f backend/Dockerfile backend/
+      - run: docker build -f web/Dockerfile web/
