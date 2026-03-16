@@ -8,6 +8,7 @@ import SidebarTabs from "@/components/sidebar/SidebarTabs";
 import SessionModeIndicator from "@/components/SessionModeIndicator";
 import SessionModeSwitcher from "@/components/SessionModeSwitcher";
 import SessionApprovalBadge from "@/components/SessionApprovalBadge";
+import SessionHistorySearch from "@/components/SessionHistorySearch";
 import { useResponsive } from "@/hooks/useResponsive";
 
 export default function SessionPage() {
@@ -142,6 +143,7 @@ export default function SessionPage() {
             />
           </div>
         )}
+        <SessionHistorySearch sessionId={sessionId} />
         <div
           className={
             isMobile
