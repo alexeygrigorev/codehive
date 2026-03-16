@@ -335,10 +335,10 @@ class TestNativeEngineOrchestratorMode:
         call_kwargs = mocks["client"].messages.create.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
-        # Full set: 6 tools
+        # Full set: 8 tools (including query_agent and send_to_agent)
         assert "edit_file" in tool_names
         assert "git_commit" in tool_names
-        assert len(tools_passed) == 6
+        assert len(tools_passed) == 8
 
         # No system prompt
         assert "system" not in call_kwargs.kwargs

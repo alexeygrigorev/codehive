@@ -13,6 +13,11 @@ from codehive.db.models import Event
 from codehive.db.models import Session as SessionModel
 
 
+# Event type constants for agent communication
+EVENT_AGENT_QUERY = "agent.query"
+EVENT_AGENT_MESSAGE = "agent.message"
+
+
 class SessionNotFoundError(Exception):
     """Raised when a session does not exist."""
 

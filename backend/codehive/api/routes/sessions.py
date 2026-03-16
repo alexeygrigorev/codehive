@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
@@ -218,6 +219,44 @@ async def get_session_diffs_endpoint(
             )
         )
     return SessionDiffsResponse(session_id=str(session_id), files=files)
+
+
+class AgentMessageRequest(BaseModel):
+    """Request body for inter-agent messaging."""
+
+    target_session_id: uuid.UUID
+    message: str
+
+
+@sessions_router.post("/{session_id}/messages/agent")
+async def send_agent_message_endpoint(
+    session_id: uuid.UUID,
+    body: AgentMessageRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Send a message from one agent to another.
+
+    Creates agent.message events on both session event streams.
+    """
+    from codehive.core.agent_comm import AgentCommService
+
+    session = await get_session(db, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    target = await get_session(db, body.target_session_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Target session not found")
+
+    # Use AgentCommService without event bus (no Redis needed for API call)
+    comm = AgentCommService()
+    result = await comm.send_to_agent(
+        db,
+        sender_session_id=session_id,
+        target_session_id=body.target_session_id,
+        message=body.message,
+    )
+    return result
 
 
 async def _build_engine(session_config: dict, engine_type: str = "native") -> Any:

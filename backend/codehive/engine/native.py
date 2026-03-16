@@ -18,6 +18,7 @@ from codehive.core.approval import (
     resolve_request as resolve_approval_request,
 )
 from codehive.core.checkpoint import create_checkpoint
+from codehive.core.agent_comm import AgentCommService
 from codehive.core.events import EventBus
 from codehive.core.subagent import SubAgentManager
 from codehive.core.modes import (
@@ -39,6 +40,8 @@ from codehive.engine.orchestrator import (
     ORCHESTRATOR_SYSTEM_PROMPT,
     filter_tools,
 )
+from codehive.engine.tools.query_agent import QUERY_AGENT_TOOL
+from codehive.engine.tools.send_to_agent import SEND_TO_AGENT_TOOL
 from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -119,6 +122,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     SPAWN_SUBAGENT_TOOL,
+    QUERY_AGENT_TOOL,
+    SEND_TO_AGENT_TOOL,
 ]
 
 # Default model for the native engine
@@ -166,6 +171,7 @@ class NativeEngine:
         self._sessions: dict[uuid.UUID, _SessionState] = {}
         self._task_fetcher: Any = None  # Optional callback for fetching tasks
         self._subagent_manager = SubAgentManager(event_bus=event_bus)
+        self._agent_comm = AgentCommService(event_bus=event_bus)
         self._approval_policies: dict[uuid.UUID, ApprovalPolicy] = {}
 
     @property
@@ -758,6 +764,37 @@ class NativeEngine:
                     role=tool_input["role"],
                     scope=tool_input["scope"],
                     config=tool_input.get("config"),
+                )
+                return {"content": json.dumps(result)}
+
+            elif tool_name == "query_agent":
+                if session_id is None or db is None:
+                    return {
+                        "content": "query_agent requires an active session with DB access",
+                        "is_error": True,
+                    }
+                target_id = uuid.UUID(tool_input["session_id"])
+                limit = tool_input.get("limit", 10)
+                result = await self._agent_comm.query_agent(
+                    db,
+                    target_session_id=target_id,
+                    querying_session_id=session_id,
+                    limit=limit,
+                )
+                return {"content": json.dumps(result)}
+
+            elif tool_name == "send_to_agent":
+                if session_id is None or db is None:
+                    return {
+                        "content": "send_to_agent requires an active session with DB access",
+                        "is_error": True,
+                    }
+                target_id = uuid.UUID(tool_input["session_id"])
+                result = await self._agent_comm.send_to_agent(
+                    db,
+                    sender_session_id=session_id,
+                    target_session_id=target_id,
+                    message=tool_input["message"],
                 )
                 return {"content": json.dumps(result)}
 
