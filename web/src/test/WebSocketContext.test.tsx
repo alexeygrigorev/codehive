@@ -79,7 +79,7 @@ describe("WebSocketProvider", () => {
 
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0].url).toBe(
-      "ws://localhost:8000/api/sessions/sess-1/ws",
+      "ws://localhost:7433/api/sessions/sess-1/ws",
     );
   });
 
@@ -114,7 +114,7 @@ describe("WebSocketProvider", () => {
     expect(ws1.close).toHaveBeenCalled();
     // The cleanup disconnect + the new connect may produce 2 new instances
     const lastWs = MockWebSocket.instances[MockWebSocket.instances.length - 1];
-    expect(lastWs.url).toBe("ws://localhost:8000/api/sessions/sess-2/ws");
+    expect(lastWs.url).toBe("ws://localhost:7433/api/sessions/sess-2/ws");
   });
 
   it("child components receive connection state via useWebSocket", () => {

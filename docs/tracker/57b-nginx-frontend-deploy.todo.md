@@ -14,8 +14,8 @@ Build the React frontend for production, serve it via nginx, and configure nginx
 ### 2. Nginx config
 - `web/nginx.conf`
 - Serves frontend static files from `/`
-- Reverse proxy `/api/` to `http://backend:8000/api/`
-- Reverse proxy `/ws/` to `http://backend:8000/ws/` with WebSocket upgrade headers
+- Reverse proxy `/api/` to `http://backend:7433/api/`
+- Reverse proxy `/ws/` to `http://backend:7433/ws/` with WebSocket upgrade headers
 - SPA fallback: all non-API, non-static routes serve `index.html`
 - Gzip compression enabled
 - Security headers: `X-Frame-Options`, `X-Content-Type-Options`, `X-XSS-Protection`

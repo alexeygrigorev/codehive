@@ -27,7 +27,7 @@ describe("messages API", () => {
       const result = await sendMessage("s1", "hello");
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        "http://localhost:8000/api/sessions/s1/messages",
+        "http://localhost:7433/api/sessions/s1/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -69,7 +69,7 @@ describe("messages API", () => {
       const result = await fetchMessages("s1");
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        "http://localhost:8000/api/sessions/s1/messages",
+        "http://localhost:7433/api/sessions/s1/messages",
       );
       expect(result).toEqual(events);
     });

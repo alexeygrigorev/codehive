@@ -43,7 +43,7 @@ describe("API: subagents", () => {
     const result = await fetchSubAgents("session-1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/session-1/subagents",
+      "http://localhost:7433/api/sessions/session-1/subagents",
     );
     expect(result).toEqual(mockData);
   });

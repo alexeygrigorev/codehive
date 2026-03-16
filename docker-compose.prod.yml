@@ -5,14 +5,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "7433:7433"
     env_file:
       - .env
     environment:
       - CODEHIVE_DATABASE_URL=${CODEHIVE_DATABASE_URL:-postgresql+asyncpg://codehive:codehive@postgres:5432/codehive}
       - CODEHIVE_REDIS_URL=${CODEHIVE_REDIS_URL:-redis://redis:6379/0}
       - CODEHIVE_HOST=${CODEHIVE_HOST:-0.0.0.0}
-      - CODEHIVE_PORT=${CODEHIVE_PORT:-8000}
+      - CODEHIVE_PORT=${CODEHIVE_PORT:-7433}
       - CODEHIVE_DEBUG=${CODEHIVE_DEBUG:-false}
       - CODEHIVE_ANTHROPIC_API_KEY=${CODEHIVE_ANTHROPIC_API_KEY:-}
     depends_on:

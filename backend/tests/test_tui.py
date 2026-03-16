@@ -105,13 +105,13 @@ def _build_error_mock_api() -> MagicMock:
 
 class TestAPIClient:
     def test_builds_correct_urls(self) -> None:
-        client = APIClient("http://localhost:8000")
-        assert client.build_url("/api/projects") == "http://localhost:8000/api/projects"
+        client = APIClient("http://localhost:7433")
+        assert client.build_url("/api/projects") == "http://localhost:7433/api/projects"
 
     def test_strips_trailing_slash(self) -> None:
-        client = APIClient("http://localhost:8000/")
-        assert client.base_url == "http://localhost:8000"
-        assert client.build_url("/api/projects") == "http://localhost:8000/api/projects"
+        client = APIClient("http://localhost:7433/")
+        assert client.base_url == "http://localhost:7433"
+        assert client.build_url("/api/projects") == "http://localhost:7433/api/projects"
 
     def test_get_returns_parsed_json(self) -> None:
         mock_response = MagicMock()
@@ -119,7 +119,7 @@ class TestAPIClient:
         mock_response.json.return_value = [{"id": "1", "name": "test"}]
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.return_value = mock_response
 
@@ -128,7 +128,7 @@ class TestAPIClient:
         client._client.get.assert_called_once_with("/api/projects", params=None)
 
     def test_get_raises_on_connection_error(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.side_effect = httpx.ConnectError("Connection refused")
 
@@ -170,7 +170,7 @@ class TestStatusIndicator:
 class TestDashboardScreen:
     @pytest.mark.asyncio
     async def test_dashboard_composes_and_mounts(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)):
             # Dashboard should be the active screen
@@ -180,7 +180,7 @@ class TestDashboardScreen:
 
     @pytest.mark.asyncio
     async def test_dashboard_shows_summary_counts(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
@@ -198,7 +198,7 @@ class TestDashboardScreen:
 
     @pytest.mark.asyncio
     async def test_dashboard_shows_no_projects_message(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_empty_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
@@ -219,7 +219,7 @@ class TestDashboardScreen:
 class TestProjectListScreen:
     @pytest.mark.asyncio
     async def test_project_list_renders_rows(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.project_list import ProjectListScreen
@@ -234,7 +234,7 @@ class TestProjectListScreen:
 
     @pytest.mark.asyncio
     async def test_project_list_select_pushes_detail(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.project_list import ProjectListScreen
@@ -262,7 +262,7 @@ class TestProjectListScreen:
 class TestProjectDetailScreen:
     @pytest.mark.asyncio
     async def test_project_detail_shows_name_and_description(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.project_detail import ProjectDetailScreen
@@ -278,7 +278,7 @@ class TestProjectDetailScreen:
 
     @pytest.mark.asyncio
     async def test_project_detail_lists_sessions(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.project_detail import ProjectDetailScreen
@@ -293,7 +293,7 @@ class TestProjectDetailScreen:
 
     @pytest.mark.asyncio
     async def test_project_detail_escape_pops_back(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.dashboard import DashboardScreen

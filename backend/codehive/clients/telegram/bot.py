@@ -46,7 +46,7 @@ COMMAND_HANDLERS = {
 
 def create_bot(
     token: str,
-    base_url: str = "http://127.0.0.1:8000",
+    base_url: str = "http://127.0.0.1:7433",
     redis: Redis | None = None,
     settings: Settings | None = None,
 ) -> Application:

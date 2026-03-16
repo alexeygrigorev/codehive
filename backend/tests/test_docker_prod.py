@@ -54,9 +54,9 @@ class TestDockerfile:
         assert len(user_lines) > 0
         assert user_lines[-1] != "USER root", "Final USER should not be root"
 
-    def test_exposes_port_8000(self):
+    def test_exposes_port_7433(self):
         content = DOCKERFILE.read_text()
-        assert "EXPOSE 8000" in content
+        assert "EXPOSE 7433" in content
 
     def test_healthcheck_defined(self):
         content = DOCKERFILE.read_text()
@@ -220,10 +220,10 @@ class TestComposeProd:
             svc = data["services"][svc_name]
             assert "networks" in svc, f"{svc_name} should have networks configured"
 
-    def test_backend_exposes_port_8000(self):
+    def test_backend_exposes_port_7433(self):
         data = yaml.safe_load(COMPOSE_PROD.read_text())
         ports = data["services"]["backend"].get("ports", [])
-        assert any("8000" in str(p) for p in ports)
+        assert any("7433" in str(p) for p in ports)
 
     def test_postgres_image_version(self):
         data = yaml.safe_load(COMPOSE_PROD.read_text())

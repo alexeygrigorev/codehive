@@ -32,7 +32,7 @@ vi.mock("@/sw-register", () => {
 // Mock the api client
 vi.mock("@/api/client", () => ({
   apiClient: {
-    baseURL: "http://localhost:8000",
+    baseURL: "http://localhost:7433",
     post: vi.fn().mockResolvedValue({ ok: true }),
     get: vi.fn(),
     patch: vi.fn(),

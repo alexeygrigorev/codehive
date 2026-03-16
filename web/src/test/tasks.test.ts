@@ -31,7 +31,7 @@ describe("API: tasks", () => {
     const result = await fetchTasks("s1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/tasks",
+      "http://localhost:7433/api/sessions/s1/tasks",
     );
     expect(result).toEqual(mockData);
   });

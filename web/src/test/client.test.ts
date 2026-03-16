@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { apiClient, healthCheck } from "@/api/client";
 
 describe("API client", () => {
-  it("has default base URL of http://localhost:8000", () => {
-    expect(apiClient.baseURL).toBe("http://localhost:8000");
+  it("has default base URL of http://localhost:7433", () => {
+    expect(apiClient.baseURL).toBe("http://localhost:7433");
   });
 
   describe("post", () => {
@@ -19,7 +19,7 @@ describe("API client", () => {
       await apiClient.post("/api/test", { key: "value" });
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        "http://localhost:8000/api/test",
+        "http://localhost:7433/api/test",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -36,7 +36,7 @@ describe("API client", () => {
       await apiClient.post("/api/sessions/s1/messages", { content: "hi" });
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        "http://localhost:8000/api/sessions/s1/messages",
+        "http://localhost:7433/api/sessions/s1/messages",
         expect.objectContaining({ method: "POST" }),
       );
     });
@@ -59,7 +59,7 @@ describe("API client", () => {
       const result = await healthCheck();
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        "http://localhost:8000/api/health",
+        "http://localhost:7433/api/health",
       );
       expect(result).toEqual(mockResponse);
     });

@@ -69,7 +69,7 @@ describe("WebSocketClient", () => {
 
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0].url).toBe(
-      "ws://localhost:8000/api/sessions/abc-123/ws",
+      "ws://localhost:7433/api/sessions/abc-123/ws",
     );
   });
 
@@ -206,7 +206,7 @@ describe("WebSocketClient", () => {
     expect(ws1.close).toHaveBeenCalled();
     expect(MockWebSocket.instances).toHaveLength(2);
     expect(MockWebSocket.instances[1].url).toBe(
-      "ws://localhost:8000/api/sessions/sess-2/ws",
+      "ws://localhost:7433/api/sessions/sess-2/ws",
     );
   });
 

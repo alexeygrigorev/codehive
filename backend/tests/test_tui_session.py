@@ -88,7 +88,7 @@ MOCK_SESSIONS_FOR_PROJECT = [
 def _build_session_mock_api() -> MagicMock:
     """Return a mocked APIClient with session-related data."""
     api = MagicMock(spec=APIClient)
-    api.base_url = "http://test:8000"
+    api.base_url = "http://test:7433"
     api.list_projects.return_value = MOCK_PROJECTS
     api.get_project.return_value = MOCK_PROJECTS[0]
     api.list_sessions.return_value = MOCK_SESSIONS_FOR_PROJECT
@@ -104,7 +104,7 @@ def _build_session_mock_api() -> MagicMock:
 def _build_empty_session_mock_api() -> MagicMock:
     """Return a mocked APIClient with empty session data."""
     api = MagicMock(spec=APIClient)
-    api.base_url = "http://test:8000"
+    api.base_url = "http://test:7433"
     api.get_session.return_value = {
         "id": _SESSION_ID,
         "name": "empty-session",
@@ -130,7 +130,7 @@ class TestAPIClientSessionMethods:
         mock_response.json.return_value = MOCK_SESSION
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.return_value = mock_response
 
@@ -143,7 +143,7 @@ class TestAPIClientSessionMethods:
         mock_response.json.return_value = MOCK_TASKS
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.return_value = mock_response
 
@@ -158,7 +158,7 @@ class TestAPIClientSessionMethods:
         mock_response.json.return_value = MOCK_EVENTS
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.return_value = mock_response
 
@@ -173,7 +173,7 @@ class TestAPIClientSessionMethods:
         mock_response.json.return_value = MOCK_EVENTS[:2]
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.return_value = mock_response
 
@@ -189,7 +189,7 @@ class TestAPIClientSessionMethods:
         mock_response.json.return_value = MOCK_DIFFS
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.get.return_value = mock_response
 
@@ -204,7 +204,7 @@ class TestAPIClientSessionMethods:
         mock_response.json.return_value = {"id": "msg-1", "status": "ok"}
         mock_response.raise_for_status = MagicMock()
 
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         client._client.post.return_value = mock_response
 
@@ -226,7 +226,7 @@ class TestAPIClientSessionMethods:
 class TestChatPanel:
     @pytest.mark.asyncio
     async def test_chat_renders_messages(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -243,7 +243,7 @@ class TestChatPanel:
 
     @pytest.mark.asyncio
     async def test_chat_shows_role_labels(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -261,7 +261,7 @@ class TestChatPanel:
 
     @pytest.mark.asyncio
     async def test_chat_input_exists_and_focusable(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -277,7 +277,7 @@ class TestChatPanel:
 
     @pytest.mark.asyncio
     async def test_chat_shows_no_messages_when_empty(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_empty_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -301,7 +301,7 @@ class TestChatPanel:
 class TestTodoPanel:
     @pytest.mark.asyncio
     async def test_todo_renders_tasks(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -317,7 +317,7 @@ class TestTodoPanel:
 
     @pytest.mark.asyncio
     async def test_todo_uses_status_indicator(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -334,7 +334,7 @@ class TestTodoPanel:
 
     @pytest.mark.asyncio
     async def test_todo_shows_no_tasks_when_empty(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_empty_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -358,7 +358,7 @@ class TestTodoPanel:
 class TestTimelinePanel:
     @pytest.mark.asyncio
     async def test_timeline_renders_events(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -374,7 +374,7 @@ class TestTimelinePanel:
 
     @pytest.mark.asyncio
     async def test_timeline_chronological_order(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -394,7 +394,7 @@ class TestTimelinePanel:
 
     @pytest.mark.asyncio
     async def test_timeline_shows_no_events_when_empty(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_empty_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -418,7 +418,7 @@ class TestTimelinePanel:
 class TestFilesPanel:
     @pytest.mark.asyncio
     async def test_files_renders_diffs(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -434,7 +434,7 @@ class TestFilesPanel:
 
     @pytest.mark.asyncio
     async def test_files_shows_no_changes_when_empty(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_empty_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -458,7 +458,7 @@ class TestFilesPanel:
 class TestSessionScreen:
     @pytest.mark.asyncio
     async def test_session_screen_composes_with_all_panels(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -478,7 +478,7 @@ class TestSessionScreen:
 
     @pytest.mark.asyncio
     async def test_session_screen_fetches_data_on_mount(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         mock_api = _build_session_mock_api()
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
@@ -494,7 +494,7 @@ class TestSessionScreen:
 
     @pytest.mark.asyncio
     async def test_session_screen_populates_all_panels(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.session import SessionScreen
@@ -514,7 +514,7 @@ class TestSessionScreen:
 
     @pytest.mark.asyncio
     async def test_session_screen_escape_pops_back(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.dashboard import DashboardScreen
@@ -536,24 +536,24 @@ class TestSessionScreen:
 
 class TestWSClient:
     def test_instantiation(self) -> None:
-        ws = WSClient("http://localhost:8000", _SESSION_ID)
+        ws = WSClient("http://localhost:7433", _SESSION_ID)
         assert ws._session_id == _SESSION_ID
 
     def test_ws_url_from_http(self) -> None:
-        ws = WSClient("http://localhost:8000", _SESSION_ID)
-        assert ws.ws_url == f"ws://localhost:8000/api/sessions/{_SESSION_ID}/ws"
+        ws = WSClient("http://localhost:7433", _SESSION_ID)
+        assert ws.ws_url == f"ws://localhost:7433/api/sessions/{_SESSION_ID}/ws"
 
     def test_ws_url_from_https(self) -> None:
         ws = WSClient("https://example.com", _SESSION_ID)
         assert ws.ws_url == f"wss://example.com/api/sessions/{_SESSION_ID}/ws"
 
     def test_ws_url_strips_trailing_slash(self) -> None:
-        ws = WSClient("http://localhost:8000/", _SESSION_ID)
-        assert ws.ws_url == f"ws://localhost:8000/api/sessions/{_SESSION_ID}/ws"
+        ws = WSClient("http://localhost:7433/", _SESSION_ID)
+        assert ws.ws_url == f"ws://localhost:7433/api/sessions/{_SESSION_ID}/ws"
 
     def test_dispatches_events_via_callback(self) -> None:
         """WSClient calls the callback for each received JSON message."""
-        ws = WSClient("http://localhost:8000", _SESSION_ID)
+        ws = WSClient("http://localhost:7433", _SESSION_ID)
         callback = MagicMock()
 
         # Mock the websocket connection
@@ -603,7 +603,7 @@ class TestWSClient:
 class TestNavigationFlow:
     @pytest.mark.asyncio
     async def test_project_detail_session_select_pushes_session_screen(self) -> None:
-        app = CodehiveApp(base_url="http://test:8000")
+        app = CodehiveApp(base_url="http://test:7433")
         app.api_client = _build_session_mock_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             from codehive.clients.terminal.screens.project_detail import ProjectDetailScreen

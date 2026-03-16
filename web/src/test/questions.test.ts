@@ -32,7 +32,7 @@ describe("API: questions", () => {
     const result = await fetchAllQuestions();
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/questions",
+      "http://localhost:7433/api/questions",
     );
     expect(result).toEqual(mockData);
   });
@@ -48,7 +48,7 @@ describe("API: questions", () => {
     await fetchAllQuestions(false);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/questions?answered=false",
+      "http://localhost:7433/api/questions?answered=false",
     );
   });
 
@@ -84,7 +84,7 @@ describe("API: questions", () => {
     const result = await fetchSessionQuestions("s1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/questions",
+      "http://localhost:7433/api/sessions/s1/questions",
     );
     expect(result).toEqual(mockData);
   });
@@ -100,7 +100,7 @@ describe("API: questions", () => {
     await fetchSessionQuestions("s1", false);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/questions?answered=false",
+      "http://localhost:7433/api/sessions/s1/questions?answered=false",
     );
   });
 
@@ -134,7 +134,7 @@ describe("API: questions", () => {
     const result = await answerQuestion("s1", "q1", "Blue");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/questions/q1/answer",
+      "http://localhost:7433/api/sessions/s1/questions/q1/answer",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -29,7 +29,7 @@ describe("API: projects", () => {
     const result = await fetchProjects();
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/projects",
+      "http://localhost:7433/api/projects",
     );
     expect(result).toEqual(mockData);
   });
@@ -65,7 +65,7 @@ describe("API: projects", () => {
     const result = await fetchProject("p1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/projects/p1",
+      "http://localhost:7433/api/projects/p1",
     );
     expect(result).toEqual(mockProject);
   });

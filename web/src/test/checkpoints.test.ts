@@ -30,7 +30,7 @@ describe("API: checkpoints", () => {
     const result = await fetchCheckpoints("s1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/checkpoints",
+      "http://localhost:7433/api/sessions/s1/checkpoints",
     );
     expect(result).toEqual(mockData);
   });
@@ -53,7 +53,7 @@ describe("API: checkpoints", () => {
     const result = await createCheckpoint("s1", "my label");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/checkpoints",
+      "http://localhost:7433/api/sessions/s1/checkpoints",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,7 +71,7 @@ describe("API: checkpoints", () => {
     await rollbackCheckpoint("cp1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/checkpoints/cp1/rollback",
+      "http://localhost:7433/api/checkpoints/cp1/rollback",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

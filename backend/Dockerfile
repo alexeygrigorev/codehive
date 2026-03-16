@@ -42,12 +42,12 @@ RUN chmod +x /app/docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 ENV VIRTUAL_ENV="/app/.venv"
 
-EXPOSE 8000
+EXPOSE 7433
 
 # Switch to non-root user
 USER codehive
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7433/api/health')" || exit 1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

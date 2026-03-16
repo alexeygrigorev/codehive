@@ -153,7 +153,7 @@ def _build_error_api() -> MagicMock:
 
 class TestAPIClientRescueMethods:
     def test_pause_session_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "paused"}
@@ -165,7 +165,7 @@ class TestAPIClientRescueMethods:
         assert result == {"status": "paused"}
 
     def test_list_checkpoints_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = [{"id": "cp-1"}]
@@ -179,7 +179,7 @@ class TestAPIClientRescueMethods:
         assert result == [{"id": "cp-1"}]
 
     def test_rollback_checkpoint_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "rolled_back"}
@@ -191,7 +191,7 @@ class TestAPIClientRescueMethods:
         assert result == {"status": "rolled_back"}
 
     def test_answer_question_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "answered"}
@@ -206,7 +206,7 @@ class TestAPIClientRescueMethods:
         assert result == {"status": "answered"}
 
     def test_get_system_health_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = MOCK_HEALTH
@@ -218,7 +218,7 @@ class TestAPIClientRescueMethods:
         assert result["version"] == "0.1.0"
 
     def test_resume_session_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "running"}
@@ -230,7 +230,7 @@ class TestAPIClientRescueMethods:
         assert result == {"status": "running"}
 
     def test_set_maintenance_calls_correct_endpoint(self) -> None:
-        client = APIClient("http://localhost:8000")
+        client = APIClient("http://localhost:7433")
         client._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"maintenance": True}
@@ -252,7 +252,7 @@ class TestAPIClientRescueMethods:
 class TestRescueScreenComposition:
     @pytest.mark.asyncio
     async def test_screen_composes_with_all_widgets(self) -> None:
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_rescue_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)):
             assert isinstance(app.screen, RescueScreen)
@@ -264,7 +264,7 @@ class TestRescueScreenComposition:
     @pytest.mark.asyncio
     async def test_screen_renders_at_80x24(self) -> None:
         """Minimum phone-over-SSH size."""
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_rescue_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -273,7 +273,7 @@ class TestRescueScreenComposition:
     @pytest.mark.asyncio
     async def test_screen_renders_at_120x40(self) -> None:
         """Larger terminal size."""
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_rescue_api()  # type: ignore[assignment]
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
@@ -288,7 +288,7 @@ class TestRescueScreenComposition:
 class TestRescueScreenDataLoading:
     @pytest.mark.asyncio
     async def test_populates_sessions_and_questions(self) -> None:
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_rescue_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -302,7 +302,7 @@ class TestRescueScreenDataLoading:
 
     @pytest.mark.asyncio
     async def test_empty_data_shows_empty_messages(self) -> None:
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_empty_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -317,7 +317,7 @@ class TestRescueScreenDataLoading:
 
     @pytest.mark.asyncio
     async def test_connection_error_shows_graceful_state(self) -> None:
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_error_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -327,7 +327,7 @@ class TestRescueScreenDataLoading:
 
     @pytest.mark.asyncio
     async def test_health_banner_reflects_data(self) -> None:
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_rescue_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -339,7 +339,7 @@ class TestRescueScreenDataLoading:
     async def test_health_banner_degraded(self) -> None:
         api = _build_rescue_api()
         api.get_system_health.return_value = MOCK_HEALTH_DEGRADED
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -357,7 +357,7 @@ class TestRescueScreenActions:
     @pytest.mark.asyncio
     async def test_press_s_calls_pause_session(self) -> None:
         mock_api = _build_rescue_api()
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -376,7 +376,7 @@ class TestRescueScreenActions:
     @pytest.mark.asyncio
     async def test_press_a_opens_answer_input(self) -> None:
         mock_api = _build_rescue_api()
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -398,7 +398,7 @@ class TestRescueScreenActions:
     @pytest.mark.asyncio
     async def test_press_m_calls_set_maintenance(self) -> None:
         mock_api = _build_rescue_api()
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -412,7 +412,7 @@ class TestRescueScreenActions:
     @pytest.mark.asyncio
     async def test_press_R_reloads_data(self) -> None:
         mock_api = _build_rescue_api()
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -429,7 +429,7 @@ class TestRescueScreenActions:
 
     @pytest.mark.asyncio
     async def test_press_q_exits_app(self) -> None:
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = _build_rescue_api()  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -457,7 +457,7 @@ class TestRescueScreenRestartAction:
             {"status": "running"},
         )[1]
 
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -481,7 +481,7 @@ class TestRescueScreenRestartAction:
             "Server Error", request=MagicMock(), response=MagicMock()
         )
 
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -508,7 +508,7 @@ class TestRescueScreenRestartAction:
             "Server Error", request=MagicMock(), response=MagicMock()
         )
 
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -530,7 +530,7 @@ class TestRescueScreenRestartAction:
     @pytest.mark.asyncio
     async def test_press_x_no_sessions_is_noop(self) -> None:
         mock_api = _build_empty_api()
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         app.api_client = mock_api  # type: ignore[assignment]
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
@@ -564,7 +564,7 @@ class TestRescueCLI:
         """The rescue subcommand creates a RescueApp, not CodehiveApp."""
         from codehive.clients.terminal.screens.rescue import RescueApp
 
-        app = RescueApp(base_url="http://test:8000")
+        app = RescueApp(base_url="http://test:7433")
         assert isinstance(app, RescueApp)
         assert app.TITLE == "Codehive Rescue"
         # Verify it is not a CodehiveApp
@@ -656,7 +656,7 @@ def _build_codehive_app_with_rescue_api():  # type: ignore[no-untyped-def]
         MOCK_QUESTIONS if sid == _SESSION_WAITING_ID and answered is False else []
     )
     api.get_system_health.return_value = MOCK_HEALTH
-    app = CodehiveApp(base_url="http://test:8000")
+    app = CodehiveApp(base_url="http://test:7433")
     app.api_client = api  # type: ignore[assignment]
     return app
 

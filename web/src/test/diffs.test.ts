@@ -28,7 +28,7 @@ describe("API: diffs", () => {
     const result = await fetchSessionDiffs("s1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/diffs",
+      "http://localhost:7433/api/sessions/s1/diffs",
     );
     expect(result).toEqual(mockData);
   });

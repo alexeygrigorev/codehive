@@ -471,7 +471,7 @@ class TestBotSetup:
             mock_app.bot_data = {}
             mock_app_cls.builder.return_value = mock_builder
 
-            create_bot(token="test-token", base_url="http://localhost:8000")
+            create_bot(token="test-token", base_url="http://localhost:7433")
 
             # Verify all 11 command handlers + 1 callback query handler
             assert mock_app.add_handler.call_count == 12
@@ -544,6 +544,6 @@ class TestTelegramCLI:
         ) as mock_create:
             main()
             mock_create.assert_called_once_with(
-                token="fake-token-123", base_url="http://127.0.0.1:8000"
+                token="fake-token-123", base_url="http://127.0.0.1:7433"
             )
             mock_app.run_polling.assert_called_once()

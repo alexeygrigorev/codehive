@@ -12,7 +12,7 @@ class TestSettingsDefaults:
 
     def test_default_port(self):
         settings = Settings()
-        assert settings.port == 8000
+        assert settings.port == 7433
 
     def test_default_debug(self):
         settings = Settings()

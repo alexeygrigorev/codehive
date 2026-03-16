@@ -26,7 +26,7 @@ describe("API: events", () => {
     const result = await fetchEvents("s1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/sessions/s1/events",
+      "http://localhost:7433/api/sessions/s1/events",
     );
     expect(result).toEqual(mockData);
   });

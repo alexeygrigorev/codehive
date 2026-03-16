@@ -1,5 +1,5 @@
 const baseURL: string =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:7433";
 
 interface ApiClient {
   baseURL: string;

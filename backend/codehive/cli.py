@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+DEFAULT_BASE_URL = "http://127.0.0.1:7433"
 
 
 def _get_base_url(args: argparse.Namespace) -> str:
@@ -326,7 +326,7 @@ def main() -> None:
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Base URL of the codehive API server (default: http://127.0.0.1:8000)",
+        help="Base URL of the codehive API server (default: http://127.0.0.1:7433)",
     )
     subparsers = parser.add_subparsers(dest="command")
 

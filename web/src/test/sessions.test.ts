@@ -31,7 +31,7 @@ describe("API: sessions", () => {
     const result = await fetchSessions("p1");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/projects/p1/sessions",
+      "http://localhost:7433/api/projects/p1/sessions",
     );
     expect(result).toEqual(mockData);
   });

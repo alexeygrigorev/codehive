@@ -14,7 +14,7 @@ describe("API client put and delete", () => {
     await apiClient.put("/api/test", { key: "value" });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/test",
+      "http://localhost:7433/api/test",
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -31,7 +31,7 @@ describe("API client put and delete", () => {
     await apiClient.delete("/api/test/123");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/test/123",
+      "http://localhost:7433/api/test/123",
       {
         method: "DELETE",
       },

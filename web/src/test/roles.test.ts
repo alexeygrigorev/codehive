@@ -35,7 +35,7 @@ describe("API: roles", () => {
     const result = await fetchRoles();
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/roles",
+      "http://localhost:7433/api/roles",
     );
     expect(result).toEqual(mockData);
   });
@@ -57,7 +57,7 @@ describe("API: roles", () => {
     const result = await createRole(body);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/roles",
+      "http://localhost:7433/api/roles",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,7 +90,7 @@ describe("API: roles", () => {
     const result = await updateRole("my-role", body);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/roles/my-role",
+      "http://localhost:7433/api/roles/my-role",
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -108,7 +108,7 @@ describe("API: roles", () => {
     await deleteRole("my-role");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/roles/my-role",
+      "http://localhost:7433/api/roles/my-role",
       {
         method: "DELETE",
       },
