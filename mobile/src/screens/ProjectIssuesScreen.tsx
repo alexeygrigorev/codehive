@@ -5,54 +5,40 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
   StyleSheet,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { DashboardStackParamList } from "../navigation/types";
-import { listSessions } from "../api/sessions";
-import { type SessionStatus } from "../components/StatusBadge";
-import SessionCard from "../components/SessionCard";
+import { listIssues } from "../api/issues";
+import { type IssueStatus } from "../components/IssueStatusBadge";
+import IssueCard from "../components/IssueCard";
 
 type Props = NativeStackScreenProps<
   DashboardStackParamList,
-  "ProjectSessions"
+  "ProjectIssues"
 >;
 
-interface Session {
+interface Issue {
   id: string;
-  name: string;
-  mode: string;
-  status: SessionStatus;
-  updated_at: string;
+  title: string;
+  status: IssueStatus;
+  created_at: string;
 }
 
-export default function ProjectSessionsScreen({ route, navigation }: Props) {
+export default function ProjectIssuesScreen({ route, navigation }: Props) {
   const { projectId, projectName } = route.params;
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    navigation.setOptions({
-      title: projectName,
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate("ProjectIssues", { projectId, projectName })
-          }
-          testID="view-issues-button"
-        >
-          <Text style={{ color: "#2196F3", fontSize: 16 }}>Issues</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, projectName, projectId]);
+    navigation.setOptions({ title: projectName });
+  }, [navigation, projectName]);
 
-  const fetchSessions = useCallback(async () => {
+  const fetchIssues = useCallback(async () => {
     try {
-      const data = await listSessions(projectId);
-      setSessions(data);
+      const data = await listIssues(projectId);
+      setIssues(data);
     } catch {
       // silently handle for now
     }
@@ -60,16 +46,16 @@ export default function ProjectSessionsScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     (async () => {
-      await fetchSessions();
+      await fetchIssues();
       setLoading(false);
     })();
-  }, [fetchSessions]);
+  }, [fetchIssues]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchSessions();
+    await fetchIssues();
     setRefreshing(false);
-  }, [fetchSessions]);
+  }, [fetchIssues]);
 
   if (loading) {
     return (
@@ -81,17 +67,16 @@ export default function ProjectSessionsScreen({ route, navigation }: Props) {
 
   return (
     <FlatList
-      data={sessions}
+      data={issues}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
-        <SessionCard
+        <IssueCard
           id={item.id}
-          name={item.name}
-          mode={item.mode}
+          title={item.title}
           status={item.status}
-          updatedAt={item.updated_at}
+          createdAt={item.created_at}
           onPress={() => {
-            navigation.navigate("SessionDetail", { sessionId: item.id });
+            // Issue detail screen is out of scope for this issue
           }}
         />
       )}
@@ -99,12 +84,12 @@ export default function ProjectSessionsScreen({ route, navigation }: Props) {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
       contentContainerStyle={
-        sessions.length === 0 ? styles.emptyContainer : styles.list
+        issues.length === 0 ? styles.emptyContainer : styles.list
       }
       ListEmptyComponent={
-        <Text style={styles.emptyText}>No sessions yet</Text>
+        <Text style={styles.emptyText}>No issues yet</Text>
       }
-      testID="session-list"
+      testID="issue-list"
     />
   );
 }

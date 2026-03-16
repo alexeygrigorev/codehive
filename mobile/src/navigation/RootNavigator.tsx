@@ -10,6 +10,7 @@ import type {
 
 import DashboardScreen from "../screens/DashboardScreen";
 import ProjectSessionsScreen from "../screens/ProjectSessionsScreen";
+import ProjectIssuesScreen from "../screens/ProjectIssuesScreen";
 import SessionsScreen from "../screens/SessionsScreen";
 import SessionDetailScreen from "../screens/SessionDetailScreen";
 import QuestionsScreen from "../screens/QuestionsScreen";
@@ -38,6 +39,11 @@ function DashboardStackNavigator() {
         name="ProjectSessions"
         component={ProjectSessionsScreen}
         options={{ title: "Sessions" }}
+      />
+      <DashboardStackNav.Screen
+        name="ProjectIssues"
+        component={ProjectIssuesScreen}
+        options={{ title: "Issues" }}
       />
       <DashboardStackNav.Screen
         name="SessionDetail"
