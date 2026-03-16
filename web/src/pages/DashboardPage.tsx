@@ -1,7 +1,22 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchProjects, type ProjectRead } from "@/api/projects";
 import { fetchSessions } from "@/api/sessions";
 import ProjectCard from "@/components/ProjectCard";
+
+function DashboardHeader() {
+  return (
+    <div className="flex items-center justify-between">
+      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <Link
+        to="/projects/new"
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+      >
+        New Project
+      </Link>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<ProjectRead[]>([]);
@@ -52,7 +67,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <DashboardHeader />
         <p className="text-gray-500 mt-4">Loading projects...</p>
       </div>
     );
@@ -61,7 +76,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <DashboardHeader />
         <p className="text-red-600 mt-4">{error}</p>
       </div>
     );
@@ -70,7 +85,7 @@ export default function DashboardPage() {
   if (projects.length === 0) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <DashboardHeader />
         <p className="text-gray-500 mt-4">
           No projects yet. Create your first project to get started.
         </p>
@@ -80,7 +95,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <DashboardHeader />
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {projects.map((project) => (
           <ProjectCard

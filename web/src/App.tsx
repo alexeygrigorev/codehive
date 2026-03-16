@@ -8,6 +8,7 @@ import QuestionsPage from "@/pages/QuestionsPage";
 import ReplayPage from "@/pages/ReplayPage";
 import RolesPage from "@/pages/RolesPage";
 import SearchPage from "@/pages/SearchPage";
+import NewProjectPage from "@/pages/NewProjectPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
@@ -27,6 +28,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/projects/new" element={<NewProjectPage />} />
           <Route path="/projects/:projectId" element={<ProjectPage />} />
           <Route path="/sessions/:sessionId" element={<SessionPage />} />
           <Route

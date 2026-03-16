@@ -121,4 +121,41 @@ describe("DashboardPage", () => {
     const link = screen.getByRole("link", { name: /linked project/i });
     expect(link).toHaveAttribute("href", "/projects/p1");
   });
+
+  it("renders a New Project button that links to /projects/new", async () => {
+    mockFetchProjects.mockResolvedValue([]);
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText(/no projects yet/i)).toBeInTheDocument();
+    });
+    const newProjectLink = screen.getByRole("link", { name: /new project/i });
+    expect(newProjectLink).toHaveAttribute("href", "/projects/new");
+  });
+
+  it("renders New Project button even when projects are loaded", async () => {
+    const projects = [
+      {
+        id: "p1",
+        workspace_id: "w1",
+        name: "Some Project",
+        path: "/tmp/p",
+        description: null,
+        archetype: null,
+        knowledge: null,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ];
+    mockFetchProjects.mockResolvedValue(projects);
+    mockFetchSessions.mockResolvedValue([]);
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText("Some Project")).toBeInTheDocument();
+    });
+    const newProjectLink = screen.getByRole("link", { name: /new project/i });
+    expect(newProjectLink).toHaveAttribute("href", "/projects/new");
+  });
 });
