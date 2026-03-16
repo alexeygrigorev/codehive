@@ -17,6 +17,7 @@ import { useEvents } from "../context/EventContext";
 import { type SessionStatus } from "../components/StatusBadge";
 import SessionHeader from "../components/SessionHeader";
 import MessageBubble, { type Message } from "../components/MessageBubble";
+import VoiceButton from "../components/VoiceButton";
 
 type Props = NativeStackScreenProps<SessionsStackParamList, "SessionDetail">;
 
@@ -34,8 +35,13 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
+  const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const events = useEvents();
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    setInputText((prev) => (prev ? `${prev} ${text}` : text));
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -101,11 +107,14 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
 
     setMessages((prev) => [...prev, optimisticMsg]);
     setInputText("");
+    setSending(true);
 
     try {
       await sendMessage(sessionId, text);
     } catch (_e) {
       // keep the optimistic message; could add error indicator later
+    } finally {
+      setSending(false);
     }
   }, [inputText, sessionId]);
 
@@ -156,6 +165,10 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
           testID="message-input"
           returnKeyType="send"
           onSubmitEditing={handleSend}
+        />
+        <VoiceButton
+          onTranscript={handleVoiceTranscript}
+          disabled={sending}
         />
         <TouchableOpacity
           style={styles.sendButton}
