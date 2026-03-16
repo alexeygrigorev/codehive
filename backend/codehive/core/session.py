@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codehive.api.schemas.session import QueueEmptyAction
 from codehive.db.models import Issue, Project
 from codehive.db.models import Session as SessionModel
 
@@ -30,6 +31,18 @@ class InvalidStatusTransitionError(Exception):
     """Raised when a status transition is not allowed."""
 
 
+def _validate_queue_empty_action(config: dict | None) -> None:
+    """Raise ValueError if config contains an invalid queue_empty_action."""
+    if config is None:
+        return
+    action = config.get("queue_empty_action")
+    if action is not None and action not in QueueEmptyAction.values():
+        raise ValueError(
+            f"Invalid queue_empty_action '{action}'. "
+            f"Must be one of: {', '.join(sorted(QueueEmptyAction.values()))}"
+        )
+
+
 # Statuses from which pause is allowed
 _PAUSABLE_STATUSES = {"idle", "planning", "executing"}
 
@@ -46,6 +59,8 @@ async def create_session(
     config: dict | None = None,
 ) -> SessionModel:
     """Create a new session. Validates project, issue, and parent session exist."""
+    _validate_queue_empty_action(config)
+
     project = await db.get(Project, project_id)
     if project is None:
         raise ProjectNotFoundError(f"Project {project_id} not found")
@@ -104,6 +119,9 @@ async def update_session(
     **fields: str | dict | None,
 ) -> SessionModel:
     """Update specific fields on a session. Raises SessionNotFoundError if not found."""
+    if "config" in fields:
+        _validate_queue_empty_action(fields["config"])
+
     session = await db.get(SessionModel, session_id)
     if session is None:
         raise SessionNotFoundError(f"Session {session_id} not found")

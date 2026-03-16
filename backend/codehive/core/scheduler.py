@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from codehive.core.events import EventBus
 from codehive.core.pending_questions import create_question, list_questions
 from codehive.core.task_queue import get_next_task, transition_task
+from codehive.db.models import Issue
 from codehive.db.models import Session as SessionModel
 
 
@@ -24,6 +26,13 @@ class EngineAdapter(Protocol):
         db: Any = None,
         task_instructions: str | None = None,
     ) -> Any: ...
+
+    async def send_message(
+        self,
+        session_id: uuid.UUID,
+        message: str,
+        **kwargs: Any,
+    ) -> AsyncIterator[dict]: ...
 
 
 class SessionScheduler:
@@ -105,16 +114,116 @@ class SessionScheduler:
             # Start the task on the engine
             await self._engine.start_task(session_id, next_task.id, db=db)
         else:
-            # No tasks remaining; transition to idle
-            session.status = "idle"
+            # No tasks remaining; dispatch on queue_empty_action
+            action = config.get("queue_empty_action", "stop")
+            await self._handle_queue_empty(session, action, db=db)
+
+    async def _handle_queue_empty(
+        self,
+        session: SessionModel,
+        action: str,
+        *,
+        db: AsyncSession,
+    ) -> None:
+        """Dispatch on queue_empty_action when the task queue is empty."""
+        session_id = session.id
+
+        if action == "ask":
+            # Create a pending question and transition to waiting_input
+            pq = await create_question(
+                db,
+                session_id,
+                "All tasks are complete. Should I continue generating new tasks or stop?",
+            )
+            session.status = "waiting_input"
             await db.commit()
             await db.refresh(session)
             await self._event_bus.publish(
                 db,
                 session_id,
-                "session.status_changed",
-                {"status": "idle"},
+                "queue_empty.ask",
+                {"question_id": str(pq.id)},
             )
+            await self._event_bus.publish(
+                db,
+                session_id,
+                "session.status_changed",
+                {"status": "waiting_input"},
+            )
+
+        elif action == "continue":
+            # Try to generate new tasks from the linked issue
+            issue_id = session.issue_id
+            if issue_id is None:
+                # No linked issue; fall back to stop
+                await self._transition_to_idle(session, db=db)
+                return
+
+            issue = await db.get(Issue, issue_id)
+            if issue is None:
+                await self._transition_to_idle(session, db=db)
+                return
+
+            # Emit event before calling the engine
+            await self._event_bus.publish(
+                db,
+                session_id,
+                "queue_empty.continue",
+                {"issue_id": str(issue_id)},
+            )
+
+            # Ask the engine to generate new tasks
+            prompt = (
+                f"All tasks are complete for issue: {issue.title}\n\n"
+                f"Description: {issue.description or 'No description provided.'}\n\n"
+                f"Please analyze the issue and create new tasks if more work is needed."
+            )
+            async for _event in self._engine.send_message(session_id, prompt, db=db):
+                pass  # consume the stream
+
+            # Check if new tasks were generated
+            next_task = await get_next_task(db, session_id)
+            if next_task is not None:
+                await transition_task(db, next_task.id, "running")
+                session.status = "executing"
+                await db.commit()
+                await db.refresh(session)
+                await self._event_bus.publish(
+                    db,
+                    session_id,
+                    "task.started",
+                    {"task_id": str(next_task.id)},
+                )
+                await self._event_bus.publish(
+                    db,
+                    session_id,
+                    "session.status_changed",
+                    {"status": "executing"},
+                )
+                await self._engine.start_task(session_id, next_task.id, db=db)
+            else:
+                await self._transition_to_idle(session, db=db)
+
+        else:
+            # Default: "stop" -- transition to idle
+            await self._transition_to_idle(session, db=db)
+
+    async def _transition_to_idle(
+        self,
+        session: SessionModel,
+        *,
+        db: AsyncSession,
+    ) -> None:
+        """Set session to idle and emit status change event."""
+        session.status = "idle"
+        await db.commit()
+        await db.refresh(session)
+        await self._event_bus.publish(
+            db,
+            session.id,
+            "session.status_changed",
+            {"status": "idle"},
+        )
 
     async def on_question_asked(
         self,

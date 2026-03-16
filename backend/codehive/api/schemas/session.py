@@ -12,6 +12,29 @@ from codehive.core.modes import VALID_MODES
 _VALID_SESSION_MODES = VALID_MODES | {"orchestrator"}
 
 
+class QueueEmptyAction(str, Enum):
+    """What to do when the task queue empties."""
+
+    stop = "stop"
+    continue_ = "continue"
+    ask = "ask"
+
+    @classmethod
+    def values(cls) -> set[str]:
+        return {m.value for m in cls}
+
+
+def _validate_queue_empty_action(config: dict) -> dict:
+    """Validate queue_empty_action in a config dict if present."""
+    action = config.get("queue_empty_action")
+    if action is not None and action not in QueueEmptyAction.values():
+        raise ValueError(
+            f"Invalid queue_empty_action '{action}'. "
+            f"Must be one of: {', '.join(sorted(QueueEmptyAction.values()))}"
+        )
+    return config
+
+
 class SessionCreate(BaseModel):
     """Request body for POST /api/projects/{project_id}/sessions."""
 
@@ -30,6 +53,11 @@ class SessionCreate(BaseModel):
                 f"Invalid mode '{v}'. Must be one of: {', '.join(sorted(_VALID_SESSION_MODES))}"
             )
         return v
+
+    @field_validator("config")
+    @classmethod
+    def config_must_have_valid_queue_empty_action(cls, v: dict) -> dict:
+        return _validate_queue_empty_action(v)
 
 
 class ModeSwitchRequest(BaseModel):
@@ -53,6 +81,13 @@ class SessionUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     mode: str | None = Field(default=None, max_length=50)
     config: dict | None = None
+
+    @field_validator("config")
+    @classmethod
+    def config_must_have_valid_queue_empty_action(cls, v: dict | None) -> dict | None:
+        if v is not None:
+            _validate_queue_empty_action(v)
+        return v
 
 
 class SessionRead(BaseModel):
