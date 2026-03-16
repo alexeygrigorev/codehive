@@ -7,6 +7,7 @@ import ToolCallResult from "./ToolCallResult";
 import ApprovalPrompt from "./ApprovalPrompt";
 import type { ApprovalStatus } from "./ApprovalPrompt";
 import ChatInput from "./ChatInput";
+import ExportButton from "./ExportButton";
 import { sendMessage } from "@/api/messages";
 
 interface ChatItem {
@@ -18,6 +19,7 @@ interface ChatItem {
 
 export interface ChatPanelProps {
   sessionId: string;
+  sessionName?: string;
 }
 
 const CHAT_EVENT_TYPES = [
@@ -27,7 +29,7 @@ const CHAT_EVENT_TYPES = [
   "approval.required",
 ];
 
-export default function ChatPanel({ sessionId }: ChatPanelProps) {
+export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
   const events = useSessionEvents(CHAT_EVENT_TYPES);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -141,6 +143,10 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
 
   return (
     <div className="chat-panel flex h-full flex-col">
+      <div className="flex items-center justify-between border-b px-4 py-2">
+        <span className="text-sm font-medium text-gray-700">Chat</span>
+        <ExportButton sessionId={sessionId} sessionName={sessionName} />
+      </div>
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto space-y-3 p-4"
