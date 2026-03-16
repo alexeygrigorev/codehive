@@ -7,18 +7,22 @@ import {
   RefreshControl,
   StyleSheet,
 } from "react-native";
-import { listQuestions, answerQuestion } from "../api/questions";
-import QuestionCard, { type Question } from "../components/QuestionCard";
+import {
+  listPendingApprovals,
+  approve,
+  reject,
+} from "../api/approvals";
+import ApprovalCard, { type Approval } from "../components/ApprovalCard";
 
-export default function QuestionsScreen() {
-  const [questions, setQuestions] = useState<Question[]>([]);
+export default function ApprovalsScreen() {
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchQuestions = useCallback(async () => {
+  const fetchApprovals = useCallback(async () => {
     try {
-      const data: Question[] = await listQuestions();
-      setQuestions(data.filter((q) => !q.answered));
+      const data: Approval[] = await listPendingApprovals();
+      setApprovals(data);
     } catch {
       // silently handle for now
     }
@@ -26,28 +30,34 @@ export default function QuestionsScreen() {
 
   useEffect(() => {
     (async () => {
-      await fetchQuestions();
+      await fetchApprovals();
       setLoading(false);
     })();
-  }, [fetchQuestions]);
+  }, [fetchApprovals]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchQuestions();
+    await fetchApprovals();
     setRefreshing(false);
-  }, [fetchQuestions]);
+  }, [fetchApprovals]);
 
-  const handleAnswer = useCallback(
-    async (id: string, answer: string) => {
-      try {
-        await answerQuestion(id, answer);
-        setQuestions((prev) => prev.filter((q) => q.id !== id));
-      } catch {
-        // silently handle for now
-      }
-    },
-    [],
-  );
+  const handleApprove = useCallback(async (id: string) => {
+    try {
+      await approve(id);
+      setApprovals((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      // silently handle for now
+    }
+  }, []);
+
+  const handleReject = useCallback(async (id: string) => {
+    try {
+      await reject(id);
+      setApprovals((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      // silently handle for now
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -59,21 +69,25 @@ export default function QuestionsScreen() {
 
   return (
     <FlatList
-      data={questions}
+      data={approvals}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
-        <QuestionCard question={item} onAnswer={handleAnswer} />
+        <ApprovalCard
+          approval={item}
+          onApprove={handleApprove}
+          onReject={handleReject}
+        />
       )}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
       contentContainerStyle={
-        questions.length === 0 ? styles.emptyContainer : styles.list
+        approvals.length === 0 ? styles.emptyContainer : styles.list
       }
       ListEmptyComponent={
-        <Text style={styles.emptyText}>No pending questions</Text>
+        <Text style={styles.emptyText}>No pending approvals</Text>
       }
-      testID="questions-list"
+      testID="approvals-list"
     />
   );
 }

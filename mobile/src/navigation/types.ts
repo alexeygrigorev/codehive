@@ -17,6 +17,10 @@ export type QuestionsStackParamList = {
   QuestionDetail: { questionId: string };
 };
 
+export type ApprovalsStackParamList = {
+  ApprovalsList: undefined;
+};
+
 export type SettingsStackParamList = {
   SettingsHome: undefined;
 };
@@ -26,5 +30,6 @@ export type RootTabParamList = {
   Dashboard: NavigatorScreenParams<DashboardStackParamList>;
   Sessions: NavigatorScreenParams<SessionsStackParamList>;
   Questions: NavigatorScreenParams<QuestionsStackParamList>;
+  Approvals: NavigatorScreenParams<ApprovalsStackParamList>;
   Settings: NavigatorScreenParams<SettingsStackParamList>;
 };
