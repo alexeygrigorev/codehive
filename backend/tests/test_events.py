@@ -391,19 +391,20 @@ class TestWebSocketEndpoint:
         """WebSocket to a valid session accepts the connection."""
         from starlette.testclient import TestClient
 
+        from codehive.core.jwt import create_access_token
+
         app = create_app()
 
         async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
             yield db_session
 
-        from codehive.api.deps import get_current_user
-
         app.dependency_overrides[get_db] = _override_get_db
-        app.dependency_overrides[get_current_user] = lambda: None
+
+        token = create_access_token(uuid.uuid4())
 
         with TestClient(app) as tc:
             # We just verify the connection is accepted (no exception on connect)
             # We close immediately since we can't easily feed Redis messages in a sync test
-            with tc.websocket_connect(f"/api/sessions/{session_model.id}/ws") as ws:
+            with tc.websocket_connect(f"/api/sessions/{session_model.id}/ws?token={token}") as ws:
                 # Connection accepted successfully -- close it
                 ws.close()
