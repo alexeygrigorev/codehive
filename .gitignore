@@ -39,6 +39,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+!web/.env.production
 
 # Other
 *.wav

@@ -40,6 +40,19 @@ services:
     networks:
       - codehive
 
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - codehive
+
   redis:
     image: redis:7
     restart: unless-stopped
