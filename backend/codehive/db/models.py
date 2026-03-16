@@ -1,9 +1,7 @@
 """SQLAlchemy 2.0 declarative models for all core entities."""
 
 import uuid
-from datetime import datetime
-
-from datetime import timezone as tz
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, ForeignKey, Integer, Text, Unicode, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -30,7 +28,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
         server_default=text("now()"),
-        default=lambda: datetime.now(tz.utc),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True
@@ -67,7 +65,7 @@ class WorkspaceMember(Base):
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
         server_default=text("now()"),
-        default=lambda: datetime.now(tz.utc),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     workspace: Mapped["Workspace"] = relationship(back_populates="members")
@@ -278,7 +276,7 @@ class PushSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
         server_default=text("now()"),
-        default=lambda: datetime.now(tz.utc),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
 
@@ -295,5 +293,5 @@ class DeviceToken(Base):
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
         server_default=text("now()"),
-        default=lambda: datetime.now(tz.utc),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
