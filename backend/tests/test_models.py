@@ -174,6 +174,7 @@ class TestBaseMetadata:
         expected = {
             "users",
             "workspaces",
+            "workspace_members",
             "projects",
             "issues",
             "sessions",

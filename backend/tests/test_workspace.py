@@ -328,9 +328,10 @@ class TestGetWorkspaceEndpoint:
         assert data["name"] == "getme"
         assert data["settings"] == {"k": "v"}
 
-    async def test_get_404(self, client: AsyncClient):
+    async def test_get_nonexistent_403(self, client: AsyncClient):
+        # Non-member access returns 403 (permission check before existence check)
         resp = await client.get(f"/api/workspaces/{uuid.uuid4()}")
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -362,17 +363,18 @@ class TestUpdateWorkspaceEndpoint:
         assert resp.status_code == 200
         assert resp.json()["settings"] == {"key": "value"}
 
-    async def test_patch_404(self, client: AsyncClient):
+    async def test_patch_nonexistent_403(self, client: AsyncClient):
+        # Non-member access returns 403 (permission check before existence check)
         resp = await client.patch(
             f"/api/workspaces/{uuid.uuid4()}",
             json={"name": "nope"},
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
 class TestDeleteWorkspaceEndpoint:
-    async def test_delete_204_then_404(self, client: AsyncClient):
+    async def test_delete_204_then_403(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/workspaces",
             json={"name": "deleteme", "root_path": "/tmp/d"},
@@ -382,12 +384,14 @@ class TestDeleteWorkspaceEndpoint:
         resp = await client.delete(f"/api/workspaces/{ws_id}")
         assert resp.status_code == 204
 
+        # After deletion, user is no longer a member so gets 403
         resp = await client.get(f"/api/workspaces/{ws_id}")
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
-    async def test_delete_404(self, client: AsyncClient):
+    async def test_delete_nonexistent_403(self, client: AsyncClient):
+        # Non-member access returns 403 (permission check before existence check)
         resp = await client.delete(f"/api/workspaces/{uuid.uuid4()}")
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     async def test_delete_with_projects_409(self, client: AsyncClient):
         # Create workspace
@@ -441,6 +445,7 @@ class TestListWorkspaceProjectsEndpoint:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_list_projects_404(self, client: AsyncClient):
+    async def test_list_projects_nonexistent_403(self, client: AsyncClient):
+        # Non-member access returns 403 (permission check before existence check)
         resp = await client.get(f"/api/workspaces/{uuid.uuid4()}/projects")
-        assert resp.status_code == 404
+        assert resp.status_code == 403

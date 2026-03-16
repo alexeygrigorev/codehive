@@ -146,6 +146,20 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+@pytest_asyncio.fixture
+async def parent_session_member(
+    parent_session: SessionModel,
+    workspace: Workspace,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> SessionModel:
+    """Ensure the test user is an owner of the workspace for API tests."""
+    from tests.conftest import ensure_workspace_membership
+
+    await ensure_workspace_membership(db_session, workspace.id)
+    return parent_session
+
+
 def _make_event_bus_mock() -> AsyncMock:
     """Create a mock EventBus with a publish method."""
     bus = AsyncMock()
@@ -517,7 +531,7 @@ class TestSubagentsEndpoint:
         client: AsyncClient,
         project: Project,
         db_session: AsyncSession,
-        parent_session: SessionModel,
+        parent_session_member: SessionModel,
     ):
         # Create 2 child sessions
         await create_session(
@@ -526,7 +540,7 @@ class TestSubagentsEndpoint:
             name="child-1",
             engine="native",
             mode="execution",
-            parent_session_id=parent_session.id,
+            parent_session_id=parent_session_member.id,
         )
         await create_session(
             db_session,
@@ -534,10 +548,10 @@ class TestSubagentsEndpoint:
             name="child-2",
             engine="native",
             mode="execution",
-            parent_session_id=parent_session.id,
+            parent_session_id=parent_session_member.id,
         )
 
-        resp = await client.get(f"/api/sessions/{parent_session.id}/subagents")
+        resp = await client.get(f"/api/sessions/{parent_session_member.id}/subagents")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 2
@@ -545,14 +559,14 @@ class TestSubagentsEndpoint:
             assert "id" in item
             assert "name" in item
             assert "status" in item
-            assert item["parent_session_id"] == str(parent_session.id)
+            assert item["parent_session_id"] == str(parent_session_member.id)
 
     async def test_list_subagents_empty_200(
         self,
         client: AsyncClient,
-        parent_session: SessionModel,
+        parent_session_member: SessionModel,
     ):
-        resp = await client.get(f"/api/sessions/{parent_session.id}/subagents")
+        resp = await client.get(f"/api/sessions/{parent_session_member.id}/subagents")
         assert resp.status_code == 200
         assert resp.json() == []
 

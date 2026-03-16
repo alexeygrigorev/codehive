@@ -5,7 +5,7 @@ from datetime import datetime
 
 from datetime import timezone as tz
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Text, Unicode, text
+from sqlalchemy import Boolean, ForeignKey, Integer, Text, Unicode, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -49,6 +49,29 @@ class Workspace(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
 
     projects: Mapped[list["Project"]] = relationship(back_populates="workspace")
+    members: Mapped[list["WorkspaceMember"]] = relationship(back_populates="workspace")
+
+
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("now()"),
+        default=lambda: datetime.now(tz.utc),
+    )
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
 
 
 class Project(Base):

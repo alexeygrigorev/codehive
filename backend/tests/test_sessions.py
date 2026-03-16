@@ -28,6 +28,7 @@ from codehive.core.session import (
 )
 from codehive.db.models import Base, Issue, Project, Workspace
 from codehive.db.models import Session as SessionModel
+from tests.conftest import ensure_workspace_membership
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
@@ -159,6 +160,15 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         token = resp.json()["access_token"]
         ac.headers["Authorization"] = f"Bearer {token}"
         yield ac
+
+
+@pytest_asyncio.fixture
+async def project_member(
+    project: Project, workspace: Workspace, client: AsyncClient, db_session: AsyncSession
+) -> Project:
+    """Ensure the test user is an owner of the workspace for API tests."""
+    await ensure_workspace_membership(db_session, workspace.id)
+    return project
 
 
 # ---------------------------------------------------------------------------
@@ -410,9 +420,9 @@ class TestCoreResumeSession:
 
 @pytest.mark.asyncio
 class TestCreateSessionEndpoint:
-    async def test_create_201(self, client: AsyncClient, project: Project):
+    async def test_create_201(self, client: AsyncClient, project_member: Project):
         resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={
                 "name": "api-session",
                 "engine": "native",
@@ -425,14 +435,14 @@ class TestCreateSessionEndpoint:
         assert data["engine"] == "native"
         assert data["mode"] == "execution"
         assert data["status"] == "idle"
-        assert data["project_id"] == str(project.id)
+        assert data["project_id"] == str(project_member.id)
         assert data["config"] == {}
         assert "id" in data
         assert "created_at" in data
 
-    async def test_create_missing_fields_422(self, client: AsyncClient, project: Project):
+    async def test_create_missing_fields_422(self, client: AsyncClient, project_member: Project):
         resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "incomplete"},
         )
         assert resp.status_code == 422
@@ -444,9 +454,9 @@ class TestCreateSessionEndpoint:
         )
         assert resp.status_code == 404
 
-    async def test_create_bad_issue_404(self, client: AsyncClient, project: Project):
+    async def test_create_bad_issue_404(self, client: AsyncClient, project_member: Project):
         resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={
                 "name": "bad-issue",
                 "engine": "native",
@@ -456,9 +466,11 @@ class TestCreateSessionEndpoint:
         )
         assert resp.status_code == 404
 
-    async def test_create_bad_parent_session_404(self, client: AsyncClient, project: Project):
+    async def test_create_bad_parent_session_404(
+        self, client: AsyncClient, project_member: Project
+    ):
         resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={
                 "name": "bad-parent",
                 "engine": "native",
@@ -471,21 +483,21 @@ class TestCreateSessionEndpoint:
 
 @pytest.mark.asyncio
 class TestListSessionsEndpoint:
-    async def test_list_empty_200(self, client: AsyncClient, project: Project):
-        resp = await client.get(f"/api/projects/{project.id}/sessions")
+    async def test_list_empty_200(self, client: AsyncClient, project_member: Project):
+        resp = await client.get(f"/api/projects/{project_member.id}/sessions")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_list_with_sessions(self, client: AsyncClient, project: Project):
+    async def test_list_with_sessions(self, client: AsyncClient, project_member: Project):
         await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "s1", "engine": "native", "mode": "execution"},
         )
         await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "s2", "engine": "native", "mode": "execution"},
         )
-        resp = await client.get(f"/api/projects/{project.id}/sessions")
+        resp = await client.get(f"/api/projects/{project_member.id}/sessions")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
@@ -496,9 +508,9 @@ class TestListSessionsEndpoint:
 
 @pytest.mark.asyncio
 class TestGetSessionEndpoint:
-    async def test_get_200(self, client: AsyncClient, project: Project):
+    async def test_get_200(self, client: AsyncClient, project_member: Project):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "getme", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]
@@ -513,9 +525,9 @@ class TestGetSessionEndpoint:
 
 @pytest.mark.asyncio
 class TestUpdateSessionEndpoint:
-    async def test_patch_200(self, client: AsyncClient, project: Project):
+    async def test_patch_200(self, client: AsyncClient, project_member: Project):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "patchme", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]
@@ -537,9 +549,9 @@ class TestUpdateSessionEndpoint:
 
 @pytest.mark.asyncio
 class TestDeleteSessionEndpoint:
-    async def test_delete_204_then_404(self, client: AsyncClient, project: Project):
+    async def test_delete_204_then_404(self, client: AsyncClient, project_member: Project):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "deleteme", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]
@@ -554,17 +566,17 @@ class TestDeleteSessionEndpoint:
         resp = await client.delete(f"/api/sessions/{uuid.uuid4()}")
         assert resp.status_code == 404
 
-    async def test_delete_with_children_409(self, client: AsyncClient, project: Project):
+    async def test_delete_with_children_409(self, client: AsyncClient, project_member: Project):
         # Create parent session
         parent_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "parent", "engine": "native", "mode": "execution"},
         )
         parent_id = parent_resp.json()["id"]
 
         # Create child session
         await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={
                 "name": "child",
                 "engine": "native",
@@ -579,9 +591,9 @@ class TestDeleteSessionEndpoint:
 
 @pytest.mark.asyncio
 class TestPauseSessionEndpoint:
-    async def test_pause_from_idle_200(self, client: AsyncClient, project: Project):
+    async def test_pause_from_idle_200(self, client: AsyncClient, project_member: Project):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "pauseme", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]
@@ -591,10 +603,10 @@ class TestPauseSessionEndpoint:
         assert resp.json()["status"] == "blocked"
 
     async def test_pause_from_completed_409(
-        self, client: AsyncClient, project: Project, db_session: AsyncSession
+        self, client: AsyncClient, project_member: Project, db_session: AsyncSession
     ):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "completed-s", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]
@@ -614,9 +626,9 @@ class TestPauseSessionEndpoint:
 
 @pytest.mark.asyncio
 class TestResumeSessionEndpoint:
-    async def test_resume_from_blocked_200(self, client: AsyncClient, project: Project):
+    async def test_resume_from_blocked_200(self, client: AsyncClient, project_member: Project):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "resumeme", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]
@@ -628,9 +640,9 @@ class TestResumeSessionEndpoint:
         assert resp.status_code == 200
         assert resp.json()["status"] == "idle"
 
-    async def test_resume_from_idle_409(self, client: AsyncClient, project: Project):
+    async def test_resume_from_idle_409(self, client: AsyncClient, project_member: Project):
         create_resp = await client.post(
-            f"/api/projects/{project.id}/sessions",
+            f"/api/projects/{project_member.id}/sessions",
             json={"name": "idle-s", "engine": "native", "mode": "execution"},
         )
         session_id = create_resp.json()["id"]

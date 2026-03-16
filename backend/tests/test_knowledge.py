@@ -134,6 +134,17 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+@pytest_asyncio.fixture
+async def workspace_member(
+    workspace: Workspace, client: AsyncClient, db_session: AsyncSession
+) -> Workspace:
+    """Ensure the test user is an owner of the workspace for API tests."""
+    from tests.conftest import ensure_workspace_membership
+
+    await ensure_workspace_membership(db_session, workspace.id)
+    return workspace
+
+
 # ---------------------------------------------------------------------------
 # Unit tests: Core knowledge CRUD
 # ---------------------------------------------------------------------------
@@ -255,10 +266,12 @@ class TestCoreCharter:
 
 @pytest.mark.asyncio
 class TestKnowledgeAPI:
-    async def test_get_knowledge_fresh_project(self, client: AsyncClient, workspace: Workspace):
+    async def test_get_knowledge_fresh_project(
+        self, client: AsyncClient, workspace_member: Workspace
+    ):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "kb-project"},
+            json={"workspace_id": str(workspace_member.id), "name": "kb-project"},
         )
         project_id = create_resp.json()["id"]
 
@@ -266,10 +279,12 @@ class TestKnowledgeAPI:
         assert resp.status_code == 200
         assert resp.json() == {}
 
-    async def test_patch_knowledge_tech_stack(self, client: AsyncClient, workspace: Workspace):
+    async def test_patch_knowledge_tech_stack(
+        self, client: AsyncClient, workspace_member: Workspace
+    ):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "kb-patch"},
+            json={"workspace_id": str(workspace_member.id), "name": "kb-patch"},
         )
         project_id = create_resp.json()["id"]
 
@@ -280,10 +295,10 @@ class TestKnowledgeAPI:
         assert resp.status_code == 200
         assert resp.json()["tech_stack"] == {"language": "python"}
 
-    async def test_patch_knowledge_merge(self, client: AsyncClient, workspace: Workspace):
+    async def test_patch_knowledge_merge(self, client: AsyncClient, workspace_member: Workspace):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "kb-merge"},
+            json={"workspace_id": str(workspace_member.id), "name": "kb-merge"},
         )
         project_id = create_resp.json()["id"]
 
@@ -301,11 +316,11 @@ class TestKnowledgeAPI:
         assert data["conventions"] == {"style": "black"}
 
     async def test_patch_knowledge_invalid_structure(
-        self, client: AsyncClient, workspace: Workspace
+        self, client: AsyncClient, workspace_member: Workspace
     ):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "kb-invalid"},
+            json={"workspace_id": str(workspace_member.id), "name": "kb-invalid"},
         )
         project_id = create_resp.json()["id"]
 
@@ -330,10 +345,12 @@ class TestKnowledgeAPI:
 
 @pytest.mark.asyncio
 class TestCharterAPI:
-    async def test_get_charter_fresh_project(self, client: AsyncClient, workspace: Workspace):
+    async def test_get_charter_fresh_project(
+        self, client: AsyncClient, workspace_member: Workspace
+    ):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "charter-fresh"},
+            json={"workspace_id": str(workspace_member.id), "name": "charter-fresh"},
         )
         project_id = create_resp.json()["id"]
 
@@ -341,10 +358,10 @@ class TestCharterAPI:
         assert resp.status_code == 200
         assert resp.json() == {}
 
-    async def test_put_charter(self, client: AsyncClient, workspace: Workspace):
+    async def test_put_charter(self, client: AsyncClient, workspace_member: Workspace):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "charter-put"},
+            json={"workspace_id": str(workspace_member.id), "name": "charter-put"},
         )
         project_id = create_resp.json()["id"]
 
@@ -363,10 +380,10 @@ class TestCharterAPI:
         data = resp.json()
         assert data["goals"] == ["Ship MVP by Q2"]
 
-    async def test_get_charter_after_put(self, client: AsyncClient, workspace: Workspace):
+    async def test_get_charter_after_put(self, client: AsyncClient, workspace_member: Workspace):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "charter-persist"},
+            json={"workspace_id": str(workspace_member.id), "name": "charter-persist"},
         )
         project_id = create_resp.json()["id"]
 
@@ -400,10 +417,10 @@ class TestCharterAPI:
         )
         assert resp.status_code == 404
 
-    async def test_put_charter_invalid_body(self, client: AsyncClient, workspace: Workspace):
+    async def test_put_charter_invalid_body(self, client: AsyncClient, workspace_member: Workspace):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "charter-invalid"},
+            json={"workspace_id": str(workspace_member.id), "name": "charter-invalid"},
         )
         project_id = create_resp.json()["id"]
 

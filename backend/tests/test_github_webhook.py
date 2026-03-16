@@ -137,6 +137,17 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+@pytest_asyncio.fixture
+async def project_member(
+    project: Project, workspace: Workspace, client: AsyncClient, db_session: AsyncSession
+) -> Project:
+    """Ensure the test user is an owner of the workspace for API tests."""
+    from tests.conftest import ensure_workspace_membership
+
+    await ensure_workspace_membership(db_session, workspace.id)
+    return project
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -411,8 +422,8 @@ class TestWebhookEndpoint:
         assert resp.status_code == 200
         assert resp.json()["action_taken"] == "ignored"
 
-    async def test_auto_mode_creates_session(self, client: AsyncClient, project: Project):
-        await _configure_project(client, project.id, trigger_mode="auto")
+    async def test_auto_mode_creates_session(self, client: AsyncClient, project_member: Project):
+        await _configure_project(client, project_member.id, trigger_mode="auto")
         payload = _gh_webhook_payload(number=99, title="Auto issue")
         resp = await _post_webhook(client, payload)
         assert resp.status_code == 200

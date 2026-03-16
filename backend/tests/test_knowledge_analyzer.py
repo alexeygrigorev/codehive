@@ -111,6 +111,17 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+@pytest_asyncio.fixture
+async def workspace_member(
+    workspace: Workspace, client: AsyncClient, db_session: AsyncSession
+) -> Workspace:
+    """Ensure the test user is an owner of the workspace for API tests."""
+    from tests.conftest import ensure_workspace_membership
+
+    await ensure_workspace_membership(db_session, workspace.id)
+    return workspace
+
+
 # ---------------------------------------------------------------------------
 # Unit: Tech stack detection
 # ---------------------------------------------------------------------------
@@ -355,7 +366,7 @@ class TestKnowledgeMerge:
 @pytest.mark.asyncio
 class TestAutoPopulateAPI:
     async def test_auto_populate_endpoint(
-        self, client: AsyncClient, workspace: Workspace, tmp_path: Path
+        self, client: AsyncClient, workspace_member: Workspace, tmp_path: Path
     ):
         # Create a fake project directory with some files
         (tmp_path / "pyproject.toml").write_text(
@@ -367,7 +378,7 @@ class TestAutoPopulateAPI:
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace.id),
+                "workspace_id": str(workspace_member.id),
                 "name": "auto-pop",
                 "path": str(tmp_path),
             },
@@ -385,14 +396,14 @@ class TestAutoPopulateAPI:
         assert "FastAPI" in data["analysis"]["frameworks"]
 
     async def test_auto_populate_populates_knowledge(
-        self, client: AsyncClient, workspace: Workspace, tmp_path: Path
+        self, client: AsyncClient, workspace_member: Workspace, tmp_path: Path
     ):
         (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "^18.0.0"}}))
 
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace.id),
+                "workspace_id": str(workspace_member.id),
                 "name": "auto-pop-verify",
                 "path": str(tmp_path),
             },
@@ -409,11 +420,11 @@ class TestAutoPopulateAPI:
         assert "JavaScript/TypeScript" in knowledge["tech_stack"]["languages"]
 
     async def test_auto_populate_no_path_returns_400(
-        self, client: AsyncClient, workspace: Workspace
+        self, client: AsyncClient, workspace_member: Workspace
     ):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace.id), "name": "no-path"},
+            json={"workspace_id": str(workspace_member.id), "name": "no-path"},
         )
         project_id = create_resp.json()["id"]
 
@@ -426,14 +437,14 @@ class TestAutoPopulateAPI:
         assert resp.status_code == 404
 
     async def test_auto_populate_preserves_existing_knowledge(
-        self, client: AsyncClient, workspace: Workspace, tmp_path: Path
+        self, client: AsyncClient, workspace_member: Workspace, tmp_path: Path
     ):
         (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["fastapi"]\n')
 
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace.id),
+                "workspace_id": str(workspace_member.id),
                 "name": "preserve-test",
                 "path": str(tmp_path),
             },

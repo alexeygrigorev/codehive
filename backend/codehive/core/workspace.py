@@ -95,6 +95,11 @@ async def delete_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> No
     if workspace.projects:
         raise WorkspaceHasDependentsError(f"Workspace {workspace_id} has associated projects")
 
+    # Delete workspace members first
+    await session.refresh(workspace, attribute_names=["members"])
+    for member in workspace.members:
+        await session.delete(member)
+
     await session.delete(workspace)
     await session.commit()
 
