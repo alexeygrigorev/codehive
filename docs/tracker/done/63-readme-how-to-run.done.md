@@ -21,3 +21,15 @@ Update README.md with instructions for running codehive: backend, web app, TUI, 
 
 ## Dependencies
 - None (documentation only)
+
+## Log
+
+### [SWE] 2026-03-16 10:00
+- Rewrote README.md with all 11 required sections
+- Sections included: What is Codehive, Architecture, Prerequisites, Quick Start, Backend, Web App, TUI, Telegram Bot, CLI Commands (full table), Running Tests (backend + web), Environment Variables (full table from config.py and .env.example)
+- Also added Infrastructure section (docker compose and make targets) and License
+- All content derived from actual codebase: cli.py, config.py, pyproject.toml, docker-compose.yml, .env.example, web/package.json, backend/Makefile
+- Files modified: README.md
+- Tests: N/A (documentation-only issue)
+- Build: N/A
+- Known limitations: none

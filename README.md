@@ -1,5 +1,199 @@
-# codehive
+# Codehive
 
-Multi-platform autonomous coding agent with sub-agent orchestration.
+Persistent AI coding agent workspace with sub-agent orchestration. Agents live in projects, execute tasks autonomously, create sub-agents, and are accessible from web, mobile, Telegram, and terminal. Not a chat -- an operating system for agent sessions.
 
-Work in progress.
+## Architecture
+
+Monorepo with three top-level directories:
+
+```
+backend/    Python 3.13, FastAPI, SQLAlchemy, Redis
+web/        React 19, Vite, TypeScript, Tailwind CSS
+mobile/     (planned)
+```
+
+Infrastructure (PostgreSQL, Redis) is defined in `docker-compose.yml` at the repo root.
+
+## Prerequisites
+
+- Python 3.13+
+- Node.js 20+
+- Docker and Docker Compose
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- Git
+
+## Quick Start
+
+```bash
+# 1. Clone and enter the repo
+git clone <repo-url> && cd codehive
+
+# 2. Copy environment config
+cp .env.example .env
+# Edit .env with your values (see Environment Variables below)
+
+# 3. Start infrastructure (PostgreSQL + Redis)
+docker compose up -d
+
+# 4. Install backend dependencies and start the API server
+cd backend
+uv sync --dev
+uv run codehive serve
+
+# 5. In another terminal, start the web dev server
+cd web
+npm install
+npm run dev
+```
+
+The API server runs at `http://127.0.0.1:8000` and the web app at `http://localhost:5173`.
+
+## Backend
+
+```bash
+cd backend
+uv sync --dev          # Install dependencies
+uv run codehive serve  # Start the API server
+```
+
+Options:
+
+```
+--host HOST    Bind address (default: 127.0.0.1)
+--port PORT    Bind port (default: 8000)
+--reload       Enable auto-reload for development
+```
+
+The server can also be configured via environment variables (see below).
+
+### Database Migrations
+
+```bash
+cd backend
+uv run alembic upgrade head    # Apply migrations
+uv run alembic revision -m "description" --autogenerate  # Create a new migration
+```
+
+## Web App
+
+```bash
+cd web
+npm install        # Install dependencies
+npm run dev        # Start dev server (http://localhost:5173)
+npm run build      # Production build
+npm run preview    # Preview production build
+npm run lint       # Run ESLint
+```
+
+## TUI (Terminal Interface)
+
+Interactive terminal dashboard, designed to work over SSH and on small screens.
+
+```bash
+cd backend
+uv run codehive tui       # Full interactive dashboard
+uv run codehive rescue    # Rescue mode (emergency controls)
+```
+
+Rescue mode provides emergency access to stop runaway sessions, kill agents, rollback checkpoints, and toggle maintenance mode.
+
+## Telegram Bot
+
+Lightweight client for monitoring sessions, answering questions, and approving actions.
+
+```bash
+# Set the bot token
+export CODEHIVE_TELEGRAM_BOT_TOKEN=your-token-here
+
+cd backend
+uv run codehive telegram
+```
+
+Create a bot via [@BotFather](https://t.me/BotFather) on Telegram to get your token.
+
+## CLI Commands
+
+All commands are available via `codehive` (or `uv run codehive` from the `backend/` directory).
+
+| Command | Description |
+|---|---|
+| `codehive serve` | Start the API server |
+| `codehive tui` | Launch interactive terminal dashboard |
+| `codehive rescue` | Launch rescue mode (emergency TUI) |
+| `codehive telegram` | Start the Telegram bot |
+| `codehive projects list` | List all projects |
+| `codehive projects create NAME --workspace ID` | Create a project |
+| `codehive sessions list --project ID` | List sessions for a project |
+| `codehive sessions create PROJECT_ID --name NAME` | Create a session |
+| `codehive sessions status SESSION_ID` | Show session details |
+| `codehive sessions chat SESSION_ID` | Interactive chat with a session |
+| `codehive sessions pause SESSION_ID` | Pause a session |
+| `codehive sessions rollback SESSION_ID --checkpoint ID` | Rollback to checkpoint |
+| `codehive questions list` | List pending questions |
+| `codehive questions answer QUESTION_ID "answer"` | Answer a question |
+| `codehive system health` | Show system health status |
+| `codehive system maintenance on\|off` | Toggle maintenance mode |
+
+Use `--base-url URL` on any command to point at a different server (default: `http://127.0.0.1:8000`). This can also be set via `CODEHIVE_BASE_URL`.
+
+## Running Tests
+
+### Backend
+
+```bash
+cd backend
+uv run pytest tests/ -v            # Run all tests
+uv run pytest --cov=codehive --cov-report=term-missing  # With coverage
+uv run ruff check                  # Lint
+uv run ruff format --check         # Check formatting
+```
+
+### Web
+
+```bash
+cd web
+npx vitest          # Run tests
+npm run lint        # Lint
+```
+
+## Environment Variables
+
+Copy `.env.example` to `.env` at the repo root and fill in your values:
+
+| Variable | Default | Description |
+|---|---|---|
+| `CODEHIVE_HOST` | `127.0.0.1` | API server bind address |
+| `CODEHIVE_PORT` | `8000` | API server bind port |
+| `CODEHIVE_DEBUG` | `false` | Enable debug mode (enables auto-reload) |
+| `CODEHIVE_DATABASE_URL` | `postgresql+asyncpg://codehive:codehive@localhost:5432/codehive` | PostgreSQL connection string |
+| `CODEHIVE_REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
+| `CODEHIVE_ANTHROPIC_API_KEY` | (empty) | Anthropic API key for native agent engine |
+| `CODEHIVE_ANTHROPIC_BASE_URL` | (empty) | Custom Anthropic API base URL |
+| `CODEHIVE_TELEGRAM_BOT_TOKEN` | (empty) | Telegram bot token (required for `codehive telegram`) |
+| `CODEHIVE_TELEGRAM_CHAT_ID` | (empty) | Telegram chat ID for notifications |
+| `CODEHIVE_GITHUB_DEFAULT_TOKEN` | (empty) | GitHub token for repository integration |
+
+PostgreSQL and Redis connection defaults match the `docker-compose.yml` configuration, so no changes are needed for local development.
+
+## Infrastructure
+
+Start and stop PostgreSQL and Redis via Docker Compose:
+
+```bash
+docker compose up -d       # Start
+docker compose down        # Stop
+docker compose ps          # Status
+```
+
+Or from the backend directory using Make:
+
+```bash
+cd backend
+make infra-up       # Start
+make infra-down     # Stop
+make infra-status   # Status
+```
+
+## License
+
+WTFPL
