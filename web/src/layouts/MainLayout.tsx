@@ -27,6 +27,20 @@ export default function MainLayout() {
                 Dashboard
               </NavLink>
             </li>
+            <li>
+              <NavLink
+                to="/tunnels"
+                className={({ isActive }) =>
+                  `block px-4 py-2 text-sm ${
+                    isActive
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                  }`
+                }
+              >
+                Tunnels
+              </NavLink>
+            </li>
           </ul>
         </nav>
       </aside>

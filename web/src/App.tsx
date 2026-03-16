@@ -7,6 +7,7 @@ import SessionPage from "@/pages/SessionPage";
 import QuestionsPage from "@/pages/QuestionsPage";
 import ReplayPage from "@/pages/ReplayPage";
 import RolesPage from "@/pages/RolesPage";
+import TunnelsPage from "@/pages/TunnelsPage";
 import SearchPage from "@/pages/SearchPage";
 import NewProjectPage from "@/pages/NewProjectPage";
 import NotFoundPage from "@/pages/NotFoundPage";
@@ -38,6 +39,7 @@ function AppRoutes() {
           <Route path="/search" element={<SearchPage />} />
           <Route path="/questions" element={<QuestionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
+          <Route path="/tunnels" element={<TunnelsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
