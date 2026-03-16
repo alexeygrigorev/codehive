@@ -46,7 +46,7 @@ npm install
 npm run dev
 ```
 
-The API server runs at `http://127.0.0.1:8000` and the web app at `http://localhost:5173`.
+The API server runs at `http://127.0.0.1:7433` and the web app at `http://localhost:5173`.
 
 ## Backend
 
@@ -60,7 +60,7 @@ Options:
 
 ```
 --host HOST    Bind address (default: 127.0.0.1)
---port PORT    Bind port (default: 8000)
+--port PORT    Bind port (default: 7433)
 --reload       Enable auto-reload for development
 ```
 
@@ -134,7 +134,7 @@ All commands are available via `codehive` (or `uv run codehive` from the `backen
 | `codehive system health` | Show system health status |
 | `codehive system maintenance on\|off` | Toggle maintenance mode |
 
-Use `--base-url URL` on any command to point at a different server (default: `http://127.0.0.1:8000`). This can also be set via `CODEHIVE_BASE_URL`.
+Use `--base-url URL` on any command to point at a different server (default: `http://127.0.0.1:7433`). This can also be set via `CODEHIVE_BASE_URL`.
 
 ## Running Tests
 
@@ -158,22 +158,20 @@ npm run lint        # Lint
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` at the repo root and fill in your values:
+Copy `.env.example` to `.env` and fill in your values. DB and Redis defaults match `docker-compose.yml` — no changes needed for local dev.
 
-| Variable | Default | Description |
-|---|---|---|
-| `CODEHIVE_HOST` | `127.0.0.1` | API server bind address |
-| `CODEHIVE_PORT` | `8000` | API server bind port |
-| `CODEHIVE_DEBUG` | `false` | Enable debug mode (enables auto-reload) |
-| `CODEHIVE_DATABASE_URL` | `postgresql+asyncpg://codehive:codehive@localhost:5432/codehive` | PostgreSQL connection string |
-| `CODEHIVE_REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
-| `CODEHIVE_ANTHROPIC_API_KEY` | (empty) | Anthropic API key for native agent engine |
-| `CODEHIVE_ANTHROPIC_BASE_URL` | (empty) | Custom Anthropic API base URL |
-| `CODEHIVE_TELEGRAM_BOT_TOKEN` | (empty) | Telegram bot token (required for `codehive telegram`) |
-| `CODEHIVE_TELEGRAM_CHAT_ID` | (empty) | Telegram chat ID for notifications |
-| `CODEHIVE_GITHUB_DEFAULT_TOKEN` | (empty) | GitHub token for repository integration |
-
-PostgreSQL and Redis connection defaults match the `docker-compose.yml` configuration, so no changes are needed for local development.
+```bash
+CODEHIVE_HOST=127.0.0.1          # API bind address
+CODEHIVE_PORT=7433               # API bind port
+CODEHIVE_DEBUG=false             # Auto-reload
+CODEHIVE_DATABASE_URL=postgresql+asyncpg://codehive:codehive@localhost:5432/codehive
+CODEHIVE_REDIS_URL=redis://localhost:6379/0
+CODEHIVE_ANTHROPIC_API_KEY=      # Required for native agent engine
+CODEHIVE_ANTHROPIC_BASE_URL=     # Optional custom API URL
+CODEHIVE_TELEGRAM_BOT_TOKEN=     # For `codehive telegram`
+CODEHIVE_TELEGRAM_CHAT_ID=       # For Telegram notifications
+CODEHIVE_GITHUB_DEFAULT_TOKEN=   # For GitHub integration
+```
 
 ## Infrastructure
 
