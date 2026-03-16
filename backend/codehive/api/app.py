@@ -1,9 +1,16 @@
 """FastAPI application factory."""
 
+import contextlib
+from collections.abc import AsyncGenerator
+
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from codehive.__version__ import __version__
+from codehive.config import Settings
 from codehive.api.deps import get_current_user
+from codehive.core.first_run import print_credentials, seed_first_run
+from codehive.db.session import async_session_factory
 from codehive.api.routes.approvals import approvals_router
 from codehive.api.routes.auth import auth_router
 from codehive.api.routes.checkpoints import checkpoints_router, session_checkpoints_router
@@ -34,7 +41,27 @@ from codehive.api.ws import router as ws_router
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
-    app = FastAPI(title="codehive", version=__version__)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        """Run first-run setup on startup."""
+        session_maker = async_session_factory()
+        async with session_maker() as db:
+            credentials = await seed_first_run(db)
+            if credentials is not None:
+                print_credentials(credentials)
+        yield
+
+    app = FastAPI(title="codehive", version=__version__, lifespan=lifespan)
+
+    settings = Settings()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # ---- Public routes (no auth required) ----
     app.include_router(auth_router)

@@ -1,6 +1,24 @@
 """Application configuration via environment variables."""
 
+from typing import Any
+
 from pydantic_settings import BaseSettings
+from pydantic_settings.sources import EnvSettingsSource
+
+
+class _CorsEnvSource(EnvSettingsSource):
+    """Env source that parses ``cors_origins`` as a comma-separated string."""
+
+    def prepare_field_value(
+        self,
+        field_name: str,
+        field: Any,
+        value: Any,
+        value_is_complex: bool,
+    ) -> Any:
+        if field_name == "cors_origins" and isinstance(value, str):
+            return [o.strip() for o in value.split(",") if o.strip()]
+        return super().prepare_field_value(field_name, field, value, value_is_complex)
 
 
 class Settings(BaseSettings):
@@ -15,6 +33,8 @@ class Settings(BaseSettings):
     debug: bool = False
     app_name: str = "codehive"
     version: str = ""
+
+    cors_origins: list[str] = ["http://localhost:5173"]
 
     database_url: str = "postgresql+asyncpg://codehive:codehive@localhost:5432/codehive"
     redis_url: str = "redis://localhost:6379/0"
@@ -56,3 +76,21 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
     }
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: Any = None,
+        env_settings: Any = None,
+        dotenv_settings: Any = None,
+        file_secret_settings: Any = None,
+        **kwargs: Any,
+    ) -> tuple:
+        """Use custom env source that handles comma-separated cors_origins."""
+        return (
+            init_settings,
+            _CorsEnvSource(settings_cls),
+            dotenv_settings,
+            file_secret_settings,
+        )
