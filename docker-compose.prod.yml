@@ -1,0 +1,59 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - CODEHIVE_DATABASE_URL=${CODEHIVE_DATABASE_URL:-postgresql+asyncpg://codehive:codehive@postgres:5432/codehive}
+      - CODEHIVE_REDIS_URL=${CODEHIVE_REDIS_URL:-redis://redis:6379/0}
+      - CODEHIVE_HOST=${CODEHIVE_HOST:-0.0.0.0}
+      - CODEHIVE_PORT=${CODEHIVE_PORT:-8000}
+      - CODEHIVE_DEBUG=${CODEHIVE_DEBUG:-false}
+      - CODEHIVE_ANTHROPIC_API_KEY=${CODEHIVE_ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - codehive
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: codehive
+      POSTGRES_PASSWORD: codehive
+      POSTGRES_DB: codehive
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codehive"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codehive
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codehive
+
+volumes:
+  postgres_data:
+
+networks:
+  codehive:
+    driver: bridge
