@@ -13,6 +13,7 @@ from codehive.db.models import Issue, Project, Session as SessionModel
 from codehive.engine.native import NativeEngine
 from codehive.execution.git_ops import GitOps
 from codehive.execution.shell import ShellRunner
+from codehive.integrations.github.closer import close_github_issue, comment_failure
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,51 @@ def build_solver_prompt(
     )
 
     return "\n".join(parts)
+
+
+def _github_config(knowledge: dict[str, Any] | None) -> tuple[str, str, str] | None:
+    """Extract (owner, repo, token) from project knowledge, or None if missing."""
+    if not knowledge:
+        return None
+    owner = knowledge.get("github_owner")
+    repo = knowledge.get("github_repo")
+    token = knowledge.get("github_token")
+    if owner and repo and token:
+        return (owner, repo, token)
+    return None
+
+
+async def _try_close_issue(
+    owner: str,
+    repo: str,
+    issue_number: int,
+    commit_sha: str,
+    token: str,
+) -> None:
+    """Call close_github_issue, logging and swallowing any exception."""
+    try:
+        await close_github_issue(owner, repo, issue_number, commit_sha, token)
+    except Exception:
+        logger.exception("Failed to close GitHub issue %s/%s#%d", owner, repo, issue_number)
+
+
+async def _try_comment_failure(
+    owner: str,
+    repo: str,
+    issue_number: int,
+    error_details: str,
+    token: str,
+) -> None:
+    """Call comment_failure, logging and swallowing any exception."""
+    try:
+        await comment_failure(owner, repo, issue_number, error_details, token)
+    except Exception:
+        logger.exception(
+            "Failed to comment failure on GitHub issue %s/%s#%d",
+            owner,
+            repo,
+            issue_number,
+        )
 
 
 async def solve_issue(
@@ -128,6 +174,10 @@ async def solve_issue(
             if session_row is not None:
                 session_row.status = "failed"
                 await db.commit()
+            # Comment failure on GitHub issue (best-effort)
+            gh = _github_config(knowledge)
+            if gh and issue.github_issue_id:
+                await _try_comment_failure(gh[0], gh[1], issue.github_issue_id, error_output, gh[2])
             return SolveResult(success=False, commit_sha=None, error=error_output)
 
         # 6. Tests passed -- commit and push
@@ -135,6 +185,14 @@ async def solve_issue(
         commit_msg = f"Fix #{issue_num}: {issue.title}"
         sha = await git_ops.commit(commit_msg)
         await git_ops.push()
+
+        # Close GitHub issue (best-effort)
+        gh = _github_config(knowledge)
+        if gh and issue.github_issue_id:
+            await _try_close_issue(gh[0], gh[1], issue.github_issue_id, sha, gh[2])
+
+        # Update internal issue status to closed
+        issue.status = "closed"
 
         if session_row is not None:
             session_row.status = "completed"
@@ -144,6 +202,16 @@ async def solve_issue(
 
     except Exception as exc:
         logger.exception("solve_issue failed for issue %s", issue_id)
+        # Comment failure on GitHub issue (best-effort)
+        try:
+            _project = await db.get(Project, project_id)
+            _knowledge = _project.knowledge if _project is not None else None
+            gh = _github_config(_knowledge)
+            _issue = await db.get(Issue, issue_id)
+            if gh and _issue and _issue.github_issue_id:
+                await _try_comment_failure(gh[0], gh[1], _issue.github_issue_id, str(exc), gh[2])
+        except Exception:
+            pass
         # Update session status to failed (best effort)
         try:
             session_row = await db.get(SessionModel, session_id)
