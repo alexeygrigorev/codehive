@@ -51,6 +51,60 @@ class MockResponse:
             self.content = []
 
 
+class MockStream:
+    """Mock for the Anthropic streaming context manager.
+
+    Simulates ``async with client.messages.stream(**kwargs) as stream:``.
+    The ``text_stream`` property yields text chunks from text blocks in the response.
+    After exiting, ``get_final_message()`` returns the full MockResponse.
+    """
+
+    def __init__(self, response: MockResponse) -> None:
+        self._response = response
+        self._text_chunks: list[str] = []
+        for block in response.content:
+            if block.type == "text":
+                # Split text into small chunks to simulate streaming
+                text = block.text
+                if len(text) <= 5:
+                    self._text_chunks.append(text)
+                else:
+                    mid = len(text) // 2
+                    self._text_chunks.append(text[:mid])
+                    self._text_chunks.append(text[mid:])
+
+    async def __aenter__(self) -> MockStream:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+    @property
+    def text_stream(self) -> _TextStreamIter:
+        return _TextStreamIter(self._text_chunks)
+
+    def get_final_message(self) -> MockResponse:
+        return self._response
+
+
+class _TextStreamIter:
+    """Async iterator for text chunks."""
+
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self._index = 0
+
+    def __aiter__(self) -> _TextStreamIter:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._chunks):
+            raise StopAsyncIteration
+        chunk = self._chunks[self._index]
+        self._index += 1
+        return chunk
+
+
 def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     """Create a NativeEngine with mocked dependencies and return (engine, mocks)."""
     client = AsyncMock()
@@ -79,7 +133,26 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     }
 
 
-async def _collect_events(aiter) -> list[dict]:
+def _setup_stream_mock(mocks: dict[str, Any], responses: list[MockResponse] | MockResponse) -> None:
+    """Configure the mock client to return MockStream instances.
+
+    Accepts a single MockResponse or a list for multi-turn conversations.
+    """
+    if isinstance(responses, MockResponse):
+        responses = [responses]
+
+    call_count = 0
+
+    def stream_side_effect(**kwargs: Any) -> MockStream:
+        nonlocal call_count
+        idx = min(call_count, len(responses) - 1)
+        call_count += 1
+        return MockStream(responses[idx])
+
+    mocks["client"].messages.stream = MagicMock(side_effect=stream_side_effect)
+
+
+async def _collect_events(aiter: Any) -> list[dict]:
     """Collect all events from an async iterator."""
     events = []
     async for event in aiter:
@@ -232,19 +305,25 @@ class TestConversationLoop:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        # Mock: simple text response
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="Hello, I can help!")])
+        # Mock: simple text response via streaming
+        _setup_stream_mock(
+            mocks,
+            MockResponse(content=[MockTextBlock(text="Hello, I can help!")]),
         )
 
         events = await _collect_events(engine.send_message(session_id, "Hi"))
 
-        # Should have user message.created + assistant message.created
-        msg_events = [e for e in events if e["type"] == "message.created"]
-        assert len(msg_events) == 2
-        assert msg_events[0]["role"] == "user"
-        assert msg_events[1]["role"] == "assistant"
-        assert msg_events[1]["content"] == "Hello, I can help!"
+        # Should have user message.created + delta events + assistant message.created
+        msg_created = [e for e in events if e["type"] == "message.created"]
+        assert len(msg_created) == 2
+        assert msg_created[0]["role"] == "user"
+        assert msg_created[1]["role"] == "assistant"
+        assert msg_created[1]["content"] == "Hello, I can help!"
+
+        # Should also have message.delta events
+        deltas = [e for e in events if e["type"] == "message.delta"]
+        assert len(deltas) >= 1
+        assert all(d["role"] == "assistant" for d in deltas)
 
     @pytest.mark.asyncio
     async def test_tool_use_then_text(self, tmp_path: Path):
@@ -254,13 +333,10 @@ class TestConversationLoop:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -268,13 +344,10 @@ class TestConversationLoop:
                             input={"path": "readme.txt"},
                         )
                     ]
-                )
-            else:
-                return MockResponse(
-                    content=[MockTextBlock(text="The file says: file contents here")]
-                )
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="The file says: file contents here")]),
+            ],
+        )
 
         events = await _collect_events(engine.send_message(session_id, "Read the file"))
 
@@ -304,13 +377,10 @@ class TestConversationLoop:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -323,11 +393,10 @@ class TestConversationLoop:
                             input={"path": "b.txt"},
                         ),
                     ]
-                )
-            else:
-                return MockResponse(content=[MockTextBlock(text="Read both files.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="Read both files.")]),
+            ],
+        )
 
         events = await _collect_events(engine.send_message(session_id, "Read both"))
 
@@ -345,13 +414,10 @@ class TestConversationLoop:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -359,11 +425,10 @@ class TestConversationLoop:
                             input={"path": "nonexistent.txt"},
                         )
                     ]
-                )
-            else:
-                return MockResponse(content=[MockTextBlock(text="File not found, sorry.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="File not found, sorry.")]),
+            ],
+        )
 
         events = await _collect_events(engine.send_message(session_id, "Read file"))
 
@@ -387,19 +452,16 @@ class TestConversationLoop:
 class TestEventEmission:
     @pytest.mark.asyncio
     async def test_events_published_to_bus(self, tmp_path: Path):
-        """EventBus.publish is called for message.created and tool events."""
+        """EventBus.publish is called for message.created, message.delta, and tool events."""
         (tmp_path / "test.txt").write_text("content")
         engine, mocks = _make_engine(tmp_path)
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -407,11 +469,10 @@ class TestEventEmission:
                             input={"path": "test.txt"},
                         )
                     ]
-                )
-            else:
-                return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="Done.")]),
+            ],
+        )
 
         db_mock = MagicMock()
         await _collect_events(engine.send_message(session_id, "Read it", db=db_mock))
@@ -456,8 +517,9 @@ class TestPauseResume:
         await engine.pause(session_id)
         await engine.resume(session_id)
 
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="Resumed!")])
+        _setup_stream_mock(
+            mocks,
+            MockResponse(content=[MockTextBlock(text="Resumed!")]),
         )
 
         events = await _collect_events(engine.send_message(session_id, "Hello"))
@@ -508,8 +570,9 @@ class TestStartTask:
         task_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="Task completed.")])
+        _setup_stream_mock(
+            mocks,
+            MockResponse(content=[MockTextBlock(text="Task completed.")]),
         )
 
         events = await _collect_events(
@@ -531,8 +594,9 @@ class TestStartTask:
 
         engine._task_fetcher = AsyncMock(return_value={"instructions": "Fetched instructions"})
 
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="Done.")])
+        _setup_stream_mock(
+            mocks,
+            MockResponse(content=[MockTextBlock(text="Done.")]),
         )
 
         events = await _collect_events(engine.start_task(session_id, task_id))

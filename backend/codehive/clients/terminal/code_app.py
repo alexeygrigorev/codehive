@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,7 @@ from typing import Any
 from anthropic import AsyncAnthropic
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
-from textual.widgets import Footer, Header, Input, Static
+from textual.widgets import Footer, Header, Input, Markdown, Static
 
 # ---------------------------------------------------------------------------
 # No-op EventBus for standalone mode (no Redis / DB required)
@@ -65,6 +66,17 @@ class _ToolCallBubble(Static):
         super().__init__(markup, **kwargs)  # type: ignore[arg-type]
 
 
+class _AssistantMarkdown(Markdown):
+    """Markdown widget for assistant messages with appropriate styling."""
+
+    DEFAULT_CSS = """
+    _AssistantMarkdown {
+        padding: 0 1;
+        margin: 0 0 1 0;
+    }
+    """
+
+
 # ---------------------------------------------------------------------------
 # Main app
 # ---------------------------------------------------------------------------
@@ -96,6 +108,9 @@ class CodeApp(App):
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
+        ("ctrl+q", "quit", "Quit"),
+        ("ctrl+l", "clear_chat", "Clear"),
+        ("ctrl+n", "new_session", "New Session"),
     ]
 
     def __init__(
@@ -114,6 +129,8 @@ class CodeApp(App):
         self._session_id = uuid.uuid4()
         self._engine: Any = None
         self._busy = False
+        self._streaming_widget: _AssistantMarkdown | None = None
+        self._streaming_buffer: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -143,9 +160,16 @@ class CodeApp(App):
             client_kwargs["base_url"] = self._base_url
         client = AsyncAnthropic(**client_kwargs)
 
+        from codehive.config import Settings as _Settings
         from codehive.engine.native import DEFAULT_MODEL
 
-        model = self._model or DEFAULT_MODEL
+        try:
+            _settings = _Settings()
+            default_model = _settings.default_model or DEFAULT_MODEL
+        except Exception:
+            default_model = DEFAULT_MODEL
+
+        model = self._model or default_model
 
         self._engine = NativeEngine(
             client=client,
@@ -171,8 +195,10 @@ class CodeApp(App):
         scroll.scroll_end(animate=False)
 
     def _append_assistant(self, text: str) -> None:
+        """Mount a final assistant message as a Markdown widget."""
         scroll = self.query_one("#code-scroll", VerticalScroll)
-        scroll.mount(_ChatBubble("assistant", text))
+        widget = _AssistantMarkdown(text)
+        scroll.mount(widget)
         scroll.scroll_end(animate=False)
 
     def _append_tool(self, tool_name: str, summary: str) -> None:
@@ -182,6 +208,46 @@ class CodeApp(App):
 
     def _set_status(self, text: str) -> None:
         self.query_one("#code-status", Static).update(text)
+
+    def _start_streaming_widget(self) -> None:
+        """Create a new Markdown widget for streaming assistant output."""
+        self._streaming_buffer = ""
+        self._streaming_widget = _AssistantMarkdown("")
+        scroll = self.query_one("#code-scroll", VerticalScroll)
+        scroll.mount(self._streaming_widget)
+
+    def _append_streaming_delta(self, text: str) -> None:
+        """Append text to the current streaming widget."""
+        self._streaming_buffer += text
+        if self._streaming_widget is not None:
+            self._streaming_widget.update(self._streaming_buffer)
+            scroll = self.query_one("#code-scroll", VerticalScroll)
+            scroll.scroll_end(animate=False)
+
+    def _finalize_streaming(self, full_text: str) -> None:
+        """Finalize the streaming widget with the complete text."""
+        if self._streaming_widget is not None:
+            self._streaming_widget.update(full_text)
+            self._streaming_widget = None
+            self._streaming_buffer = ""
+            scroll = self.query_one("#code-scroll", VerticalScroll)
+            scroll.scroll_end(animate=False)
+
+    # ---- Actions ----------------------------------------------------------
+
+    def action_clear_chat(self) -> None:
+        """Clear the chat scroll area."""
+        scroll = self.query_one("#code-scroll", VerticalScroll)
+        scroll.remove_children()
+
+    async def action_new_session(self) -> None:
+        """Start a new session -- reset engine state and clear the UI."""
+        self.action_clear_chat()
+        self._session_id = uuid.uuid4()
+        if self._engine is not None:
+            await self._engine.create_session(self._session_id)
+        self._append_system(f"New session started in {self._project_dir}")
+        self._set_status(f"[dim]project: {self._project_dir}[/dim]")
 
     # ---- Event handling ---------------------------------------------------
 
@@ -208,16 +274,37 @@ class CodeApp(App):
 
     async def _run_agent(self, message: str) -> None:
         """Run the engine conversation loop and push events to the UI."""
+        t_start = time.monotonic()
+        received_deltas = False
         try:
             async for event in self._engine.send_message(self._session_id, message):
                 etype = event.get("type", "")
 
-                if etype == "message.created" and event.get("role") == "assistant":
+                if etype == "message.delta" and event.get("role") == "assistant":
                     content = event.get("content", "")
                     if content:
-                        self._append_assistant(content)
+                        if not received_deltas:
+                            received_deltas = True
+                            self._start_streaming_widget()
+                            self._set_status("[bold green]streaming...[/bold green]")
+                        self._append_streaming_delta(content)
+
+                elif etype == "message.created" and event.get("role") == "assistant":
+                    content = event.get("content", "")
+                    if content:
+                        if received_deltas:
+                            # Finalize the streaming widget with complete text
+                            self._finalize_streaming(content)
+                            received_deltas = False
+                        else:
+                            # No deltas were received -- fallback
+                            self._append_assistant(content)
 
                 elif etype == "tool.call.started":
+                    # Finalize any in-progress streaming before tool calls
+                    if received_deltas and self._streaming_widget is not None:
+                        self._finalize_streaming(self._streaming_buffer)
+                        received_deltas = False
                     tool_name = event.get("tool_name", "?")
                     tool_input = event.get("tool_input", {})
                     summary = _tool_summary(tool_name, tool_input)
@@ -235,8 +322,11 @@ class CodeApp(App):
         except Exception as exc:
             self._append_system(f"Error: {type(exc).__name__}: {exc}")
         finally:
+            elapsed = time.monotonic() - t_start
             self._busy = False
-            self._set_status(f"[dim]project: {self._project_dir}[/dim]")
+            self._streaming_widget = None
+            self._streaming_buffer = ""
+            self._set_status(f"[dim]Done in {elapsed:.1f}s | project: {self._project_dir}[/dim]")
             self.query_one("#code-input", Input).disabled = False
             self.query_one("#code-input", Input).focus()
 

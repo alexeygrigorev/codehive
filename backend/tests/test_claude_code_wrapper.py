@@ -173,7 +173,7 @@ class TestClaudeCodeParser:
         assert events == []
 
     def test_parse_content_block_delta(self, parser: ClaudeCodeParser) -> None:
-        """content_block_delta with text_delta is parsed as message.created."""
+        """content_block_delta with text_delta is parsed as message.delta."""
         line = json.dumps(
             {
                 "type": "content_block_delta",
@@ -182,7 +182,7 @@ class TestClaudeCodeParser:
         )
         events = parser.parse_line(line, SESSION_ID)
         assert len(events) == 1
-        assert events[0]["type"] == "message.created"
+        assert events[0]["type"] == "message.delta"
         assert events[0]["content"] == "streaming chunk"
 
 

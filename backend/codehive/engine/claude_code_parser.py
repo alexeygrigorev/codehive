@@ -109,7 +109,7 @@ class ClaudeCodeParser:
                 if text:
                     return [
                         {
-                            "type": "message.created",
+                            "type": "message.delta",
                             "role": "assistant",
                             "content": text,
                             "session_id": sid,

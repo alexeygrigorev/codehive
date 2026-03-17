@@ -328,17 +328,32 @@ class NativeEngine:
                 yield {"type": "session.paused", "session_id": str(session_id)}
                 return
 
-            # Call Anthropic API
-            response = await self._client.messages.create(**api_kwargs)
-
-            # Process content blocks
-            tool_use_blocks = []
+            # Stream from Anthropic API
             text_content = ""
+            async with self._client.messages.stream(**api_kwargs) as stream:
+                async for text in stream.text_stream:
+                    text_content += text
+                    delta_event = {
+                        "type": "message.delta",
+                        "role": "assistant",
+                        "content": text,
+                        "session_id": str(session_id),
+                    }
+                    if db is not None and self._event_bus is not None:
+                        await self._event_bus.publish(
+                            db,
+                            session_id,
+                            "message.delta",
+                            {"role": "assistant", "content": text},
+                        )
+                    yield delta_event
 
+            response = stream.get_final_message()
+
+            # Process content blocks for tool_use
+            tool_use_blocks = []
             for block in response.content:
-                if block.type == "text":
-                    text_content += block.text
-                elif block.type == "tool_use":
+                if block.type == "tool_use":
                     tool_use_blocks.append(block)
 
             # If there are tool calls, execute them
