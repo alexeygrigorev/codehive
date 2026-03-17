@@ -118,10 +118,10 @@ class CodeApp(App):
     """
 
     BINDINGS = [
-        ("ctrl+c", "quit", "Quit"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+l", "clear_chat", "Clear"),
         ("ctrl+n", "new_session", "New Session"),
+        ("ctrl+v", "paste", "Paste"),
     ]
 
     def __init__(
@@ -264,6 +264,26 @@ class CodeApp(App):
             self._auto_scroll()
 
     # ---- Actions ----------------------------------------------------------
+
+    def action_paste(self) -> None:
+        """Paste from system clipboard into the input field."""
+        import subprocess
+
+        try:
+            # Try xclip first (X11), then xsel, then wl-paste (Wayland)
+            for cmd in (["xclip", "-selection", "clipboard", "-o"], ["xsel", "--clipboard", "--output"], ["wl-paste"]):
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                    if result.returncode == 0:
+                        text = result.stdout
+                        if text:
+                            inp = self.query_one("#code-input", Input)
+                            inp.insert_text_at_cursor(text)
+                        return
+                except FileNotFoundError:
+                    continue
+        except Exception:
+            pass
 
     def action_clear_chat(self) -> None:
         """Clear the chat scroll area."""
