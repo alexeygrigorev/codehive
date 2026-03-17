@@ -45,26 +45,28 @@ async def session_events_ws(
 ) -> None:
     """Stream session events in real-time via Redis pub/sub."""
     # --- Authentication ---
-    # Method 1: token as query parameter
-    if token is not None:
-        try:
-            verify_ws_token(token)
-        except TokenError:
-            raise WebSocketException(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
-    else:
-        # Method 2: accept connection, then expect auth as first message
-        await websocket.accept()
-        try:
-            raw = await websocket.receive_text()
-            msg = json.loads(raw)
-            if msg.get("type") != "auth" or "token" not in msg:
-                await websocket.close(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
+    settings = Settings()
+    if settings.auth_enabled:
+        # Method 1: token as query parameter
+        if token is not None:
+            try:
+                verify_ws_token(token)
+            except TokenError:
+                raise WebSocketException(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
+        else:
+            # Method 2: accept connection, then expect auth as first message
+            await websocket.accept()
+            try:
+                raw = await websocket.receive_text()
+                msg = json.loads(raw)
+                if msg.get("type") != "auth" or "token" not in msg:
+                    await websocket.close(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
+                    return
+                verify_ws_token(msg["token"])
+            except (TokenError, json.JSONDecodeError, KeyError):
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.close(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
                 return
-            verify_ws_token(msg["token"])
-        except (TokenError, json.JSONDecodeError, KeyError):
-            if websocket.client_state == WebSocketState.CONNECTED:
-                await websocket.close(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
-            return
 
     # --- Session lookup ---
     session = await db.get(SessionModel, session_id)
@@ -84,7 +86,6 @@ async def session_events_ws(
     # Import redis here to keep the module importable without Redis running
     from redis.asyncio import Redis
 
-    settings = Settings()
     redis = Redis.from_url(settings.redis_url)
     pubsub = redis.pubsub()
     channel = f"session:{session_id}:events"

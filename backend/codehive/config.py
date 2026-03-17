@@ -58,6 +58,8 @@ class Settings(BaseSettings):
         "question.created",
     ]
 
+    auth_enabled: bool = False
+
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7

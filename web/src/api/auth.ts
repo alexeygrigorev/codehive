@@ -15,6 +15,18 @@ export interface UserRead {
   created_at: string;
 }
 
+export interface AuthConfig {
+  auth_enabled: boolean;
+}
+
+export async function fetchAuthConfig(): Promise<AuthConfig> {
+  const response = await fetch(`${baseURL}/api/auth/config`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch auth config: ${response.status}`);
+  }
+  return response.json() as Promise<AuthConfig>;
+}
+
 export async function loginUser(
   email: string,
   password: string,

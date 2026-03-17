@@ -25,6 +25,16 @@ from codehive.core.workspace import (
 )
 from codehive.db.models import Base, Project
 
+# All tests in this file require auth_enabled=True since they test workspace/auth behavior.
+pytestmark = pytest.mark.usefixtures("_enable_auth")
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth(monkeypatch):
+    """Ensure auth is enabled for all tests in this module."""
+    monkeypatch.setenv("CODEHIVE_AUTH_ENABLED", "true")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
 # ---------------------------------------------------------------------------

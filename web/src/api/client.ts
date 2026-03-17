@@ -3,6 +3,7 @@ const baseURL: string =
 
 const ACCESS_TOKEN_KEY = "codehive_access_token";
 const REFRESH_TOKEN_KEY = "codehive_refresh_token";
+const AUTH_DISABLED_KEY = "codehive_auth_disabled";
 
 const AUTH_PATHS = [
   "/api/auth/login",
@@ -14,8 +15,23 @@ function isAuthPath(path: string): boolean {
   return AUTH_PATHS.some((p) => path === p);
 }
 
+/** Returns true when the backend has auth disabled. */
+export function isAuthDisabled(): boolean {
+  return localStorage.getItem(AUTH_DISABLED_KEY) === "true";
+}
+
+/** Called by AuthProvider after fetching /api/auth/config. */
+export function setAuthDisabled(disabled: boolean): void {
+  if (disabled) {
+    localStorage.setItem(AUTH_DISABLED_KEY, "true");
+  } else {
+    localStorage.removeItem(AUTH_DISABLED_KEY);
+  }
+}
+
 function getAuthHeaders(path: string): Record<string, string> {
   if (isAuthPath(path)) return {};
+  if (isAuthDisabled()) return {};
   const token = localStorage.getItem(ACCESS_TOKEN_KEY);
   if (token) {
     return { Authorization: `Bearer ${token}` };
@@ -99,7 +115,7 @@ async function request(
     response = await fetch(url);
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 && !isAuthDisabled()) {
     const retryInit: RequestInit = {
       ...init,
       ...(hasHeaders ? { headers: mergedHeaders } : {}),

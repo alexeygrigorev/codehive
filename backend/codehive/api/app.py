@@ -24,7 +24,6 @@ from codehive.api.routes.logs import logs_router
 from codehive.api.routes.notifications import router as push_router
 from codehive.api.routes.projects import router as projects_router
 from codehive.api.routes.remote import router as remote_router
-from codehive.api.routes.tunnels import router as tunnels_router
 from codehive.api.routes.replay import replay_router
 from codehive.api.routes.search import search_router, session_history_router
 from codehive.api.routes.webhooks import webhooks_router
@@ -79,6 +78,10 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "version": __version__}
 
+    @app.get("/api/auth/config")
+    async def auth_config() -> dict:
+        return {"auth_enabled": settings.auth_enabled}
+
     # ---- Protected routes (require valid access token) ----
     _auth = [Depends(get_current_user)]
 
@@ -105,7 +108,6 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router, dependencies=_auth)
     app.include_router(github_router, dependencies=_auth)
     app.include_router(remote_router, dependencies=_auth)
-    app.include_router(tunnels_router, dependencies=_auth)
     app.include_router(webhooks_router, dependencies=_auth)
     app.include_router(replay_router, dependencies=_auth)
     app.include_router(push_router, dependencies=_auth)

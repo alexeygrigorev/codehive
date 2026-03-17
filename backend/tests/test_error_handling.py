@@ -217,8 +217,16 @@ class TestHealthEndpointUnaffected:
 
 
 class TestRealAppAuthError:
-    def setup_method(self):
+    def setup_method(self, monkeypatch=None):
+        import os
+
+        os.environ["CODEHIVE_AUTH_ENABLED"] = "true"
         self.client = TestClient(create_app())
+
+    def teardown_method(self):
+        import os
+
+        os.environ.pop("CODEHIVE_AUTH_ENABLED", None)
 
     def test_protected_route_without_auth_returns_error_response(self):
         resp = self.client.get("/api/projects")

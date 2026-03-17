@@ -17,6 +17,16 @@ from codehive.core.auth import verify_password
 from codehive.core.first_run import is_first_run, print_credentials, seed_first_run
 from codehive.db.models import Base, User, Workspace, WorkspaceMember
 
+# All tests in this file require auth_enabled=True since they test first-run with auth.
+pytestmark = pytest.mark.usefixtures("_enable_auth")
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth(monkeypatch):
+    """Ensure auth is enabled for all tests in this module."""
+    monkeypatch.setenv("CODEHIVE_AUTH_ENABLED", "true")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
 # ---------------------------------------------------------------------------
@@ -133,7 +143,7 @@ class TestSeeding:
         """Seed without env vars: username defaults to 'admin', password is generated."""
         with mock.patch.dict(
             os.environ,
-            {},
+            {"CODEHIVE_AUTH_ENABLED": "true"},
             clear=True,
         ):
             # Make sure the env vars are not set
@@ -153,7 +163,7 @@ class TestSeeding:
 
     async def test_seed_creates_default_workspace(self, db_session: AsyncSession):
         """Seeding creates a workspace named 'Default'."""
-        with mock.patch.dict(os.environ, {}, clear=True):
+        with mock.patch.dict(os.environ, {"CODEHIVE_AUTH_ENABLED": "true"}, clear=True):
             os.environ.pop("CODEHIVE_ADMIN_USERNAME", None)
             os.environ.pop("CODEHIVE_ADMIN_PASSWORD", None)
             await seed_first_run(db_session)

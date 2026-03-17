@@ -5,7 +5,6 @@ import TimelinePanel from "./TimelinePanel";
 import SubAgentPanel from "./SubAgentPanel";
 import QuestionsPanel from "./QuestionsPanel";
 import CheckpointPanel from "./CheckpointPanel";
-import TunnelPanel from "@/components/TunnelPanel";
 import AgentCommPanel from "./AgentCommPanel";
 
 export type TabKey =
@@ -15,8 +14,7 @@ export type TabKey =
   | "sub-agents"
   | "comms"
   | "questions"
-  | "checkpoints"
-  | "tunnels";
+  | "checkpoints";
 
 interface TabDef {
   key: TabKey;
@@ -31,7 +29,6 @@ const TABS: TabDef[] = [
   { key: "comms", label: "Comms" },
   { key: "questions", label: "Questions" },
   { key: "checkpoints", label: "Checkpoints" },
-  { key: "tunnels", label: "Tunnels" },
 ];
 
 interface SidebarTabsProps {
@@ -89,7 +86,6 @@ export default function SidebarTabs({
         {activeTab === "checkpoints" && (
           <CheckpointPanel sessionId={sessionId} />
         )}
-        {activeTab === "tunnels" && <TunnelPanel />}
       </div>
     </div>
   );

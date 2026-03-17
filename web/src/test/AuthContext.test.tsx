@@ -9,6 +9,14 @@ vi.mock("@/api/auth", () => ({
   registerUser: vi.fn(),
   refreshToken: vi.fn(),
   getMe: vi.fn(),
+  fetchAuthConfig: vi
+    .fn()
+    .mockResolvedValue({ auth_enabled: true }),
+}));
+
+// Mock the client module (setAuthDisabled)
+vi.mock("@/api/client", () => ({
+  setAuthDisabled: vi.fn(),
 }));
 
 import { loginUser, registerUser, refreshToken, getMe } from "@/api/auth";

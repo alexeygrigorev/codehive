@@ -16,6 +16,16 @@ from codehive.core.auth import hash_password, verify_password
 from codehive.core.jwt import TokenError, create_access_token, create_refresh_token, decode_token
 from codehive.db.models import Base
 
+# All tests in this file require auth_enabled=True since they test auth behavior.
+pytestmark = pytest.mark.usefixtures("_enable_auth")
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth(monkeypatch):
+    """Ensure auth is enabled for all tests in this module."""
+    monkeypatch.setenv("CODEHIVE_AUTH_ENABLED", "true")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
 # ---------------------------------------------------------------------------

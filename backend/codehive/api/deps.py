@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass, field
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,6 +14,20 @@ from codehive.db.session import async_session_factory
 _SessionFactory = async_session_factory()
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+# A fixed UUID used as the anonymous user's ID when auth is disabled.
+_ANON_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
+
+
+@dataclass
+class AnonymousUser:
+    """Sentinel user returned when auth is disabled."""
+
+    id: uuid.UUID = field(default_factory=lambda: _ANON_USER_ID)
+    email: str = "anonymous@codehive.local"
+    username: str = "anonymous"
+    is_active: bool = True
+    is_admin: bool = True
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -29,7 +44,15 @@ async def get_current_user(
 
     Returns 401 if the token is missing, invalid, expired, not an access
     token, or the user no longer exists / is inactive.
+
+    When ``auth_enabled`` is ``False`` in settings, returns an
+    ``AnonymousUser`` sentinel immediately (anonymous access).
     """
+    from codehive.config import Settings
+
+    if not Settings().auth_enabled:
+        return AnonymousUser()
+
     from codehive.core.jwt import TokenError, decode_token
     from codehive.db.models import User
 

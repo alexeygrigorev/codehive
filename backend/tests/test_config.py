@@ -2,20 +2,41 @@
 
 from pathlib import Path
 
+import pytest
+
 from codehive.config import Settings
 
 
+@pytest.fixture()
+def _isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Clear all CODEHIVE_* env vars and point Settings away from real .env files."""
+    for key in list(monkeypatch._env_cache if hasattr(monkeypatch, "_env_cache") else []):
+        pass
+    import os
+
+    for key in list(os.environ):
+        if key.startswith("CODEHIVE_"):
+            monkeypatch.delenv(key)
+    # Also clear provider-specific vars that _resolve_provider reads directly
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+
 class TestSettingsDefaults:
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_default_host(self):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.host == "127.0.0.1"
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_default_port(self):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.port == 7433
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_default_debug(self):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.debug is False
 
 
@@ -39,16 +60,18 @@ class TestSettingsEnvOverride:
 class TestDatabaseSettings:
     """Tests for database and Redis URL configuration (issue #02)."""
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_database_url_default(self):
         """Verify database_url returns the expected default Postgres connection string."""
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.database_url == (
             "postgresql+asyncpg://codehive:codehive@localhost:5432/codehive"
         )
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_redis_url_default(self):
         """Verify redis_url returns the expected default Redis connection string."""
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.redis_url == "redis://localhost:6379/0"
 
     def test_database_url_override(self, monkeypatch):

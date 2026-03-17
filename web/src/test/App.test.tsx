@@ -7,13 +7,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import ProjectPage from "@/pages/ProjectPage";
 import SessionPage from "@/pages/SessionPage";
 import QuestionsPage from "@/pages/QuestionsPage";
-import TunnelsPage from "@/pages/TunnelsPage";
 import NotFoundPage from "@/pages/NotFoundPage";
-
-// Mock TunnelPanel to avoid API calls
-vi.mock("@/components/TunnelPanel", () => ({
-  default: () => <div data-testid="tunnel-panel">TunnelPanel</div>,
-}));
 
 // Mock the AuthContext since MainLayout now includes UserMenu
 vi.mock("@/context/AuthContext", () => ({
@@ -43,7 +37,6 @@ function renderWithRouter(initialEntry: string) {
           <Route path="/projects/:projectId" element={<ProjectPage />} />
           <Route path="/sessions/:sessionId" element={<SessionPage />} />
           <Route path="/questions" element={<QuestionsPage />} />
-          <Route path="/tunnels" element={<TunnelsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
@@ -78,14 +71,6 @@ describe("App routing", () => {
     expect(screen.getByText(/loading questions/i)).toBeInTheDocument();
   });
 
-  it("renders TunnelsPage at /tunnels", () => {
-    renderWithRouter("/tunnels");
-    expect(
-      screen.getByRole("heading", { name: /tunnels/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("tunnel-panel")).toBeInTheDocument();
-  });
-
   it("renders NotFoundPage for unknown routes", () => {
     renderWithRouter("/nonexistent-path");
     expect(screen.getByText(/404/)).toBeInTheDocument();
@@ -99,13 +84,6 @@ describe("MainLayout", () => {
     const dashboardLink = screen.getByRole("link", { name: /dashboard/i });
     expect(dashboardLink).toBeInTheDocument();
     expect(dashboardLink).toHaveAttribute("href", "/");
-  });
-
-  it("renders sidebar with Tunnels navigation link", () => {
-    renderWithRouter("/");
-    const tunnelsLink = screen.getByRole("link", { name: /tunnels/i });
-    expect(tunnelsLink).toBeInTheDocument();
-    expect(tunnelsLink).toHaveAttribute("href", "/tunnels");
   });
 
   it("renders an outlet area with child content", () => {

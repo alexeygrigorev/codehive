@@ -11,8 +11,10 @@ import {
   registerUser,
   refreshToken as refreshTokenApi,
   getMe,
+  fetchAuthConfig,
 } from "@/api/auth";
 import type { UserRead } from "@/api/auth";
+import { setAuthDisabled } from "@/api/client";
 
 const ACCESS_TOKEN_KEY = "codehive_access_token";
 const REFRESH_TOKEN_KEY = "codehive_refresh_token";
@@ -23,6 +25,7 @@ interface AuthContextValue {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  authEnabled: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (
     email: string,
@@ -46,46 +49,69 @@ export function AuthProvider({ children }: AuthProviderProps) {
     null,
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [authEnabled, setAuthEnabled] = useState(true);
 
   useEffect(() => {
-    const storedAccess = localStorage.getItem(ACCESS_TOKEN_KEY);
-    const storedRefresh = localStorage.getItem(REFRESH_TOKEN_KEY);
-
-    if (storedAccess && storedRefresh) {
-      setAccessToken(storedAccess);
-      setRefreshTokenValue(storedRefresh);
-      getMe(storedAccess)
-        .then((userData) => {
-          setUser(userData);
+    fetchAuthConfig()
+      .then((config) => {
+        setAuthEnabled(config.auth_enabled);
+        setAuthDisabled(!config.auth_enabled);
+        if (!config.auth_enabled) {
+          // Auth is disabled -- treat as authenticated immediately
           setIsLoading(false);
-        })
-        .catch(() => {
-          // Token might be expired, try refresh
-          refreshTokenApi(storedRefresh)
-            .then((tokens) => {
-              localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-              localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
-              setAccessToken(tokens.access_token);
-              setRefreshTokenValue(tokens.refresh_token);
-              return getMe(tokens.access_token);
-            })
+          return;
+        }
+
+        // Auth is enabled -- check stored tokens
+        const storedAccess = localStorage.getItem(ACCESS_TOKEN_KEY);
+        const storedRefresh = localStorage.getItem(REFRESH_TOKEN_KEY);
+
+        if (storedAccess && storedRefresh) {
+          setAccessToken(storedAccess);
+          setRefreshTokenValue(storedRefresh);
+          getMe(storedAccess)
             .then((userData) => {
               setUser(userData);
               setIsLoading(false);
             })
             .catch(() => {
-              // Refresh also failed, clear everything
-              localStorage.removeItem(ACCESS_TOKEN_KEY);
-              localStorage.removeItem(REFRESH_TOKEN_KEY);
-              setAccessToken(null);
-              setRefreshTokenValue(null);
-              setUser(null);
-              setIsLoading(false);
+              // Token might be expired, try refresh
+              refreshTokenApi(storedRefresh)
+                .then((tokens) => {
+                  localStorage.setItem(
+                    ACCESS_TOKEN_KEY,
+                    tokens.access_token,
+                  );
+                  localStorage.setItem(
+                    REFRESH_TOKEN_KEY,
+                    tokens.refresh_token,
+                  );
+                  setAccessToken(tokens.access_token);
+                  setRefreshTokenValue(tokens.refresh_token);
+                  return getMe(tokens.access_token);
+                })
+                .then((userData) => {
+                  setUser(userData);
+                  setIsLoading(false);
+                })
+                .catch(() => {
+                  // Refresh also failed, clear everything
+                  localStorage.removeItem(ACCESS_TOKEN_KEY);
+                  localStorage.removeItem(REFRESH_TOKEN_KEY);
+                  setAccessToken(null);
+                  setRefreshTokenValue(null);
+                  setUser(null);
+                  setIsLoading(false);
+                });
             });
-        });
-    } else {
-      setIsLoading(false);
-    }
+        } else {
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        // If we can't reach the server, fall back to auth-enabled behavior
+        setIsLoading(false);
+      });
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -135,8 +161,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     accessToken,
     refreshToken: refreshTokenValue,
-    isAuthenticated: user !== null,
+    isAuthenticated: !authEnabled || user !== null,
     isLoading,
+    authEnabled,
     login,
     register,
     logout,

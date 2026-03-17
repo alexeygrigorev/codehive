@@ -1,6 +1,5 @@
 """First-run setup: detect empty DB, seed default workspace and admin user."""
 
-import os
 import secrets
 import string
 from datetime import UTC, datetime
@@ -37,12 +36,29 @@ async def seed_first_run(session: AsyncSession) -> dict[str, str] | None:
     Returns a dict with ``username``, ``password``, and ``email`` on success,
     or ``None`` if seeding was skipped (users already exist).
     """
-    if not await is_first_run(session):
-        return None
-
     from codehive.config import Settings
 
     settings = Settings()
+
+    if not settings.auth_enabled:
+        # When auth is disabled, only create the default workspace (no admin user).
+        # Check if workspace already exists to be idempotent.
+        ws_result = await session.execute(select(Workspace).where(Workspace.name == "Default"))
+        if ws_result.scalar_one_or_none() is None:
+            now = datetime.now(UTC).replace(tzinfo=None)
+            workspace = Workspace(
+                name="Default",
+                root_path="/",
+                settings={},
+                created_at=now,
+            )
+            session.add(workspace)
+            await session.commit()
+        return None
+
+    if not await is_first_run(session):
+        return None
+
     username = settings.admin_username
     password = settings.admin_password or _generate_password()
     email = f"{username}@codehive.local"

@@ -36,9 +36,6 @@ vi.mock("@/components/sidebar/CheckpointPanel", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/TunnelPanel", () => ({
-  default: () => <div data-testid="tunnel-panel">TunnelPanel</div>,
-}));
 vi.mock("@/components/sidebar/AgentCommPanel", () => ({
   default: ({ sessionId }: { sessionId?: string }) => (
     <div data-testid="agent-comm-panel" data-session-id={sessionId ?? ""}>
@@ -48,7 +45,7 @@ vi.mock("@/components/sidebar/AgentCommPanel", () => ({
 }));
 
 describe("SidebarTabs", () => {
-  it("renders all eight tab labels", () => {
+  it("renders all seven tab labels", () => {
     render(<SidebarTabs sessionId="s1" />);
 
     expect(screen.getByText("ToDo")).toBeInTheDocument();
@@ -58,7 +55,6 @@ describe("SidebarTabs", () => {
     expect(screen.getByText("Comms")).toBeInTheDocument();
     expect(screen.getByText("Questions")).toBeInTheDocument();
     expect(screen.getByText("Checkpoints")).toBeInTheDocument();
-    expect(screen.getByText("Tunnels")).toBeInTheDocument();
   });
 
   it("defaults to the ToDo tab being selected", () => {
@@ -160,16 +156,6 @@ describe("SidebarTabs", () => {
     expect(panel.getAttribute("data-session-id")).toBe("s1");
   });
 
-  it("clicking the Tunnels tab renders TunnelPanel", async () => {
-    const user = userEvent.setup();
-    render(<SidebarTabs sessionId="s1" />);
-
-    await user.click(screen.getByText("Tunnels"));
-
-    expect(screen.getByTestId("tunnel-panel")).toBeInTheDocument();
-    expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
-  });
-
   it("clicking the Comms tab renders AgentCommPanel with sessionId", async () => {
     const user = userEvent.setup();
     render(<SidebarTabs sessionId="s1" />);
@@ -180,29 +166,5 @@ describe("SidebarTabs", () => {
     expect(panel).toBeInTheDocument();
     expect(panel.getAttribute("data-session-id")).toBe("s1");
     expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
-  });
-
-  it("onTabChange fires with 'tunnels' when Tunnels tab is clicked", async () => {
-    const user = userEvent.setup();
-    const onTabChange = vi.fn();
-    render(<SidebarTabs sessionId="s1" onTabChange={onTabChange} />);
-
-    await user.click(screen.getByText("Tunnels"));
-
-    expect(onTabChange).toHaveBeenCalledWith("tunnels");
-  });
-
-  it("the active CSS class applies correctly to the Tunnels tab", async () => {
-    const user = userEvent.setup();
-    render(<SidebarTabs sessionId="s1" />);
-
-    await user.click(screen.getByText("Tunnels"));
-
-    expect(screen.getByText("Tunnels").className).toContain(
-      "sidebar-tab-active",
-    );
-    expect(screen.getByText("ToDo").className).not.toContain(
-      "sidebar-tab-active",
-    );
   });
 });

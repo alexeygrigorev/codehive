@@ -22,6 +22,16 @@ from codehive.api.app import create_app
 from codehive.api.deps import get_db
 from codehive.db.models import Base
 
+# E2E tests exercise the full auth flow and require auth_enabled=True.
+pytestmark = pytest.mark.usefixtures("_enable_auth")
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth(monkeypatch):
+    """Ensure auth is enabled for all tests in this module."""
+    monkeypatch.setenv("CODEHIVE_AUTH_ENABLED", "true")
+
+
 # ---------------------------------------------------------------------------
 # SQLite-compatible metadata helper (same pattern as test_auth.py)
 # ---------------------------------------------------------------------------
