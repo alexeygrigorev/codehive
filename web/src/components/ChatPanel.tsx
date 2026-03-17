@@ -24,6 +24,7 @@ export interface ChatPanelProps {
 
 const CHAT_EVENT_TYPES = [
   "message.created",
+  "message.delta",
   "tool.call.started",
   "tool.call.finished",
   "approval.required",
@@ -42,11 +43,56 @@ export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
   const chatItems = useMemo(() => {
     const items: ChatItem[] = [];
     const toolCallMap = new Map<string, ChatItem>();
+    let streamingBuffer = "";
+    let streamingId: string | null = null;
 
     for (const event of events) {
-      if (event.type === "message.created") {
-        items.push({ id: event.id, kind: "message", event });
+      if (event.type === "message.delta") {
+        const content = event.data.content as string;
+        if (content) {
+          streamingBuffer += content;
+          if (!streamingId) {
+            streamingId = `streaming-${event.id}`;
+          }
+          // Update or create the streaming message item
+          const existing = items.find((i) => i.id === streamingId);
+          if (existing) {
+            existing.event = {
+              ...event,
+              type: "message.created",
+              data: { ...event.data, role: "assistant", content: streamingBuffer },
+            };
+          } else {
+            items.push({
+              id: streamingId,
+              kind: "message",
+              event: {
+                ...event,
+                type: "message.created",
+                data: { ...event.data, role: "assistant", content: streamingBuffer },
+              },
+            });
+          }
+        }
+      } else if (event.type === "message.created") {
+        if (event.data.role === "assistant" && streamingId) {
+          // Final message replaces the streaming buffer
+          const existing = items.find((i) => i.id === streamingId);
+          if (existing) {
+            existing.event = event;
+            existing.id = event.id;
+          } else {
+            items.push({ id: event.id, kind: "message", event });
+          }
+          streamingBuffer = "";
+          streamingId = null;
+        } else {
+          items.push({ id: event.id, kind: "message", event });
+        }
       } else if (event.type === "tool.call.started") {
+        // Finalize any streaming before tool calls
+        streamingBuffer = "";
+        streamingId = null;
         const item: ChatItem = { id: event.id, kind: "tool_call", event };
         items.push(item);
         const callId = (event.data.call_id as string) ?? event.id;
