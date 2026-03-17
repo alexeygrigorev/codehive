@@ -2,7 +2,8 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +17,9 @@ from codehive.core.project import (
     WorkspaceNotFoundError,
     create_project,
     delete_project,
+    get_or_create_project_by_path,
     get_project,
+    get_project_by_path,
     update_project,
 )
 from codehive.db.models import Project, User, WorkspaceMember
@@ -44,6 +47,42 @@ async def create_project_endpoint(
         raise HTTPException(status_code=404, detail="Workspace not found")
     except InvalidArchetypeError:
         raise HTTPException(status_code=400, detail=f"Invalid archetype: '{body.archetype}'")
+    return ProjectRead.model_validate(project)
+
+
+class ProjectByPathRequest(BaseModel):
+    """Request body for POST /api/projects/by-path."""
+
+    path: str
+    workspace_id: uuid.UUID | None = None
+
+
+@router.get("/by-path", response_model=ProjectRead)
+async def get_project_by_path_endpoint(
+    path: str = Query(..., description="Absolute filesystem path"),
+    db: AsyncSession = Depends(get_db),
+) -> ProjectRead:
+    """Look up a project by its filesystem path. Returns 404 if not found."""
+    project = await get_project_by_path(db, path)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ProjectRead.model_validate(project)
+
+
+@router.post("/by-path", response_model=ProjectRead)
+async def create_project_by_path_endpoint(
+    body: ProjectByPathRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> ProjectRead:
+    """Get or create a project by filesystem path.
+
+    Returns 200 if the project already existed, 201 if newly created.
+    """
+    project, created = await get_or_create_project_by_path(
+        db, body.path, workspace_id=body.workspace_id
+    )
+    response.status_code = 201 if created else 200
     return ProjectRead.model_validate(project)
 
 

@@ -1,5 +1,6 @@
 """Project business logic (DB queries)."""
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -114,3 +115,51 @@ async def delete_project(session: AsyncSession, project_id: uuid.UUID) -> None:
 
     await session.delete(project)
     await session.commit()
+
+
+def normalize_path(path: str) -> str:
+    """Normalize a filesystem path: resolve to absolute, strip trailing slashes."""
+    # os.path.normpath handles trailing slashes and redundant separators
+    return os.path.normpath(os.path.abspath(path))
+
+
+async def get_project_by_path(
+    session: AsyncSession,
+    path: str,
+) -> Project | None:
+    """Return a project matching the normalized absolute path, or None."""
+    normalized = normalize_path(path)
+    result = await session.execute(select(Project).where(Project.path == normalized))
+    return result.scalar_one_or_none()
+
+
+async def get_or_create_project_by_path(
+    session: AsyncSession,
+    path: str,
+    *,
+    workspace_id: uuid.UUID | None = None,
+) -> tuple[Project, bool]:
+    """Look up a project by path; create it if it doesn't exist.
+
+    Returns (project, created) where created is True if a new project was made.
+    The project name is derived from the path basename.
+    If workspace_id is provided it is used when creating a new project.
+    """
+    normalized = normalize_path(path)
+    existing = await get_project_by_path(session, normalized)
+    if existing is not None:
+        return existing, False
+
+    name = os.path.basename(normalized)
+    project = Project(
+        name=name,
+        path=normalized,
+        knowledge={},
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    if workspace_id is not None:
+        project.workspace_id = workspace_id
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+    return project, True
