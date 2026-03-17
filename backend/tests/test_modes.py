@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -213,7 +213,61 @@ def _make_engine(tmp_path: Path):
     return engine, {"client": client, "event_bus": event_bus}
 
 
-async def _collect_events(aiter) -> list[dict]:
+class _MockStream:
+    """Mock for the Anthropic streaming context manager."""
+
+    def __init__(self, response: MockResponse) -> None:
+        self._response = response
+        self._text_chunks: list[str] = []
+        for block in response.content:
+            if block.type == "text":
+                self._text_chunks.append(block.text)
+
+    async def __aenter__(self) -> _MockStream:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+    @property
+    def text_stream(self) -> _TextStreamIter:
+        return _TextStreamIter(self._text_chunks)
+
+    def get_final_message(self) -> MockResponse:
+        return self._response
+
+
+class _TextStreamIter:
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self._index = 0
+
+    def __aiter__(self) -> _TextStreamIter:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._chunks):
+            raise StopAsyncIteration
+        chunk = self._chunks[self._index]
+        self._index += 1
+        return chunk
+
+
+def _setup_stream_mock(mocks: dict[str, Any], responses: list[MockResponse] | MockResponse) -> None:
+    if isinstance(responses, MockResponse):
+        responses = [responses]
+    call_count = 0
+
+    def stream_side_effect(**kwargs: Any) -> _MockStream:
+        nonlocal call_count
+        idx = min(call_count, len(responses) - 1)
+        call_count += 1
+        return _MockStream(responses[idx])
+
+    mocks["client"].messages.stream = MagicMock(side_effect=stream_side_effect)
+
+
+async def _collect_events(aiter: Any) -> list[dict]:
     events = []
     async for event in aiter:
         events.append(event)
@@ -228,13 +282,10 @@ class TestEngineModeIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -242,11 +293,10 @@ class TestEngineModeIntegration:
                             input={"path": "test.txt", "old_text": "a", "new_text": "b"},
                         )
                     ]
-                )
-            else:
-                return MockResponse(content=[MockTextBlock(text="OK.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="OK.")]),
+            ],
+        )
 
         events = await _collect_events(
             engine.send_message(session_id, "Edit something", mode="brainstorm")
@@ -266,13 +316,10 @@ class TestEngineModeIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -280,11 +327,10 @@ class TestEngineModeIntegration:
                             input={"path": "test.txt"},
                         )
                     ]
-                )
-            else:
-                return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="Done.")]),
+            ],
+        )
 
         events = await _collect_events(
             engine.send_message(session_id, "Read file", mode="execution")
@@ -301,17 +347,12 @@ class TestEngineModeIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         await _collect_events(engine.send_message(session_id, "Hello", mode="brainstorm"))
 
-        system = captured_kwargs.get("system", "")
+        call_kwargs = mocks["client"].messages.stream.call_args
+        system = call_kwargs.kwargs.get("system", "")
         assert "brainstorm" in system.lower()
 
     @pytest.mark.asyncio
@@ -321,13 +362,7 @@ class TestEngineModeIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         # Planning mode allows: read_file, search_files, run_shell
         # Developer role allows: edit_file, read_file, run_shell, git_commit, search_files
@@ -336,7 +371,8 @@ class TestEngineModeIntegration:
             engine.send_message(session_id, "Plan work", mode="planning", role="developer")
         )
 
-        tool_names = {t["name"] for t in captured_kwargs["tools"]}
+        call_kwargs = mocks["client"].messages.stream.call_args
+        tool_names = {t["name"] for t in call_kwargs.kwargs["tools"]}
         assert tool_names == {"read_file", "search_files", "run_shell"}
 
     @pytest.mark.asyncio
@@ -346,17 +382,12 @@ class TestEngineModeIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         await _collect_events(engine.send_message(session_id, "Think", mode="brainstorm"))
 
-        tool_names = {t["name"] for t in captured_kwargs["tools"]}
+        call_kwargs = mocks["client"].messages.stream.call_args
+        tool_names = {t["name"] for t in call_kwargs.kwargs["tools"]}
         assert tool_names == {"read_file", "search_files"}
 
 

@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -560,7 +560,59 @@ def _make_engine(tmp_path: Path):
     return engine, {"client": client, "event_bus": event_bus}
 
 
-async def _collect_events(aiter) -> list[dict]:
+class _MockStream:
+    def __init__(self, response: MockResponse) -> None:
+        self._response = response
+        self._text_chunks: list[str] = []
+        for block in response.content:
+            if block.type == "text":
+                self._text_chunks.append(block.text)
+
+    async def __aenter__(self) -> _MockStream:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+    @property
+    def text_stream(self) -> _TextStreamIter:
+        return _TextStreamIter(self._text_chunks)
+
+    def get_final_message(self) -> MockResponse:
+        return self._response
+
+
+class _TextStreamIter:
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self._index = 0
+
+    def __aiter__(self) -> _TextStreamIter:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._chunks):
+            raise StopAsyncIteration
+        chunk = self._chunks[self._index]
+        self._index += 1
+        return chunk
+
+
+def _setup_stream_mock(mocks: dict[str, Any], responses: list[MockResponse] | MockResponse) -> None:
+    if isinstance(responses, MockResponse):
+        responses = [responses]
+    call_count = 0
+
+    def stream_side_effect(**kwargs: Any) -> _MockStream:
+        nonlocal call_count
+        idx = min(call_count, len(responses) - 1)
+        call_count += 1
+        return _MockStream(responses[idx])
+
+    mocks["client"].messages.stream = MagicMock(side_effect=stream_side_effect)
+
+
+async def _collect_events(aiter: Any) -> list[dict]:
     events = []
     async for event in aiter:
         events.append(event)
@@ -575,18 +627,13 @@ class TestEngineRoleIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         await _collect_events(engine.send_message(session_id, "Test something", role="tester"))
 
         # Check that tools were filtered to tester's allowed_tools
-        tool_names = [t["name"] for t in captured_kwargs["tools"]]
+        call_kwargs = mocks["client"].messages.stream.call_args
+        tool_names = [t["name"] for t in call_kwargs.kwargs["tools"]]
         # Tester allows: read_file, run_shell, search_files
         # Tester denies: git_commit
         assert "read_file" in tool_names
@@ -602,13 +649,7 @@ class TestEngineRoleIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         # Developer role allows: edit_file, read_file, run_shell, git_commit, search_files
         # Orchestrator allows: spawn_subagent, read_file, search_files, run_shell
@@ -617,7 +658,8 @@ class TestEngineRoleIntegration:
             engine.send_message(session_id, "Plan work", mode="orchestrator", role="developer")
         )
 
-        tool_names = set(t["name"] for t in captured_kwargs["tools"])
+        call_kwargs = mocks["client"].messages.stream.call_args
+        tool_names = set(t["name"] for t in call_kwargs.kwargs["tools"])
         assert tool_names == {"read_file", "search_files", "run_shell"}
 
     @pytest.mark.asyncio
@@ -627,17 +669,12 @@ class TestEngineRoleIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         await _collect_events(engine.send_message(session_id, "Hello", role="developer"))
 
-        system = captured_kwargs.get("system", "")
+        call_kwargs = mocks["client"].messages.stream.call_args
+        system = call_kwargs.kwargs.get("system", "")
         assert "developer agent" in system.lower()
         assert "type hints" in system.lower()
 
@@ -648,13 +685,7 @@ class TestEngineRoleIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         custom_role = RoleDefinition(
             name="custom",
@@ -664,9 +695,10 @@ class TestEngineRoleIntegration:
 
         await _collect_events(engine.send_message(session_id, "Hi", role=custom_role))
 
-        tool_names = [t["name"] for t in captured_kwargs["tools"]]
+        call_kwargs = mocks["client"].messages.stream.call_args
+        tool_names = [t["name"] for t in call_kwargs.kwargs["tools"]]
         assert tool_names == ["read_file"]
-        assert "Custom agent prompt." in captured_kwargs.get("system", "")
+        assert "Custom agent prompt." in call_kwargs.kwargs.get("system", "")
 
     @pytest.mark.asyncio
     async def test_no_role_no_system_prompt(self, tmp_path: Path):
@@ -675,14 +707,9 @@ class TestEngineRoleIntegration:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        captured_kwargs: dict[str, Any] = {}
-
-        async def mock_create(**kwargs):
-            captured_kwargs.update(kwargs)
-            return MockResponse(content=[MockTextBlock(text="Done.")])
-
-        mocks["client"].messages.create = mock_create
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Done.")]))
 
         await _collect_events(engine.send_message(session_id, "Hi"))
 
-        assert "system" not in captured_kwargs
+        call_kwargs = mocks["client"].messages.stream.call_args
+        assert "system" not in call_kwargs.kwargs

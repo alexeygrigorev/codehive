@@ -331,7 +331,10 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
         if not settings.anthropic_api_key:
             raise HTTPException(status_code=503, detail="Engine not configured")
 
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        client_kwargs: dict[str, Any] = {"api_key": settings.anthropic_api_key}
+        if settings.anthropic_base_url:
+            client_kwargs["base_url"] = settings.anthropic_base_url
+        client = AsyncAnthropic(**client_kwargs)
         redis_client: Any = None
         try:
             from redis.asyncio import Redis
@@ -345,6 +348,8 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
         shell_runner = ShellRunner()
         git_ops = GitOps(repo_path=project_root)
 
+        model = session_config.get("model", "") or settings.default_model
+
         return NativeEngine(
             client=client,
             event_bus=event_bus,  # type: ignore[arg-type]
@@ -352,6 +357,7 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
             shell_runner=shell_runner,
             git_ops=git_ops,
             diff_service=diff_service,
+            model=model,
         )
 
     raise HTTPException(status_code=400, detail=f"Unknown engine type: {engine_type}")

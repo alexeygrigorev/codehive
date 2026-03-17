@@ -124,11 +124,14 @@ def _sessions_list(args: argparse.Namespace) -> None:
 def _sessions_create(args: argparse.Namespace) -> None:
     base_url = _get_base_url(args)
     client = _make_client(base_url)
-    body = {
+    body: dict[str, Any] = {
         "name": args.name,
         "engine": args.engine,
         "mode": args.mode,
     }
+    model = getattr(args, "model", "")
+    if model:
+        body["config"] = {"model": model}
     resp = _request(
         client,
         "post",
@@ -368,6 +371,9 @@ def main() -> None:
     sessions_create_parser.add_argument(
         "--mode", default="execution", help="Mode (default: execution)"
     )
+    sessions_create_parser.add_argument(
+        "--model", default="", help="Model name to use for the session"
+    )
 
     # sessions status
     sessions_status_parser = sessions_sub.add_parser("status", help="Show session status")
@@ -438,9 +444,7 @@ def main() -> None:
     subparsers.add_parser("rescue", help="Launch rescue mode (emergency TUI)")
 
     # code subcommand
-    code_parser = subparsers.add_parser(
-        "code", help="Start a lightweight coding agent session"
-    )
+    code_parser = subparsers.add_parser("code", help="Start a lightweight coding agent session")
     code_parser.add_argument(
         "directory",
         nargs="?",
@@ -450,6 +454,17 @@ def main() -> None:
     code_parser.add_argument(
         "--model", default="", help="Model name (default: claude-sonnet-4-20250514)"
     )
+    code_parser.add_argument(
+        "--provider",
+        default="",
+        choices=["anthropic", "zai", ""],
+        help="Provider shortcut: anthropic (default) or zai",
+    )
+
+    # providers subcommand group
+    providers_parser = subparsers.add_parser("providers", help="Manage LLM providers")
+    providers_sub = providers_parser.add_subparsers(dest="action")
+    providers_sub.add_parser("list", help="List configured providers")
 
     # telegram subcommand
     subparsers.add_parser("telegram", help="Start the Telegram bot")
@@ -469,6 +484,11 @@ def main() -> None:
             backup_parser.print_help()
     elif args.command == "code":
         _code(args)
+    elif args.command == "providers":
+        if args.action == "list":
+            _providers_list(args)
+        else:
+            providers_parser.print_help()
     elif args.command == "tui":
         _tui(args)
     elif args.command == "rescue":
@@ -572,24 +592,34 @@ def _backup_restore(args: argparse.Namespace) -> None:
     print(f"Database restored from {args.file}")
 
 
-def _code(args: argparse.Namespace) -> None:
-    import os
+def _resolve_provider(args: argparse.Namespace) -> tuple[str, str, str]:
+    """Resolve provider, api_key, base_url, and model from CLI args and env.
 
-    from codehive.clients.terminal.code_app import CodeApp
+    Returns (api_key, base_url, model).
+    """
+    provider = getattr(args, "provider", "") or ""
+    model = getattr(args, "model", "") or ""
 
-    project_dir = os.path.abspath(args.directory)
-    if not os.path.isdir(project_dir):
-        print(f"Error: {project_dir} is not a directory", file=sys.stderr)
-        sys.exit(1)
+    if provider == "zai":
+        from codehive.config import Settings
 
-    # Read API key/base_url from env (CODEHIVE_ prefixed or standard) or settings
-    api_key = (
-        os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "")
-        or os.environ.get("ANTHROPIC_API_KEY", "")
+        settings = Settings()
+        api_key = (
+            os.environ.get("CODEHIVE_ZAI_API_KEY", "")
+            or os.environ.get("ZAI_API_KEY", "")
+            or settings.zai_api_key
+        )
+        base_url = settings.zai_base_url
+        if not model:
+            model = "glm-4.7"
+        return api_key, base_url, model
+
+    # Default: anthropic provider
+    api_key = os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "") or os.environ.get(
+        "ANTHROPIC_API_KEY", ""
     )
-    base_url = (
-        os.environ.get("CODEHIVE_ANTHROPIC_BASE_URL", "")
-        or os.environ.get("ANTHROPIC_BASE_URL", "")
+    base_url = os.environ.get("CODEHIVE_ANTHROPIC_BASE_URL", "") or os.environ.get(
+        "ANTHROPIC_BASE_URL", ""
     )
     if not api_key:
         try:
@@ -601,6 +631,21 @@ def _code(args: argparse.Namespace) -> None:
         except Exception:
             pass
 
+    return api_key, base_url, model
+
+
+def _code(args: argparse.Namespace) -> None:
+    import os
+
+    from codehive.clients.terminal.code_app import CodeApp
+
+    project_dir = os.path.abspath(args.directory)
+    if not os.path.isdir(project_dir):
+        print(f"Error: {project_dir} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    api_key, base_url, model = _resolve_provider(args)
+
     if not api_key:
         print(
             "Error: No API key found. Set CODEHIVE_ANTHROPIC_API_KEY or "
@@ -611,11 +656,51 @@ def _code(args: argparse.Namespace) -> None:
 
     app = CodeApp(
         project_dir=project_dir,
-        model=args.model,
+        model=model,
         api_key=api_key,
         base_url=base_url,
     )
     app.run()
+
+
+def _providers_list(args: argparse.Namespace) -> None:
+    """Print a table of configured LLM providers."""
+    from codehive.config import Settings
+
+    settings = Settings()
+
+    anthropic_key_set = bool(
+        settings.anthropic_api_key
+        or os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "")
+        or os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    zai_key_set = bool(
+        settings.zai_api_key
+        or os.environ.get("CODEHIVE_ZAI_API_KEY", "")
+        or os.environ.get("ZAI_API_KEY", "")
+    )
+
+    anthropic_base = settings.anthropic_base_url or "default"
+
+    providers = [
+        {
+            "name": "anthropic",
+            "base_url": anthropic_base,
+            "api_key": "yes" if anthropic_key_set else "no",
+            "default_model": settings.default_model,
+        },
+        {
+            "name": "zai",
+            "base_url": settings.zai_base_url,
+            "api_key": "yes" if zai_key_set else "no",
+            "default_model": "glm-4.7",
+        },
+    ]
+
+    print(f"{'Provider':<12} {'Base URL':<40} {'API Key':<10} {'Default Model'}")
+    print("-" * 95)
+    for p in providers:
+        print(f"{p['name']:<12} {p['base_url']:<40} {p['api_key']:<10} {p['default_model']}")
 
 
 def _rescue(args: argparse.Namespace) -> None:

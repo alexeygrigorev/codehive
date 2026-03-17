@@ -93,6 +93,58 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     }
 
 
+class _MockStream:
+    def __init__(self, response: MockResponse) -> None:
+        self._response = response
+        self._text_chunks: list[str] = []
+        for block in response.content:
+            if block.type == "text":
+                self._text_chunks.append(block.text)
+
+    async def __aenter__(self) -> _MockStream:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+    @property
+    def text_stream(self) -> _TextStreamIter:
+        return _TextStreamIter(self._text_chunks)
+
+    def get_final_message(self) -> MockResponse:
+        return self._response
+
+
+class _TextStreamIter:
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self._index = 0
+
+    def __aiter__(self) -> _TextStreamIter:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._chunks):
+            raise StopAsyncIteration
+        chunk = self._chunks[self._index]
+        self._index += 1
+        return chunk
+
+
+def _setup_stream_mock(mocks: dict[str, Any], responses: list[MockResponse] | MockResponse) -> None:
+    if isinstance(responses, MockResponse):
+        responses = [responses]
+    call_count = 0
+
+    def stream_side_effect(**kwargs: Any) -> _MockStream:
+        nonlocal call_count
+        idx = min(call_count, len(responses) - 1)
+        call_count += 1
+        return _MockStream(responses[idx])
+
+    mocks["client"].messages.stream = MagicMock(side_effect=stream_side_effect)
+
+
 async def _collect_events(aiter: Any) -> list[dict]:
     """Collect all events from an async iterator."""
     events = []
@@ -272,13 +324,10 @@ class TestEngineGateInterception:
         mocks["shell_runner"].run = AsyncMock()
         engine._shell_runner = mocks["shell_runner"]
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -286,11 +335,10 @@ class TestEngineGateInterception:
                             input={"command": "rm -rf /tmp"},
                         )
                     ]
-                )
-            else:
-                return MockResponse(content=[MockTextBlock(text="Waiting for approval.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="Waiting for approval.")]),
+            ],
+        )
 
         db_mock = MagicMock()
         events = await _collect_events(engine.send_message(session_id, "Delete files", db=db_mock))

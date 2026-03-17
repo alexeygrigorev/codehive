@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -55,6 +55,46 @@ class MockResponse:
             self.content = []
 
 
+class _MockStream:
+    """Mock for the Anthropic streaming context manager."""
+
+    def __init__(self, response: MockResponse) -> None:
+        self._response = response
+        self._text_chunks: list[str] = []
+        for block in response.content:
+            if block.type == "text":
+                self._text_chunks.append(block.text)
+
+    async def __aenter__(self) -> _MockStream:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+    @property
+    def text_stream(self) -> _TextStreamIter:
+        return _TextStreamIter(self._text_chunks)
+
+    def get_final_message(self) -> MockResponse:
+        return self._response
+
+
+class _TextStreamIter:
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self._index = 0
+
+    def __aiter__(self) -> _TextStreamIter:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._chunks):
+            raise StopAsyncIteration
+        chunk = self._chunks[self._index]
+        self._index += 1
+        return chunk
+
+
 def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     """Create a NativeEngine with mocked dependencies and return (engine, mocks)."""
     client = AsyncMock()
@@ -83,7 +123,21 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     }
 
 
-async def _collect_events(aiter) -> list[dict]:
+def _setup_stream_mock(mocks: dict[str, Any], responses: list[MockResponse] | MockResponse) -> None:
+    if isinstance(responses, MockResponse):
+        responses = [responses]
+    call_count = 0
+
+    def stream_side_effect(**kwargs: Any) -> _MockStream:
+        nonlocal call_count
+        idx = min(call_count, len(responses) - 1)
+        call_count += 1
+        return _MockStream(responses[idx])
+
+    mocks["client"].messages.stream = MagicMock(side_effect=stream_side_effect)
+
+
+async def _collect_events(aiter: Any) -> list[dict]:
     """Collect all events from an async iterator."""
     events = []
     async for event in aiter:
@@ -241,16 +295,14 @@ class TestNativeEngineOrchestratorMode:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="I will plan.")])
-        )
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="I will plan.")]))
 
         events = await _collect_events(
             engine.send_message(session_id, "Plan the work", mode="orchestrator")
         )
 
         # Verify API was called with filtered tools (4 tools) and system prompt
-        call_kwargs = mocks["client"].messages.create.call_args
+        call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
         assert tool_names == {"spawn_subagent", "read_file", "search_files", "run_shell"}
@@ -283,13 +335,10 @@ class TestNativeEngineOrchestratorMode:
         engine._subagent_manager = AsyncMock()
         engine._subagent_manager.spawn_subagent = AsyncMock(return_value=mock_result)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -301,10 +350,10 @@ class TestNativeEngineOrchestratorMode:
                             },
                         )
                     ]
-                )
-            return MockResponse(content=[MockTextBlock(text="Sub-agent spawned.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="Sub-agent spawned.")]),
+            ],
+        )
 
         db_mock = AsyncMock()
         events = await _collect_events(
@@ -326,13 +375,11 @@ class TestNativeEngineOrchestratorMode:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="Hello!")])
-        )
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Hello!")]))
 
         await _collect_events(engine.send_message(session_id, "Hi"))
 
-        call_kwargs = mocks["client"].messages.create.call_args
+        call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
         # Full set: 8 tools (including query_agent and send_to_agent)
@@ -357,13 +404,10 @@ class TestDefensiveToolRejection:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        call_count = 0
-
-        async def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return MockResponse(
+        _setup_stream_mock(
+            mocks,
+            [
+                MockResponse(
                     content=[
                         MockToolUseBlock(
                             id="tool_1",
@@ -375,10 +419,10 @@ class TestDefensiveToolRejection:
                             },
                         )
                     ]
-                )
-            return MockResponse(content=[MockTextBlock(text="Sorry, I cannot edit files.")])
-
-        mocks["client"].messages.create = mock_create
+                ),
+                MockResponse(content=[MockTextBlock(text="Sorry, I cannot edit files.")]),
+            ],
+        )
 
         events = await _collect_events(
             engine.send_message(session_id, "Edit the file", mode="orchestrator")
@@ -410,9 +454,7 @@ class TestNoRegressions:
         session_id = uuid.uuid4()
         await engine.create_session(session_id)
 
-        mocks["client"].messages.create = AsyncMock(
-            return_value=MockResponse(content=[MockTextBlock(text="Hello, I can help!")])
-        )
+        _setup_stream_mock(mocks, MockResponse(content=[MockTextBlock(text="Hello, I can help!")]))
 
         events = await _collect_events(engine.send_message(session_id, "Hi"))
 

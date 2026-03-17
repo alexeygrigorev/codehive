@@ -6,7 +6,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -552,7 +552,28 @@ class TestEngineKnowledgeInjection:
                     self.content = [TextBlock()]
 
         client_mock = AsyncMock()
-        client_mock.messages.create = AsyncMock(return_value=MockResp())
+        _resp = MockResp()
+
+        class _Stream:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            @property
+            def text_stream(self):
+                async def _gen():
+                    for b in _resp.content:
+                        if b.type == "text":
+                            yield b.text
+
+                return _gen()
+
+            def get_final_message(self):
+                return _resp
+
+        client_mock.messages.stream = MagicMock(return_value=_Stream())
 
         engine = NativeEngine(
             client=client_mock,
@@ -568,7 +589,7 @@ class TestEngineKnowledgeInjection:
             events.append(ev)
 
         # Verify the system prompt was passed with knowledge
-        call_kwargs = client_mock.messages.create.call_args
+        call_kwargs = client_mock.messages.stream.call_args
         assert "system" in call_kwargs.kwargs or (
             len(call_kwargs.args) > 0 and "system" in str(call_kwargs)
         )
@@ -617,7 +638,28 @@ class TestEngineKnowledgeInjection:
                     self.content = [TextBlock()]
 
         client_mock = AsyncMock()
-        client_mock.messages.create = AsyncMock(return_value=MockResp())
+        _resp2 = MockResp()
+
+        class _Stream2:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            @property
+            def text_stream(self):
+                async def _gen():
+                    for b in _resp2.content:
+                        if b.type == "text":
+                            yield b.text
+
+                return _gen()
+
+            def get_final_message(self):
+                return _resp2
+
+        client_mock.messages.stream = MagicMock(return_value=_Stream2())
 
         engine = NativeEngine(
             client=client_mock,
@@ -632,7 +674,7 @@ class TestEngineKnowledgeInjection:
         async for ev in engine.send_message(session_row.id, "hi", db=db_session):
             events.append(ev)
 
-        call_kwargs = client_mock.messages.create.call_args
+        call_kwargs = client_mock.messages.stream.call_args
         system_prompt = call_kwargs.kwargs.get("system", "")
         assert "Project Knowledge" not in system_prompt
 
@@ -685,7 +727,28 @@ class TestEngineKnowledgeInjection:
                     self.content = [TextBlock()]
 
         client_mock = AsyncMock()
-        client_mock.messages.create = AsyncMock(return_value=MockResp())
+        _resp3 = MockResp()
+
+        class _Stream3:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            @property
+            def text_stream(self):
+                async def _gen():
+                    for b in _resp3.content:
+                        if b.type == "text":
+                            yield b.text
+
+                return _gen()
+
+            def get_final_message(self):
+                return _resp3
+
+        client_mock.messages.stream = MagicMock(return_value=_Stream3())
 
         engine = NativeEngine(
             client=client_mock,
@@ -700,7 +763,7 @@ class TestEngineKnowledgeInjection:
         async for ev in engine.send_message(session_row.id, "hi", db=db_session):
             events.append(ev)
 
-        call_kwargs = client_mock.messages.create.call_args
+        call_kwargs = client_mock.messages.stream.call_args
         system_prompt = call_kwargs.kwargs.get("system", "")
         assert "Agent Charter" in system_prompt
         assert "Ship MVP by Q2" in system_prompt
