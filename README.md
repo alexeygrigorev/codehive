@@ -127,6 +127,7 @@ All commands are available via `codehive` (or `uv run codehive` from the `backen
 
 | Command | Description |
 |---|---|
+| `codehive code [directory]` | Start a lightweight coding agent session |
 | `codehive serve` | Start the API server |
 | `codehive tui` | Launch interactive terminal dashboard |
 | `codehive rescue` | Launch rescue mode (emergency TUI) |

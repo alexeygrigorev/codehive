@@ -437,6 +437,20 @@ def main() -> None:
     # rescue subcommand
     subparsers.add_parser("rescue", help="Launch rescue mode (emergency TUI)")
 
+    # code subcommand
+    code_parser = subparsers.add_parser(
+        "code", help="Start a lightweight coding agent session"
+    )
+    code_parser.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Project directory (default: current directory)",
+    )
+    code_parser.add_argument(
+        "--model", default="", help="Model name (default: claude-sonnet-4-20250514)"
+    )
+
     # telegram subcommand
     subparsers.add_parser("telegram", help="Start the Telegram bot")
 
@@ -453,6 +467,8 @@ def main() -> None:
             _backup_restore(args)
         else:
             backup_parser.print_help()
+    elif args.command == "code":
+        _code(args)
     elif args.command == "tui":
         _tui(args)
     elif args.command == "rescue":
@@ -554,6 +570,46 @@ def _backup_restore(args: argparse.Namespace) -> None:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     print(f"Database restored from {args.file}")
+
+
+def _code(args: argparse.Namespace) -> None:
+    import os
+
+    from codehive.clients.terminal.code_app import CodeApp
+
+    project_dir = os.path.abspath(args.directory)
+    if not os.path.isdir(project_dir):
+        print(f"Error: {project_dir} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    # Read API key/base_url from env or codehive settings
+    api_key = os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "")
+    base_url = os.environ.get("CODEHIVE_ANTHROPIC_BASE_URL", "")
+    if not api_key:
+        try:
+            from codehive.config import Settings
+
+            settings = Settings()
+            api_key = settings.anthropic_api_key
+            base_url = base_url or settings.anthropic_base_url
+        except Exception:
+            pass
+
+    if not api_key:
+        print(
+            "Error: No API key found. Set CODEHIVE_ANTHROPIC_API_KEY or "
+            "ANTHROPIC_API_KEY environment variable.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    app = CodeApp(
+        project_dir=project_dir,
+        model=args.model,
+        api_key=api_key,
+        base_url=base_url,
+    )
+    app.run()
 
 
 def _rescue(args: argparse.Namespace) -> None:
