@@ -65,7 +65,7 @@ async def import_issues(
                     description=mapped["description"],
                     status=mapped["status"],
                     github_issue_id=mapped["github_issue_id"],
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
                 db.add(issue)
                 result.created += 1

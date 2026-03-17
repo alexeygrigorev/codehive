@@ -67,7 +67,7 @@ async def create_checkpoint(
         session_id=session_id,
         git_ref=sha,
         state=state,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(checkpoint)
     await db.commit()

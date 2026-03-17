@@ -44,7 +44,7 @@ async def create_question(
         context=context,
         answered=False,
         answer=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(pq)
     await db.commit()

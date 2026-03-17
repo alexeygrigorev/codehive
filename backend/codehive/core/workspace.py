@@ -34,7 +34,7 @@ async def create_workspace(
         name=name,
         root_path=root_path,
         settings=settings if settings is not None else {},
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     session.add(workspace)
     try:

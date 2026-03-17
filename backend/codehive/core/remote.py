@@ -63,7 +63,7 @@ async def create_remote_target(
         username=username,
         key_path=key_path,
         known_hosts_policy=known_hosts_policy,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     session.add(target)
     await session.commit()

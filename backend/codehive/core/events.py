@@ -54,7 +54,7 @@ class EventBus:
             session_id=session_id,
             type=event_type,
             data=data,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(event)
         await db.commit()

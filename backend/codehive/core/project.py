@@ -61,7 +61,7 @@ async def create_project(
         description=description,
         archetype=archetype,
         knowledge=knowledge,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     session.add(project)
     await session.commit()

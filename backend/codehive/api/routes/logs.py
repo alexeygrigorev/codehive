@@ -74,7 +74,7 @@ async def export_logs(
 
     return LogExport(
         session_id=session_id,
-        exported_at=datetime.now(timezone.utc),
+        exported_at=datetime.now(timezone.utc).replace(tzinfo=None),
         event_count=len(events),
         events=[LogEntry.model_validate(e) for e in events],
     )

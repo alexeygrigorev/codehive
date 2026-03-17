@@ -144,7 +144,7 @@ async def clone_archetype_endpoint(
     custom_row = CustomArchetype(
         name=body.name,
         definition=definition,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(custom_row)
     await db.commit()

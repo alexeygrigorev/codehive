@@ -48,7 +48,7 @@ async def add_member(
         workspace_id=workspace_id,
         user_id=body.user_id,
         role=body.role,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(member)
     try:

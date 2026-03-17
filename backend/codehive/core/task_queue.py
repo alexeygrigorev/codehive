@@ -80,7 +80,7 @@ async def create_task(
         depends_on=depends_on,
         mode=mode,
         created_by=created_by,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(task)
     await db.commit()

@@ -120,7 +120,7 @@ async def create_role_endpoint(
     row = CustomRole(
         name=body.name,
         definition=definition,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
     await db.commit()

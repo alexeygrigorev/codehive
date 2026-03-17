@@ -84,7 +84,7 @@ async def create_session(
         issue_id=issue_id,
         parent_session_id=parent_session_id,
         config=config if config is not None else {},
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(session)
     await db.commit()

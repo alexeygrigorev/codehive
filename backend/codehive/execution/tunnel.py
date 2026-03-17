@@ -87,7 +87,7 @@ class TunnelManager:
             local_port=local_port,
             label=label,
             status=TunnelStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
             _listener=listener,
         )
         self._tunnels[tunnel.id] = tunnel

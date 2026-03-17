@@ -47,7 +47,7 @@ async def create_issue(
         title=title,
         description=description,
         status="open",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(issue)
     await db.commit()

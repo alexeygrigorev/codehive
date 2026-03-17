@@ -47,7 +47,7 @@ async def create_workspace_endpoint(
         workspace_id=workspace.id,
         user_id=current_user.id,
         role="owner",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(member)
     await db.commit()
