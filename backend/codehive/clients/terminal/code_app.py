@@ -67,7 +67,11 @@ class _ToolCallBubble(Static):
 
 
 class _AssistantMarkdown(Markdown):
-    """Markdown widget for assistant messages with appropriate styling."""
+    """Markdown widget for assistant messages with appropriate styling.
+
+    On every resize (which happens when Markdown re-renders its content),
+    scrolls the parent VerticalScroll to the bottom.
+    """
 
     DEFAULT_CSS = """
     _AssistantMarkdown {
@@ -75,6 +79,13 @@ class _AssistantMarkdown(Markdown):
         margin: 0 0 1 0;
     }
     """
+
+    def on_resize(self) -> None:
+        """After Markdown content is laid out, scroll parent to bottom."""
+        app = self.app
+        if isinstance(app, CodeApp) and not app._user_scrolled_up:
+            scroll = app.query_one("#code-scroll", VerticalScroll)
+            scroll.scroll_end(animate=False)
 
 
 # ---------------------------------------------------------------------------
@@ -190,9 +201,17 @@ class CodeApp(App):
         self._user_scrolled_up = True
 
     def _auto_scroll(self) -> None:
-        """Scroll to bottom unless the user has scrolled up."""
+        """Scroll to bottom unless the user has scrolled up.
+
+        Defers the scroll to after the next layout refresh so that
+        newly mounted or updated widgets have their correct size.
+        """
         if not self._user_scrolled_up:
-            self.query_one("#code-scroll", VerticalScroll).scroll_end(animate=False)
+            self.call_after_refresh(self._do_scroll_end)
+
+    def _do_scroll_end(self) -> None:
+        """Actually perform the scroll — called after layout refresh."""
+        self.query_one("#code-scroll", VerticalScroll).scroll_end(animate=False)
 
     def _append_system(self, text: str) -> None:
         scroll = self.query_one("#code-scroll", VerticalScroll)
@@ -204,7 +223,7 @@ class CodeApp(App):
         scroll.mount(_ChatBubble("user", text))
         # Always scroll to bottom on user message and re-enable auto-scroll
         self._user_scrolled_up = False
-        scroll.scroll_end(animate=False)
+        self.call_after_refresh(self._do_scroll_end)
 
     def _append_assistant(self, text: str) -> None:
         """Mount a final assistant message as a Markdown widget."""
