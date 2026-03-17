@@ -1,4 +1,4 @@
-"""WebSocket endpoint for real-time event streaming via Redis pub/sub."""
+"""WebSocket endpoint for real-time event streaming via event bus pub/sub."""
 
 import json
 import uuid
@@ -9,6 +9,7 @@ from starlette.websockets import WebSocketState
 
 from codehive.api.deps import get_db
 from codehive.config import Settings
+from codehive.core.events import create_event_bus
 from codehive.core.jwt import TokenError, decode_token
 from codehive.db.models import Session as SessionModel
 
@@ -43,7 +44,7 @@ async def session_events_ws(
     token: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Stream session events in real-time via Redis pub/sub."""
+    """Stream session events in real-time via the event bus."""
     # --- Authentication ---
     settings = Settings()
     if settings.auth_enabled:
@@ -83,19 +84,13 @@ async def session_events_ws(
     if websocket.client_state != WebSocketState.CONNECTED:
         await websocket.accept()
 
-    # Import redis here to keep the module importable without Redis running
-    from redis.asyncio import Redis
+    # Use the event bus subscribe interface (works with both Redis and local)
+    bus = create_event_bus(settings.redis_url)
 
-    redis = Redis.from_url(settings.redis_url)
-    pubsub = redis.pubsub()
-    channel = f"session:{session_id}:events"
-
-    try:
-        await pubsub.subscribe(channel)
-        async for message in pubsub.listen():
-            if message["type"] == "message":
-                await websocket.send_text(message["data"].decode("utf-8"))
-    finally:
-        await pubsub.unsubscribe(channel)
-        await pubsub.aclose()
-        await redis.close()
+    async with bus.subscribe(session_id) as queue:
+        try:
+            while True:
+                message = await queue.get()
+                await websocket.send_text(message)
+        except Exception:
+            pass
