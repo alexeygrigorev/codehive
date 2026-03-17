@@ -582,9 +582,15 @@ def _code(args: argparse.Namespace) -> None:
         print(f"Error: {project_dir} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    # Read API key/base_url from env or codehive settings
-    api_key = os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "")
-    base_url = os.environ.get("CODEHIVE_ANTHROPIC_BASE_URL", "")
+    # Read API key/base_url from env (CODEHIVE_ prefixed or standard) or settings
+    api_key = (
+        os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "")
+        or os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    base_url = (
+        os.environ.get("CODEHIVE_ANTHROPIC_BASE_URL", "")
+        or os.environ.get("ANTHROPIC_BASE_URL", "")
+    )
     if not api_key:
         try:
             from codehive.config import Settings
