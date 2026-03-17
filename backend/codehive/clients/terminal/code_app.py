@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 from anthropic import AsyncAnthropic
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
-from textual.widgets import Footer, Header, Input, Markdown, Static
+from textual.message import Message
+from textual.widgets import Footer, Header, Markdown, Static, TextArea
 
 # ---------------------------------------------------------------------------
 # No-op EventBus for standalone mode (no Redis / DB required)
@@ -88,6 +91,69 @@ class _AssistantMarkdown(Markdown):
             scroll.scroll_end(animate=False)
 
 
+class _ChatInput(TextArea):
+    """Multiline input area: Enter submits, Shift+Enter inserts newline.
+
+    Compact when empty (3 lines), grows up to 5 lines, then scrolls internally.
+    """
+
+    _MIN_HEIGHT = 3
+    _MAX_HEIGHT = 5
+
+    DEFAULT_CSS = """
+    _ChatInput {
+        height: 3;
+    }
+    """
+
+    class Submitted(Message):
+        """Posted when the user presses Enter to submit text."""
+
+        def __init__(self, value: str) -> None:
+            super().__init__()
+            self.value = value
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.show_line_numbers = False
+
+    async def _on_key(self, event: events.Key) -> None:
+        """Intercept Enter to submit; allow Shift+Enter for newlines."""
+        if event.key == "enter":
+            # Submit the text
+            event.stop()
+            event.prevent_default()
+            text = self.text
+            self.post_message(self.Submitted(text))
+            return
+
+        if event.key == "shift+enter":
+            # Insert a newline character
+            event.stop()
+            event.prevent_default()
+            start, end = self.selection
+            self._replace_via_keyboard("\n", start, end)
+            self._resize_to_content()
+            return
+
+        # Let TextArea handle everything else
+        await super()._on_key(event)
+        # After any key, adjust height
+        self._resize_to_content()
+
+    def _resize_to_content(self) -> None:
+        """Adjust height based on line count, clamped to min/max."""
+        line_count = self.document.line_count
+        # Add 2 for TextArea chrome (border/padding)
+        target = max(self._MIN_HEIGHT, min(line_count + 2, self._MAX_HEIGHT))
+        self.styles.height = target
+
+    def clear_input(self) -> None:
+        """Clear the text and reset to compact size."""
+        self.clear()
+        self.styles.height = self._MIN_HEIGHT
+
+
 # ---------------------------------------------------------------------------
 # Main app
 # ---------------------------------------------------------------------------
@@ -105,6 +171,8 @@ class CodeApp(App):
     }
     #code-input {
         dock: bottom;
+        min-height: 3;
+        max-height: 5;
     }
     #code-status {
         dock: bottom;
@@ -130,6 +198,7 @@ class CodeApp(App):
         model: str = "",
         api_key: str = "",
         base_url: str = "",
+        auto_approve: bool = False,
         **kwargs: object,
     ) -> None:
         super().__init__(**kwargs)  # type: ignore[arg-type]
@@ -137,25 +206,30 @@ class CodeApp(App):
         self._model = model
         self._api_key = api_key
         self._base_url = base_url
+        self._auto_approve = auto_approve
+        self._always_approved: set[str] = set()
+        self._approval_event: asyncio.Event = asyncio.Event()
+        self._approval_result: str = ""
         self._session_id = uuid.uuid4()
         self._engine: Any = None
         self._busy = False
         self._streaming_widget: _AssistantMarkdown | None = None
         self._streaming_buffer: str = ""
         self._user_scrolled_up = False
+        self._awaiting_approval = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical(id="code-body"):
             yield VerticalScroll(id="code-scroll")
             yield Static(f"[dim]project: {self._project_dir}[/dim]", id="code-status")
-            yield Input(placeholder="Ask the agent anything...", id="code-input")
+            yield _ChatInput(id="code-input")
         yield Footer()
 
     async def on_mount(self) -> None:
         await self._init_engine()
         self._append_system(f"Session started in {self._project_dir}")
-        self.query_one("#code-input", Input).focus()
+        self.query_one("#code-input", _ChatInput).focus()
 
     async def _init_engine(self) -> None:
         from codehive.engine.native import NativeEngine
@@ -191,8 +265,68 @@ class CodeApp(App):
             git_ops=GitOps(repo_path=self._project_dir),
             diff_service=DiffService(),
             model=model,
+            approval_callback=self._approval_callback,
         )
         await self._engine.create_session(self._session_id)
+
+    # ---- Approval callback ------------------------------------------------
+
+    async def _approval_callback(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        """Called by NativeEngine before executing destructive tools.
+
+        Returns True to proceed, False to reject.
+        """
+        # Auto-approve mode: skip all prompts
+        if self._auto_approve:
+            return True
+
+        # Already approved for this tool type in this session
+        if tool_name in self._always_approved:
+            return True
+
+        # Build detail string for the prompt
+        if tool_name == "run_shell":
+            detail = f"command: {tool_input.get('command', '?')}"
+        elif tool_name == "edit_file":
+            path = tool_input.get("path", "?")
+            old = tool_input.get("old_string", "")
+            new = tool_input.get("new_string", "")
+            detail = f"file: {path}\n  old: {old[:120]}\n  new: {new[:120]}"
+        elif tool_name == "git_commit":
+            detail = f"message: {tool_input.get('message', '?')}"
+        else:
+            detail = str(tool_input)[:200]
+
+        # Show the approval prompt in the chat area
+        self._append_system(
+            f"Approve {tool_name}?\n  {detail}\n[y]es / [n]o / [a]lways approve {tool_name}"
+        )
+
+        # Wait for user response via the approval event
+        self._awaiting_approval = True
+        self._approval_event.clear()
+        self._approval_result = ""
+
+        # Temporarily enable input so the user can respond
+        inp = self.query_one("#code-input", _ChatInput)
+        inp.disabled = False
+        inp.read_only = False
+        inp.focus()
+
+        await self._approval_event.wait()
+
+        self._awaiting_approval = False
+        inp.disabled = True
+        inp.read_only = True
+
+        response = self._approval_result.strip().lower()
+        if response in ("a", "always"):
+            self._always_approved.add(tool_name)
+            return True
+        if response in ("y", "yes", ""):
+            return True
+        # Anything else (including "n", "no") is a rejection
+        return False
 
     # ---- UI helpers -------------------------------------------------------
 
@@ -271,14 +405,19 @@ class CodeApp(App):
 
         try:
             # Try xclip first (X11), then xsel, then wl-paste (Wayland)
-            for cmd in (["xclip", "-selection", "clipboard", "-o"], ["xsel", "--clipboard", "--output"], ["wl-paste"]):
+            for cmd in (
+                ["xclip", "-selection", "clipboard", "-o"],
+                ["xsel", "--clipboard", "--output"],
+                ["wl-paste"],
+            ):
                 try:
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
                     if result.returncode == 0:
                         text = result.stdout
                         if text:
-                            inp = self.query_one("#code-input", Input)
-                            inp.insert_text_at_cursor(text)
+                            inp = self.query_one("#code-input", _ChatInput)
+                            inp.insert(text)
+                            inp._resize_to_content()
                         return
                 except FileNotFoundError:
                     continue
@@ -294,6 +433,7 @@ class CodeApp(App):
         """Start a new session -- reset engine state and clear the UI."""
         self.action_clear_chat()
         self._session_id = uuid.uuid4()
+        self._always_approved = set()
         if self._engine is not None:
             await self._engine.create_session(self._session_id)
         self._append_system(f"New session started in {self._project_dir}")
@@ -301,11 +441,19 @@ class CodeApp(App):
 
     # ---- Event handling ---------------------------------------------------
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
+    async def on__chat_input_submitted(self, event: _ChatInput.Submitted) -> None:
         text = event.value.strip()
+        inp = self.query_one("#code-input", _ChatInput)
         if not text:
+            inp.clear_input()
             return
-        event.input.value = ""
+        inp.clear_input()
+
+        # If we are waiting for an approval response, route it there
+        if self._awaiting_approval:
+            self._approval_result = text
+            self._approval_event.set()
+            return
 
         if text in ("/quit", "/exit"):
             self.exit()
@@ -319,7 +467,8 @@ class CodeApp(App):
         self._user_scrolled_up = False
         self._busy = True
         self._set_status("[bold yellow]thinking...[/bold yellow]")
-        self.query_one("#code-input", Input).disabled = True
+        inp.disabled = True
+        inp.read_only = True
 
         self.run_worker(self._run_agent(text), exclusive=True)
 
@@ -378,8 +527,10 @@ class CodeApp(App):
             self._streaming_widget = None
             self._streaming_buffer = ""
             self._set_status(f"[dim]Done in {elapsed:.1f}s | project: {self._project_dir}[/dim]")
-            self.query_one("#code-input", Input).disabled = False
-            self.query_one("#code-input", Input).focus()
+            inp = self.query_one("#code-input", _ChatInput)
+            inp.disabled = False
+            inp.read_only = False
+            inp.focus()
 
 
 def _tool_summary(tool_name: str, tool_input: dict) -> str:
