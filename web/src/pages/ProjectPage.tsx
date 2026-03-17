@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProject, type ProjectRead } from "@/api/projects";
-import { fetchSessions, type SessionRead } from "@/api/sessions";
+import { createSession, fetchSessions, type SessionRead } from "@/api/sessions";
 import SessionList from "@/components/SessionList";
 
 export default function ProjectPage() {
@@ -10,6 +10,7 @@ export default function ProjectPage() {
   const [sessions, setSessions] = useState<SessionRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -85,7 +86,28 @@ export default function ProjectPage() {
         )}
       </div>
       <div className="mt-6">
-        <h2 className="text-lg font-semibold mb-3">Sessions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Sessions</h2>
+          <button
+            onClick={async () => {
+              const name = prompt("Session name:", "New Session");
+              if (!name?.trim()) return;
+              setCreating(true);
+              try {
+                const session = await createSession(projectId!, { name: name.trim() });
+                setSessions((prev) => [...prev, session]);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to create session");
+              } finally {
+                setCreating(false);
+              }
+            }}
+            disabled={creating}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+          >
+            {creating ? "Creating..." : "+ New Session"}
+          </button>
+        </div>
         <SessionList sessions={sessions} />
       </div>
     </div>

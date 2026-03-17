@@ -13,6 +13,24 @@ export interface SessionRead {
   created_at: string;
 }
 
+export async function createSession(
+  projectId: string,
+  body: { name: string; engine?: string; mode?: string },
+): Promise<SessionRead> {
+  const response = await apiClient.post(
+    `/api/projects/${projectId}/sessions`,
+    {
+      engine: "native",
+      mode: "execution",
+      ...body,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to create session: ${response.status}`);
+  }
+  return response.json() as Promise<SessionRead>;
+}
+
 export async function fetchSessions(
   projectId: string,
 ): Promise<SessionRead[]> {
