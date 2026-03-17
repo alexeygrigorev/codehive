@@ -52,9 +52,9 @@ class ShellRunner:
         """
         if policy is not None:
             cmd_str = " ".join(command) if isinstance(command, list) else command
-            verdict = policy.check(cmd_str)
-            if verdict in (PolicyVerdict.DENY, PolicyVerdict.ASK):
-                raise CommandPolicyViolation(cmd_str, verdict)
+            result = policy.check(cmd_str)
+            if result.verdict in (PolicyVerdict.DENY, PolicyVerdict.ASK):
+                raise CommandPolicyViolation(cmd_str, result.verdict, result.reason)
 
         working_dir = Path(working_dir)
         if not working_dir.exists():
@@ -134,9 +134,9 @@ class ShellRunner:
         """
         if policy is not None:
             cmd_str = " ".join(command) if isinstance(command, list) else command
-            verdict = policy.check(cmd_str)
-            if verdict in (PolicyVerdict.DENY, PolicyVerdict.ASK):
-                raise CommandPolicyViolation(cmd_str, verdict)
+            result = policy.check(cmd_str)
+            if result.verdict in (PolicyVerdict.DENY, PolicyVerdict.ASK):
+                raise CommandPolicyViolation(cmd_str, result.verdict, result.reason)
 
         working_dir = Path(working_dir)
         if not working_dir.exists():
