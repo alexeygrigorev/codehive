@@ -5,6 +5,7 @@ import {
   type FlowStartResult,
   type ProjectBrief,
 } from "@/api/projectFlow";
+import { createProject, fetchDefaultWorkspaceId } from "@/api/projects";
 import FlowChat from "@/components/project-flow/FlowChat";
 import BriefReview from "@/components/project-flow/BriefReview";
 
@@ -26,14 +27,14 @@ const FLOW_TYPES = [
     requiresInput: false,
   },
   {
-    type: "from_notes",
+    type: "spec_from_notes",
     title: "From Notes",
     description:
       "Paste your existing notes, docs, or ideas and let the system structure them into a project.",
     requiresInput: true,
   },
   {
-    type: "from_repo",
+    type: "start_from_repo",
     title: "From Repository",
     description:
       "Start from an existing repository URL to analyze and build a project around it.",
@@ -50,6 +51,27 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [initialInput, setInitialInput] = useState("");
   const [selectedType, setSelectedType] = useState<string | null>(null);
+
+  async function handleCreateEmpty() {
+    const name = prompt("Project name:");
+    if (!name?.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const wsId = await fetchDefaultWorkspaceId();
+      const project = await createProject({
+        workspace_id: wsId,
+        name: name.trim(),
+      });
+      navigate(`/projects/${project.id}`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create project",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSelectFlow(flowType: string, requiresInput: boolean) {
     if (requiresInput && !initialInput.trim()) {
@@ -110,6 +132,17 @@ export default function NewProjectPage() {
     <div className="max-w-2xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">New Project</h1>
 
+      <button
+        onClick={handleCreateEmpty}
+        disabled={loading}
+        className="w-full border-2 border-dashed rounded-lg p-4 text-left hover:border-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-50 mb-4"
+      >
+        <h3 className="font-semibold text-lg">Empty Project</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          Create a blank project and start chatting right away.
+        </p>
+      </button>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {FLOW_TYPES.map((flow) => (
           <button
@@ -124,10 +157,10 @@ export default function NewProjectPage() {
         ))}
       </div>
 
-      {(selectedType === "from_notes" || selectedType === "from_repo") && (
+      {(selectedType === "spec_from_notes" || selectedType === "start_from_repo") && (
         <div className="mt-4 space-y-2">
           <label htmlFor="initial-input" className="block font-medium">
-            {selectedType === "from_notes"
+            {selectedType === "spec_from_notes"
               ? "Paste your notes"
               : "Repository URL"}
           </label>
