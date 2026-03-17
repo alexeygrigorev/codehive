@@ -24,6 +24,36 @@ function httpToWs(url: string): string {
 const INITIAL_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30000;
 
+/**
+ * Normalize a raw WebSocket message into a proper SessionEvent.
+ *
+ * The backend EventBus publishes events with the full SessionEvent shape
+ * (`id`, `session_id`, `type`, `data`, `created_at`). However, some code
+ * paths (e.g. the POST /messages HTTP response) may produce flat events
+ * without a `data` wrapper. This function ensures a consistent shape.
+ */
+export function normalizeEvent(raw: Record<string, unknown>): SessionEvent {
+  // Already has a nested `data` object -- standard SessionEvent shape
+  if (
+    raw.data !== null &&
+    raw.data !== undefined &&
+    typeof raw.data === "object" &&
+    !Array.isArray(raw.data)
+  ) {
+    return raw as unknown as SessionEvent;
+  }
+
+  // Flat event: extract known top-level fields, put the rest into `data`
+  const { id, session_id, type, created_at, ...rest } = raw;
+  return {
+    id: (id as string) ?? crypto.randomUUID(),
+    session_id: (session_id as string) ?? "",
+    type: (type as string) ?? "unknown",
+    data: rest as Record<string, unknown>,
+    created_at: (created_at as string) ?? new Date().toISOString(),
+  };
+}
+
 export class WebSocketClient {
   private ws: WebSocket | null = null;
   private eventListeners: Set<EventCallback> = new Set();
@@ -103,13 +133,19 @@ export class WebSocketClient {
     };
 
     ws.onmessage = (event: MessageEvent) => {
-      let parsed: SessionEvent;
+      let raw: Record<string, unknown>;
       try {
-        parsed = JSON.parse(event.data as string) as SessionEvent;
+        raw = JSON.parse(event.data as string) as Record<string, unknown>;
       } catch {
         console.warn("WebSocket received malformed message:", event.data);
         return;
       }
+
+      if (import.meta.env.DEV) {
+        console.debug("[WS raw]", raw);
+      }
+
+      const parsed = normalizeEvent(raw);
       for (const listener of this.eventListeners) {
         listener(parsed);
       }
