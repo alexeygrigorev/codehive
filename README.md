@@ -58,6 +58,24 @@ npm run dev
 
 The API server runs at `http://127.0.0.1:7433` and the web app at `http://localhost:5173`.
 
+### Default Login
+
+On first run the server creates an admin user. Credentials are controlled by environment variables:
+
+| Variable | Default |
+|---|---|
+| `CODEHIVE_ADMIN_USERNAME` | `admin` |
+| `CODEHIVE_ADMIN_PASSWORD` | random (printed to server logs) |
+
+Set `CODEHIVE_ADMIN_PASSWORD=admin` in your `.env` for a known password. If the admin was already created and you forgot the password, reset the DB:
+
+```bash
+docker exec codehive-postgres-1 psql -U codehive -d codehive \
+  -c "DELETE FROM workspace_members; DELETE FROM users; DELETE FROM workspaces;"
+```
+
+Then restart `uv run codehive serve` — it will re-seed with your configured credentials.
+
 ## Backend
 
 ```bash
