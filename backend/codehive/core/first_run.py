@@ -40,8 +40,11 @@ async def seed_first_run(session: AsyncSession) -> dict[str, str] | None:
     if not await is_first_run(session):
         return None
 
-    username = os.environ.get("CODEHIVE_ADMIN_USERNAME", "admin")
-    password = os.environ.get("CODEHIVE_ADMIN_PASSWORD") or _generate_password()
+    from codehive.config import Settings
+
+    settings = Settings()
+    username = settings.admin_username
+    password = settings.admin_password or _generate_password()
     email = f"{username}@codehive.local"
 
     now = datetime.now(UTC).replace(tzinfo=None)
