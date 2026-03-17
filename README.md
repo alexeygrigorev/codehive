@@ -8,9 +8,13 @@ Codehive is a self-hosted tool that runs on your own server or computer. There i
 
 1. Install codehive on your server (or laptop, or home machine)
 2. SSH in and run `codehive serve` to start the backend
-3. Connect from your browser, phone, Telegram, or terminal over SSH tunnel or local network
+3. Connect from your clients via SSH port forwarding:
+   ```bash
+   ssh -L 7433:localhost:7433 yourserver
+   ```
+4. Open `http://localhost:7433` in your browser, or point the mobile app at it
 
-One user, one instance. Your code and agent data never leave your machine.
+One user, one instance. Your code and agent data never leave your machine. The backend only listens on `127.0.0.1` — remote access is handled by SSH tunnels on the client side, not by the backend.
 
 ## Architecture
 
