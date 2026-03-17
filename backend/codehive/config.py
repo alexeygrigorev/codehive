@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     log_file: str = ""
     log_json: bool = True
 
+    admin_username: str = "admin"
+    admin_password: str = ""
+
     model_config = {
         "env_prefix": "CODEHIVE_",
         "env_file": ".env",
