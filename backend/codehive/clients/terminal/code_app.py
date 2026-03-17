@@ -131,6 +131,7 @@ class CodeApp(App):
         self._busy = False
         self._streaming_widget: _AssistantMarkdown | None = None
         self._streaming_buffer: str = ""
+        self._user_scrolled_up = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -184,15 +185,13 @@ class CodeApp(App):
 
     # ---- UI helpers -------------------------------------------------------
 
-    def _is_at_bottom(self) -> bool:
-        """Check if the scroll is near the bottom (auto-scroll zone)."""
-        scroll = self.query_one("#code-scroll", VerticalScroll)
-        # Consider "at bottom" if within 2 lines of the end
-        return scroll.scroll_offset.y >= scroll.max_scroll_y - 2
+    def on_vertical_scroll_scroll_up(self) -> None:
+        """User scrolled up manually — stop auto-scrolling."""
+        self._user_scrolled_up = True
 
     def _auto_scroll(self) -> None:
-        """Scroll to bottom only if already near the bottom."""
-        if self._is_at_bottom():
+        """Scroll to bottom unless the user has scrolled up."""
+        if not self._user_scrolled_up:
             self.query_one("#code-scroll", VerticalScroll).scroll_end(animate=False)
 
     def _append_system(self, text: str) -> None:
@@ -203,7 +202,8 @@ class CodeApp(App):
     def _append_user(self, text: str) -> None:
         scroll = self.query_one("#code-scroll", VerticalScroll)
         scroll.mount(_ChatBubble("user", text))
-        # Always scroll to bottom on user message
+        # Always scroll to bottom on user message and re-enable auto-scroll
+        self._user_scrolled_up = False
         scroll.scroll_end(animate=False)
 
     def _append_assistant(self, text: str) -> None:
@@ -277,6 +277,7 @@ class CodeApp(App):
             return
 
         self._append_user(text)
+        self._user_scrolled_up = False
         self._busy = True
         self._set_status("[bold yellow]thinking...[/bold yellow]")
         self.query_one("#code-input", Input).disabled = True
