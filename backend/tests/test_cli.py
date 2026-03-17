@@ -10,7 +10,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import JSON, MetaData, Table, event, text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from codehive.api.app import create_app
@@ -40,30 +40,6 @@ def _run_cli(args: list[str], monkeypatch: pytest.MonkeyPatch) -> tuple[str, int
         return out.getvalue() + err.getvalue(), e.code or 0
 
 
-def _sqlite_compatible_metadata() -> MetaData:
-    """Return a copy of Base.metadata with SQLite-compatible types."""
-    metadata = MetaData()
-    for table in Base.metadata.tables.values():
-        columns = []
-        for col in table.columns:
-            col_copy = col._copy()
-            if col_copy.type.__class__.__name__ == "JSONB":
-                col_copy.type = JSON()
-            if col_copy.server_default is not None:
-                default_text = str(col_copy.server_default.arg)
-                if "::jsonb" in default_text:
-                    col_copy.server_default = text("'{}'")
-                elif "now()" in default_text:
-                    col_copy.server_default = text("(datetime('now'))")
-                elif default_text == "true":
-                    col_copy.server_default = text("1")
-                elif default_text == "false":
-                    col_copy.server_default = text("0")
-            columns.append(col_copy)
-        Table(table.name, metadata, *columns)
-    return metadata
-
-
 # ---------------------------------------------------------------------------
 # Fixtures for integration tests
 # ---------------------------------------------------------------------------
@@ -80,14 +56,13 @@ async def db_engine():
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    metadata = _sqlite_compatible_metadata()
     async with engine.begin() as conn:
-        await conn.run_sync(metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
     async with engine.begin() as conn:
-        await conn.run_sync(metadata.drop_all)
+        await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
 
 

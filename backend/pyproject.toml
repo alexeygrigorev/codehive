@@ -11,10 +11,10 @@ requires-python = ">=3.10"
 dynamic = ["version"]
 
 dependencies = [
+    "aiosqlite>=0.22.1",
     "alembic>=1.18.4",
     "anthropic>=0.84.0",
     "asyncpg>=0.31.0",
-    # Add runtime dependencies here
     "asyncssh>=2.22.0",
     "fastapi>=0.135.1",
     "firebase-admin>=7.2.0",
@@ -51,7 +51,6 @@ codehive = "codehive.cli:main"
 
 [dependency-groups]
 dev = [
-    "aiosqlite>=0.22.1",
     "hatch",
     "httpx>=0.28.1",
     "pytest",

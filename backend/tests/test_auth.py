@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import JSON, MetaData, event, text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from codehive.api.app import create_app
@@ -33,38 +33,6 @@ def _enable_auth(monkeypatch):
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-def _sqlite_compatible_metadata() -> MetaData:
-    """Return a copy of Base.metadata with SQLite-compatible types and defaults."""
-    metadata = MetaData()
-
-    for table in Base.metadata.tables.values():
-        columns = []
-        for col in table.columns:
-            col_copy = col._copy()
-
-            if col_copy.type.__class__.__name__ == "JSONB":
-                col_copy.type = JSON()
-
-            if col_copy.server_default is not None:
-                default_text = str(col_copy.server_default.arg)
-                if "::jsonb" in default_text:
-                    col_copy.server_default = text("'{}'")
-                elif "now()" in default_text:
-                    col_copy.server_default = text("(datetime('now'))")
-                elif default_text == "true":
-                    col_copy.server_default = text("1")
-                elif default_text == "false":
-                    col_copy.server_default = text("0")
-
-            columns.append(col_copy)
-
-        from sqlalchemy import Table
-
-        Table(table.name, metadata, *columns)
-
-    return metadata
-
-
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine(SQLITE_URL)
@@ -75,17 +43,15 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    sqlite_metadata = _sqlite_compatible_metadata()
-
     async with engine.begin() as conn:
-        await conn.run_sync(sqlite_metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
         yield session
 
     async with engine.begin() as conn:
-        await conn.run_sync(sqlite_metadata.drop_all)
+        await conn.run_sync(Base.metadata.drop_all)
 
     await engine.dispose()
 

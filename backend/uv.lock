@@ -730,6 +730,7 @@ wheels = [
 name = "codehive"
 source = { editable = "." }
 dependencies = [
+    { name = "aiosqlite" },
     { name = "alembic" },
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -751,7 +752,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "aiosqlite" },
     { name = "hatch" },
     { name = "httpx" },
     { name = "pytest" },
@@ -765,6 +765,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "anthropic", specifier = ">=0.84.0" },
     { name = "asyncpg", specifier = ">=0.31.0" },
@@ -786,7 +787,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "hatch" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest" },
