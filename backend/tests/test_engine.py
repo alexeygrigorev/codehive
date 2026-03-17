@@ -83,7 +83,7 @@ class MockStream:
     def text_stream(self) -> _TextStreamIter:
         return _TextStreamIter(self._text_chunks)
 
-    def get_final_message(self) -> MockResponse:
+    async def get_final_message(self) -> MockResponse:
         return self._response
 
 

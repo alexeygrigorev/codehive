@@ -348,7 +348,7 @@ class NativeEngine:
                         )
                     yield delta_event
 
-            response = stream.get_final_message()
+                response = await stream.get_final_message()
 
             # Process content blocks for tool_use
             tool_use_blocks = []

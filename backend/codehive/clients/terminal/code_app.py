@@ -184,14 +184,26 @@ class CodeApp(App):
 
     # ---- UI helpers -------------------------------------------------------
 
+    def _is_at_bottom(self) -> bool:
+        """Check if the scroll is near the bottom (auto-scroll zone)."""
+        scroll = self.query_one("#code-scroll", VerticalScroll)
+        # Consider "at bottom" if within 2 lines of the end
+        return scroll.scroll_offset.y >= scroll.max_scroll_y - 2
+
+    def _auto_scroll(self) -> None:
+        """Scroll to bottom only if already near the bottom."""
+        if self._is_at_bottom():
+            self.query_one("#code-scroll", VerticalScroll).scroll_end(animate=False)
+
     def _append_system(self, text: str) -> None:
         scroll = self.query_one("#code-scroll", VerticalScroll)
         scroll.mount(_ChatBubble("system", text))
-        scroll.scroll_end(animate=False)
+        self._auto_scroll()
 
     def _append_user(self, text: str) -> None:
         scroll = self.query_one("#code-scroll", VerticalScroll)
         scroll.mount(_ChatBubble("user", text))
+        # Always scroll to bottom on user message
         scroll.scroll_end(animate=False)
 
     def _append_assistant(self, text: str) -> None:
@@ -199,12 +211,12 @@ class CodeApp(App):
         scroll = self.query_one("#code-scroll", VerticalScroll)
         widget = _AssistantMarkdown(text)
         scroll.mount(widget)
-        scroll.scroll_end(animate=False)
+        self._auto_scroll()
 
     def _append_tool(self, tool_name: str, summary: str) -> None:
         scroll = self.query_one("#code-scroll", VerticalScroll)
         scroll.mount(_ToolCallBubble(tool_name, summary))
-        scroll.scroll_end(animate=False)
+        self._auto_scroll()
 
     def _set_status(self, text: str) -> None:
         self.query_one("#code-status", Static).update(text)
@@ -215,14 +227,14 @@ class CodeApp(App):
         self._streaming_widget = _AssistantMarkdown("")
         scroll = self.query_one("#code-scroll", VerticalScroll)
         scroll.mount(self._streaming_widget)
+        self._auto_scroll()
 
     def _append_streaming_delta(self, text: str) -> None:
         """Append text to the current streaming widget."""
         self._streaming_buffer += text
         if self._streaming_widget is not None:
             self._streaming_widget.update(self._streaming_buffer)
-            scroll = self.query_one("#code-scroll", VerticalScroll)
-            scroll.scroll_end(animate=False)
+            self._auto_scroll()
 
     def _finalize_streaming(self, full_text: str) -> None:
         """Finalize the streaming widget with the complete text."""
@@ -230,8 +242,7 @@ class CodeApp(App):
             self._streaming_widget.update(full_text)
             self._streaming_widget = None
             self._streaming_buffer = ""
-            scroll = self.query_one("#code-scroll", VerticalScroll)
-            scroll.scroll_end(animate=False)
+            self._auto_scroll()
 
     # ---- Actions ----------------------------------------------------------
 

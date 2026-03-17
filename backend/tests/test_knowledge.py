@@ -570,7 +570,7 @@ class TestEngineKnowledgeInjection:
 
                 return _gen()
 
-            def get_final_message(self):
+            async def get_final_message(self):
                 return _resp
 
         client_mock.messages.stream = MagicMock(return_value=_Stream())
@@ -656,7 +656,7 @@ class TestEngineKnowledgeInjection:
 
                 return _gen()
 
-            def get_final_message(self):
+            async def get_final_message(self):
                 return _resp2
 
         client_mock.messages.stream = MagicMock(return_value=_Stream2())
@@ -745,7 +745,7 @@ class TestEngineKnowledgeInjection:
 
                 return _gen()
 
-            def get_final_message(self):
+            async def get_final_message(self):
                 return _resp3
 
         client_mock.messages.stream = MagicMock(return_value=_Stream3())
