@@ -92,14 +92,16 @@ class TestDatabaseSettings:
 class TestAnthropicSettings:
     """Tests for Anthropic API key and base URL fields (issue #13)."""
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_anthropic_api_key_default(self):
         """When no env var is set, anthropic_api_key defaults to empty string."""
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.anthropic_api_key == ""
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_anthropic_base_url_default(self):
         """When no env var is set, anthropic_base_url defaults to empty string."""
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.anthropic_base_url == ""
 
     def test_anthropic_api_key_override(self, monkeypatch):
@@ -126,11 +128,11 @@ class TestEnvFileLoading:
         settings = Settings(_env_file=env_file)
         assert settings.host == "10.0.0.1"
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_env_file_loads_anthropic_key(self, tmp_path, monkeypatch):
         """Settings picks up anthropic_api_key from a .env file."""
         env_file = tmp_path / ".env"
         env_file.write_text("CODEHIVE_ANTHROPIC_API_KEY=sk-test-123\n", encoding="utf-8")
-        monkeypatch.chdir(tmp_path)
         settings = Settings(_env_file=env_file)
         assert settings.anthropic_api_key == "sk-test-123"
 
@@ -143,9 +145,9 @@ class TestEnvFileLoading:
         settings = Settings(_env_file=env_file)
         assert settings.port == 4000
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_missing_env_file_uses_defaults(self, tmp_path, monkeypatch):
         """When no .env file exists, defaults are used without error."""
-        monkeypatch.chdir(tmp_path)
         settings = Settings(_env_file=tmp_path / "nonexistent.env")
         assert settings.host == "127.0.0.1"
         assert settings.anthropic_api_key == ""

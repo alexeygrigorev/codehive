@@ -379,11 +379,11 @@ class TestTUIBindings:
         assert "ctrl+n" in binding_keys
 
     def test_code_app_has_quit_binding(self) -> None:
-        """CodeApp BINDINGS contains ctrl+c for quit."""
+        """CodeApp BINDINGS contains ctrl+q for quit."""
         from codehive.clients.terminal.code_app import CodeApp
 
         binding_keys = [b[0] for b in CodeApp.BINDINGS]
-        assert "ctrl+c" in binding_keys
+        assert "ctrl+q" in binding_keys
 
     def test_code_app_bindings_have_descriptions(self) -> None:
         """All bindings have a description (third element)."""

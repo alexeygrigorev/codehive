@@ -1,14 +1,27 @@
 """Tests for LLM provider configuration (issue #84)."""
 
 import argparse
+import os
 import uuid
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from codehive.cli import _resolve_provider, main
 from codehive.config import Settings
+
+
+@pytest.fixture()
+def _isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Clear all CODEHIVE_* and provider env vars, point away from real .env."""
+    for key in list(os.environ):
+        if key.startswith("CODEHIVE_"):
+            monkeypatch.delenv(key)
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -38,16 +51,19 @@ def _run_cli(args: list[str], monkeypatch: pytest.MonkeyPatch) -> tuple[str, int
 class TestProviderSettings:
     """Settings has zai_api_key, zai_base_url, default_model fields."""
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_zai_api_key_default(self):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.zai_api_key == ""
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_zai_base_url_default(self):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.zai_base_url == "https://api.z.ai/api/anthropic"
 
+    @pytest.mark.usefixtures("_isolated_settings")
     def test_default_model_default(self):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.default_model == "claude-sonnet-4-20250514"
 
     def test_zai_api_key_env_override(self, monkeypatch):
@@ -175,6 +191,9 @@ class TestCLIProviderResolution:
 
     def test_provider_anthropic_default(self, monkeypatch):
         """--provider anthropic (or omitted) uses default Anthropic behavior."""
+        # Clear any CODEHIVE_ vars that would take precedence
+        monkeypatch.delenv("CODEHIVE_ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CODEHIVE_ANTHROPIC_BASE_URL", raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-789")
         args = argparse.Namespace(provider="anthropic", model="")
         api_key, base_url, model = _resolve_provider(args)
@@ -183,6 +202,8 @@ class TestCLIProviderResolution:
 
     def test_provider_omitted_uses_anthropic(self, monkeypatch):
         """When --provider is omitted, uses Anthropic."""
+        monkeypatch.delenv("CODEHIVE_ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CODEHIVE_ANTHROPIC_BASE_URL", raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-abc")
         args = argparse.Namespace(provider="", model="")
         api_key, base_url, model = _resolve_provider(args)
@@ -190,6 +211,8 @@ class TestCLIProviderResolution:
 
     def test_model_without_provider_overrides_model_only(self, monkeypatch):
         """--model without --provider overrides model, keeps default provider."""
+        monkeypatch.delenv("CODEHIVE_ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CODEHIVE_ANTHROPIC_BASE_URL", raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-def")
         args = argparse.Namespace(provider="", model="claude-opus-4-20250515")
         api_key, base_url, model = _resolve_provider(args)
