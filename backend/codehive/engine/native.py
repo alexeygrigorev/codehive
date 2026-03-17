@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 from anthropic import AsyncAnthropic
 
@@ -160,6 +160,7 @@ class NativeEngine:
         diff_service: DiffService,
         *,
         model: str = DEFAULT_MODEL,
+        approval_callback: Callable[[str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self._client = client
         self._event_bus = event_bus
@@ -168,6 +169,7 @@ class NativeEngine:
         self._git_ops = git_ops
         self._diff_service = diff_service
         self._model = model
+        self._approval_callback = approval_callback
         self._sessions: dict[uuid.UUID, _SessionState] = {}
         self._task_fetcher: Any = None  # Optional callback for fetching tasks
         self._subagent_manager = SubAgentManager(event_bus=event_bus)
@@ -601,7 +603,20 @@ class NativeEngine:
         If the tool requires approval, returns a pending-approval result and
         emits an ``approval.required`` event.
         """
-        # Check approval policy for destructive tools
+        # Check TUI-native approval callback for destructive tools
+        if tool_name in DESTRUCTIVE_TOOLS and self._approval_callback is not None:
+            approved = await self._approval_callback(tool_name, tool_input)
+            if not approved:
+                return {
+                    "content": (f"Action rejected by user. Tool '{tool_name}' was not executed."),
+                    "is_error": True,
+                }
+            # Callback approved -- skip DB-based approval, go straight to execution
+            return await self._execute_tool_direct(
+                tool_name, tool_input, session_id=session_id, db=db
+            )
+
+        # Check approval policy for destructive tools (DB-based path)
         if tool_name in DESTRUCTIVE_TOOLS and session_id is not None:
             policy = self.get_approval_policy(session_id)
             rule = check_action(policy, tool_name, tool_input)

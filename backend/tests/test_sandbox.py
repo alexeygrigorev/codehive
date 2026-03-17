@@ -327,10 +327,11 @@ class TestSandboxPolicyIntegration:
         result = await runner.run("ls", working_dir=tmp_path, policy=policy)
         assert result.exit_code == 0
 
-        # ShellRunner: rm -rf is ASK
+        # ShellRunner: rm -rf / is DENY (root filesystem removal is catastrophic)
         with pytest.raises(CommandPolicyViolation) as exc_info:
             await runner.run("rm -rf /", working_dir=tmp_path, policy=policy)
-        assert exc_info.value.needs_approval is True
+        assert exc_info.value.verdict == PolicyVerdict.DENY
+        assert exc_info.value.needs_approval is False
 
         # ShellRunner: git push is ASK
         with pytest.raises(CommandPolicyViolation) as exc_info:

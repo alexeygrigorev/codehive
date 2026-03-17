@@ -460,6 +460,12 @@ def main() -> None:
         choices=["anthropic", "zai", ""],
         help="Provider shortcut: anthropic (default) or zai",
     )
+    code_parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        default=False,
+        help="Skip all tool confirmation prompts",
+    )
 
     # providers subcommand group
     providers_parser = subparsers.add_parser("providers", help="Manage LLM providers")
@@ -659,6 +665,7 @@ def _code(args: argparse.Namespace) -> None:
         model=model,
         api_key=api_key,
         base_url=base_url,
+        auto_approve=getattr(args, "auto_approve", False),
     )
     app.run()
 
