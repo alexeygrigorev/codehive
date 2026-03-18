@@ -66,7 +66,7 @@ export default function SearchResult({ result, query }: SearchResultProps) {
   return (
     <Link
       to={url}
-      className="search-result block rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+      className="search-result block rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
       data-testid="search-result"
     >
       <div className="flex items-center gap-2 mb-1">
@@ -83,7 +83,7 @@ export default function SearchResult({ result, query }: SearchResultProps) {
           {formatTimestamp(result.created_at)}
         </span>
       </div>
-      <p className="text-sm text-gray-700">
+      <p className="text-sm text-gray-700 dark:text-gray-300">
         <SearchHighlight text={result.snippet} query={query} />
       </p>
     </Link>

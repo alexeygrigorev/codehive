@@ -20,11 +20,11 @@ export default function ApprovalPrompt({
   const isPending = status === "pending";
 
   return (
-    <div className="approval-prompt rounded-lg border border-amber-200 bg-amber-50 p-3 my-2">
-      <p className="text-sm font-medium text-amber-900 mb-2">
+    <div className="approval-prompt rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 p-3 my-2">
+      <p className="text-sm font-medium text-amber-900 dark:text-amber-200 mb-2">
         Approval Required
       </p>
-      <p className="approval-description text-sm text-amber-800 mb-3">
+      <p className="approval-description text-sm text-amber-800 dark:text-amber-300 mb-3">
         {description}
       </p>
       {isPending ? (
@@ -48,7 +48,7 @@ export default function ApprovalPrompt({
         </div>
       ) : (
         <p
-          className={`approval-resolved text-sm font-medium ${status === "approved" ? "text-green-700" : "text-red-700"}`}
+          className={`approval-resolved text-sm font-medium ${status === "approved" ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}
         >
           {status === "approved" ? "Approved" : "Rejected"}
         </p>

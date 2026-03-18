@@ -13,7 +13,7 @@ export default function DiffSummary({ files, onFileClick }: DiffSummaryProps) {
   if (files.length === 0) {
     return (
       <div
-        className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500"
+        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-500"
         data-testid="diff-summary"
       >
         No changes
@@ -26,11 +26,11 @@ export default function DiffSummary({ files, onFileClick }: DiffSummaryProps) {
 
   return (
     <div
-      className="rounded-lg border border-gray-200 bg-white p-4"
+      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
       data-testid="diff-summary"
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-gray-700">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {files.length} {files.length === 1 ? "file" : "files"} changed
         </span>
         <span className="text-xs">

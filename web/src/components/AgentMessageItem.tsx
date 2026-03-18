@@ -25,8 +25,8 @@ export default function AgentMessageItem({
   const isQuery = event.type === "agent.query";
 
   const alignmentClass = isOutgoing
-    ? "ml-auto bg-blue-100 text-blue-900"
-    : "mr-auto bg-gray-100 text-gray-900";
+    ? "ml-auto bg-blue-100 text-blue-900 dark:bg-blue-900 dark:text-blue-100"
+    : "mr-auto bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-gray-100";
 
   const queryClass = isQuery ? "border-l-4 border-yellow-400" : "";
 

@@ -49,7 +49,7 @@ export default function QuestionsPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Pending Questions</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Pending Questions</h1>
         <p className="mt-4 text-gray-500">Loading questions...</p>
       </div>
     );
@@ -58,7 +58,7 @@ export default function QuestionsPage() {
   if (error) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Pending Questions</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Pending Questions</h1>
         <p className="mt-4 text-red-600">{error}</p>
       </div>
     );
@@ -67,7 +67,7 @@ export default function QuestionsPage() {
   if (questions.length === 0) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Pending Questions</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Pending Questions</h1>
         <p className="mt-4 text-gray-500">
           No pending questions across any session.
         </p>
@@ -81,7 +81,7 @@ export default function QuestionsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Pending Questions</h1>
+      <h1 className="text-2xl font-bold dark:text-gray-100">Pending Questions</h1>
       <div className="mt-4 space-y-3">
         {sorted.map((q) => (
           <QuestionCard

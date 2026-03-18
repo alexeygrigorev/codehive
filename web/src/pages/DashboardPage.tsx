@@ -7,7 +7,7 @@ import ProjectCard from "@/components/ProjectCard";
 function DashboardHeader() {
   return (
     <div className="flex items-center justify-between">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <h1 className="text-2xl font-bold dark:text-gray-100">Dashboard</h1>
       <Link
         to="/projects/new"
         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"

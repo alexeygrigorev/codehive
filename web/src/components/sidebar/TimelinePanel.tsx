@@ -63,7 +63,7 @@ export default function TimelinePanel({ sessionId }: TimelinePanelProps) {
       {events.map((event) => (
         <li
           key={event.id}
-          className="flex items-start gap-2 border-l-2 border-gray-300 pl-3 text-sm"
+          className="flex items-start gap-2 border-l-2 border-gray-300 dark:border-gray-600 pl-3 text-sm"
         >
           <div>
             <span className="font-medium">{event.type}</span>

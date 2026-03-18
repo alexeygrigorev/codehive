@@ -21,7 +21,7 @@ export default function VoiceButton({
       className={`rounded-lg px-3 py-2 text-sm font-medium ${
         isListening
           ? "bg-red-600 text-white animate-pulse voice-recording"
-          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+          : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
       }`}
       onClick={isListening ? onStopListening : onStartListening}
       aria-label={isListening ? "Stop voice input" : "Start voice input"}

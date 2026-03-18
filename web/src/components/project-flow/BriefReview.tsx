@@ -43,7 +43,7 @@ export default function BriefReview({
         <input
           id="brief-name"
           type="text"
-          className="w-full border rounded p-2"
+          className="w-full border dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={loading}
@@ -56,7 +56,7 @@ export default function BriefReview({
         </label>
         <textarea
           id="brief-description"
-          className="w-full border rounded p-2"
+          className="w-full border dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           rows={4}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -94,10 +94,10 @@ export default function BriefReview({
           <h3 className="font-medium">Suggested Sessions</h3>
           <div className="space-y-2">
             {brief.suggested_sessions.map((session, i) => (
-              <div key={i} className="border rounded p-3">
-                <p className="font-medium">{session.name}</p>
-                <p className="text-sm text-gray-600">{session.mission}</p>
-                <p className="text-xs text-gray-500">Mode: {session.mode}</p>
+              <div key={i} className="border dark:border-gray-700 rounded p-3">
+                <p className="font-medium dark:text-gray-100">{session.name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{session.mission}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Mode: {session.mode}</p>
               </div>
             ))}
           </div>

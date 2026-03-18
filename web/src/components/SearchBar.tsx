@@ -105,33 +105,33 @@ export default function SearchBar() {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Search..."
-        className="w-64 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="w-64 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         aria-label="Search"
       />
       {showDropdown && (
         <div
-          className="absolute top-full left-0 mt-1 w-80 rounded-md border border-gray-200 bg-white shadow-lg z-50"
+          className="absolute top-full left-0 mt-1 w-80 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg z-50"
           data-testid="search-dropdown"
         >
           {loading && (
-            <div className="p-3 text-sm text-gray-500">Searching...</div>
+            <div className="p-3 text-sm text-gray-500 dark:text-gray-400">Searching...</div>
           )}
           {!loading && results.length === 0 && (
-            <div className="p-3 text-sm text-gray-500">No results</div>
+            <div className="p-3 text-sm text-gray-500 dark:text-gray-400">No results</div>
           )}
           {!loading &&
             results.map((result) => (
               <button
                 key={result.id}
                 type="button"
-                className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                 onClick={() => handleResultClick(result)}
                 data-testid="dropdown-result"
               >
-                <span className="text-xs font-medium text-gray-500 uppercase">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   {result.entity_type}
                 </span>
-                <p className="text-sm text-gray-700 truncate">
+                <p className="text-sm text-gray-700 dark:text-gray-300 truncate">
                   {result.snippet}
                 </p>
               </button>
@@ -139,7 +139,7 @@ export default function SearchBar() {
           {!loading && results.length > 0 && (
             <button
               type="button"
-              className="w-full text-center px-3 py-2 text-sm text-blue-600 hover:bg-gray-50"
+              className="w-full text-center px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700"
               onClick={handleSeeAll}
               data-testid="see-all-results"
             >

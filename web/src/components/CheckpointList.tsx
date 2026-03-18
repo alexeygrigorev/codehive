@@ -88,7 +88,7 @@ export default function CheckpointList({ sessionId }: CheckpointListProps) {
           {checkpoints.map((cp) => (
             <li
               key={cp.id}
-              className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm"
             >
               <div>
                 <span className="font-medium">

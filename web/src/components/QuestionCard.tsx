@@ -59,7 +59,7 @@ export default function QuestionCard({
   }
 
   return (
-    <div className="rounded border border-gray-200 p-3">
+    <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span
           className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
@@ -75,7 +75,7 @@ export default function QuestionCard({
         </span>
       </div>
 
-      <p className="text-sm font-medium text-gray-900">
+      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
         {localQuestion.question}
       </p>
 
@@ -90,15 +90,15 @@ export default function QuestionCard({
       )}
 
       {localQuestion.answered && localQuestion.answer && (
-        <div className="mt-2 rounded bg-gray-50 p-2">
-          <p className="text-sm text-gray-700">{localQuestion.answer}</p>
+        <div className="mt-2 rounded bg-gray-50 dark:bg-gray-800 p-2">
+          <p className="text-sm text-gray-700 dark:text-gray-300">{localQuestion.answer}</p>
         </div>
       )}
 
       {!localQuestion.answered && (
         <form onSubmit={handleSubmit} className="mt-2">
           <textarea
-            className="w-full rounded border border-gray-300 p-2 text-sm"
+            className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-sm"
             rows={2}
             placeholder="Type your answer..."
             value={answerText}

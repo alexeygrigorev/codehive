@@ -190,7 +190,7 @@ export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
   return (
     <div className="chat-panel flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-4 py-2">
-        <span className="text-sm font-medium text-gray-700">Chat</span>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Chat</span>
         <ExportButton sessionId={sessionId} sessionName={sessionName} />
       </div>
       <div
@@ -199,7 +199,7 @@ export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
         onScroll={handleScroll}
       >
         {chatItems.length === 0 && (
-          <p className="chat-empty text-center text-gray-400 mt-8">
+          <p className="chat-empty text-center text-gray-400 dark:text-gray-500 mt-8">
             No messages yet. Start the conversation.
           </p>
         )}

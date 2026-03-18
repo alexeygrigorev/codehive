@@ -44,13 +44,13 @@ export default function SessionHistorySearch({
   }, [query, sessionId]);
 
   return (
-    <div className="border-b border-gray-200 px-4 py-2" data-testid="session-history-search">
+    <div className="border-b border-gray-200 dark:border-gray-700 px-4 py-2" data-testid="session-history-search">
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search messages..."
-        className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         aria-label="Search session messages"
       />
       {loading && (
@@ -64,13 +64,13 @@ export default function SessionHistorySearch({
           {results.map((item) => (
             <li
               key={item.id}
-              className="rounded bg-gray-50 px-2 py-1 text-sm"
+              className="rounded bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm"
               data-testid="history-result"
             >
-              <span className="text-xs font-medium text-gray-500 mr-1">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-1">
                 {item.role}:
               </span>
-              <span className="text-gray-700">{item.content}</span>
+              <span className="text-gray-700 dark:text-gray-300">{item.content}</span>
             </li>
           ))}
         </ul>

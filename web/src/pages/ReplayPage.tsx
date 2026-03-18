@@ -61,7 +61,7 @@ export default function ReplayPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Session Replay</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Session Replay</h1>
         <p className="text-gray-500 mt-4">Loading replay...</p>
       </div>
     );
@@ -70,7 +70,7 @@ export default function ReplayPage() {
   if (error) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Session Replay</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Session Replay</h1>
         <p className="text-red-600 mt-4">{error}</p>
       </div>
     );
@@ -80,8 +80,8 @@ export default function ReplayPage() {
 
   return (
     <div className="replay-page flex h-full flex-col">
-      <div className="border-b border-gray-200 px-4 py-3">
-        <h1 className="text-xl font-bold text-gray-900">Session Replay</h1>
+      <div className="border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Session Replay</h1>
       </div>
       <ReplayTimeline
         steps={steps}
@@ -95,7 +95,7 @@ export default function ReplayPage() {
           <p className="text-gray-500">No steps to display</p>
         )}
       </div>
-      <div className="border-t border-gray-200">
+      <div className="border-t border-gray-200 dark:border-gray-700">
         <ReplayControls
           currentIndex={currentIndex}
           totalSteps={totalSteps}

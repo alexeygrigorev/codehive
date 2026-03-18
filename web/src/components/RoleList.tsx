@@ -80,7 +80,7 @@ export default function RoleList({ onEdit, onCreate }: RoleListProps) {
           {roles.map((role) => (
             <li
               key={role.name}
-              className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm"
             >
               <div>
                 <span className="font-medium">{role.name}</span>

@@ -60,7 +60,7 @@ export default function ChangedFilesPanel({
       {files.map((file) => (
         <li
           key={file.path}
-          className="flex items-center justify-between rounded border border-gray-200 px-2 py-1.5 text-sm"
+          className="flex items-center justify-between rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-sm"
         >
           <span className="truncate">{file.path}</span>
           <span className="ml-2 whitespace-nowrap text-xs">

@@ -29,11 +29,11 @@ export default function SubAgentNode({
 
   return (
     <li className="sub-agent-node">
-      <div className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1.5 text-sm">
+      <div className="flex items-center gap-2 rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-sm">
         {hasChildren ? (
           <button
             type="button"
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
             onClick={() => setExpanded((prev) => !prev)}
             aria-label={expanded ? "Collapse" : "Expand"}
           >
@@ -49,7 +49,7 @@ export default function SubAgentNode({
         />
         <Link
           to={`/sessions/${session.id}`}
-          className="sub-agent-link flex-1 text-blue-600 hover:underline"
+          className="sub-agent-link flex-1 text-blue-600 dark:text-blue-400 hover:underline"
         >
           {session.name}
         </Link>

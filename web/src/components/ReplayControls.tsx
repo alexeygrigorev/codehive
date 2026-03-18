@@ -62,7 +62,7 @@ export default function ReplayControls({
     <div className="replay-controls flex items-center gap-3 p-2">
       <button
         type="button"
-        className="rounded bg-gray-200 px-3 py-1 text-sm disabled:opacity-50"
+        className="rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-1 text-sm disabled:opacity-50"
         onClick={onPrevious}
         disabled={isFirst}
         aria-label="Previous"
@@ -79,14 +79,14 @@ export default function ReplayControls({
       </button>
       <button
         type="button"
-        className="rounded bg-gray-200 px-3 py-1 text-sm disabled:opacity-50"
+        className="rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-1 text-sm disabled:opacity-50"
         onClick={onNext}
         disabled={isLast}
         aria-label="Next"
       >
         Next
       </button>
-      <span className="step-indicator text-sm text-gray-600">
+      <span className="step-indicator text-sm text-gray-600 dark:text-gray-400">
         Step {totalSteps === 0 ? 0 : currentIndex + 1} of {totalSteps}
       </span>
     </div>

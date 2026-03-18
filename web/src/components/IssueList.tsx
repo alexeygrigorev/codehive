@@ -71,7 +71,7 @@ export default function IssueList({
               className={`px-3 py-1 rounded text-sm font-medium ${
                 statusFilter === f.value
                   ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
               }`}
             >
               {f.label}
@@ -89,10 +89,10 @@ export default function IssueList({
       {showForm && (
         <form
           onSubmit={handleSubmit}
-          className="mb-4 p-4 border border-gray-200 rounded-lg bg-white"
+          className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
         >
           <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Title
             </label>
             <input
@@ -101,11 +101,11 @@ export default function IssueList({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Issue title"
               required
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
           <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Description (optional)
             </label>
             <textarea
@@ -113,7 +113,7 @@ export default function IssueList({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Issue description"
               rows={3}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
           <div className="flex gap-2">
@@ -127,7 +127,7 @@ export default function IssueList({
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm"
+              className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded text-sm"
             >
               Cancel
             </button>
@@ -136,16 +136,16 @@ export default function IssueList({
       )}
 
       {issues.length === 0 ? (
-        <p className="text-gray-500 text-sm">No issues found.</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">No issues found.</p>
       ) : (
-        <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg bg-white">
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
           {issues.map((issue) => {
             const colorClass =
               issueStatusColors[issue.status] ?? "bg-gray-100 text-gray-700";
             return (
               <li key={issue.id} className="px-4 py-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
                     {issue.title}
                   </span>
                   <span
@@ -154,7 +154,7 @@ export default function IssueList({
                     {issue.status}
                   </span>
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {formatRelativeTime(issue.created_at)}
                 </div>
               </li>

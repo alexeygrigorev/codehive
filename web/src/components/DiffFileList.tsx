@@ -12,18 +12,18 @@ export default function DiffFileList({
   onSelectFile,
 }: DiffFileListProps) {
   if (files.length === 0) {
-    return <div className="p-4 text-gray-500">No changed files</div>;
+    return <div className="p-4 text-gray-500 dark:text-gray-400">No changed files</div>;
   }
 
   return (
-    <ul className="divide-y divide-gray-200">
+    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
       {files.map((file) => (
         <li
           key={file.path}
           role="button"
           tabIndex={0}
-          className={`px-4 py-2 cursor-pointer hover:bg-gray-50 ${
-            selectedPath === file.path ? "bg-blue-50" : ""
+          className={`px-4 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${
+            selectedPath === file.path ? "bg-blue-50 dark:bg-blue-900/30" : ""
           }`}
           onClick={() => onSelectFile(file.path)}
           onKeyDown={(e) => {

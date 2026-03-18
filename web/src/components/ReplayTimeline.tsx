@@ -34,7 +34,7 @@ export default function ReplayTimeline({
             className={`timeline-marker flex-shrink-0 rounded px-2 py-1 text-xs font-mono cursor-pointer transition-colors ${
               isCurrent
                 ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
             }`}
             onClick={() => onStepClick(step.index)}
             aria-label={`Step ${step.index + 1}: ${step.step_type}`}

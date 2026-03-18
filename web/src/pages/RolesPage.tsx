@@ -33,7 +33,7 @@ export default function RolesPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold">Roles</h1>
+      <h1 className="mb-4 text-2xl font-bold dark:text-gray-100">Roles</h1>
       {mode === "list" && (
         <RoleList key={key} onEdit={handleEdit} onCreate={handleCreate} />
       )}

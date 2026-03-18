@@ -24,10 +24,10 @@ export default function QuickActions({
 
   return (
     <div
-      className="fixed bottom-16 left-4 right-4 z-40 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-lg"
+      className="fixed bottom-16 left-4 right-4 z-40 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 p-3 shadow-lg"
       data-testid="quick-actions"
     >
-      <p className="text-sm text-amber-900 mb-2 truncate">
+      <p className="text-sm text-amber-900 dark:text-amber-200 mb-2 truncate">
         {first.description}
       </p>
       <div className="flex gap-2">

@@ -91,7 +91,7 @@ export default function RoleEditor({
           onChange={(e) => setName(e.target.value)}
           disabled={isEdit}
           required
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-100"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm disabled:bg-gray-100 dark:disabled:bg-gray-800"
         />
       </div>
 
@@ -107,7 +107,7 @@ export default function RoleEditor({
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -123,7 +123,7 @@ export default function RoleEditor({
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -139,7 +139,7 @@ export default function RoleEditor({
           value={responsibilities}
           onChange={(e) => setResponsibilities(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -155,7 +155,7 @@ export default function RoleEditor({
           value={allowedTools}
           onChange={(e) => setAllowedTools(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -171,7 +171,7 @@ export default function RoleEditor({
           value={deniedTools}
           onChange={(e) => setDeniedTools(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -187,7 +187,7 @@ export default function RoleEditor({
           value={codingRules}
           onChange={(e) => setCodingRules(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -203,7 +203,7 @@ export default function RoleEditor({
           value={systemPromptExtra}
           onChange={(e) => setSystemPromptExtra(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         />
       </div>
 
@@ -219,7 +219,7 @@ export default function RoleEditor({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50"
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
           >
             Cancel
           </button>

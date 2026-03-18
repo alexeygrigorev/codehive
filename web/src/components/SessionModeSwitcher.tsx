@@ -20,7 +20,7 @@ export default function SessionModeSwitcher({
       {SESSION_MODES.map((mode) => {
         const isActive = mode === currentMode;
         const modeStyle = MODE_STYLES[mode] ?? "bg-gray-100 text-gray-700";
-        const activeClass = isActive ? `${modeStyle} ring-2 ring-offset-1` : "bg-gray-50 text-gray-500";
+        const activeClass = isActive ? `${modeStyle} ring-2 ring-offset-1` : "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400";
 
         return (
           <button

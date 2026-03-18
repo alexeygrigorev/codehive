@@ -11,10 +11,10 @@ export default function AggregatedProgress({
 
   return (
     <div className="mb-3">
-      <p className="mb-1 text-sm font-medium text-gray-700">
+      <p className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
         {completed}/{total} completed
       </p>
-      <div className="h-2 w-full rounded-full bg-gray-200">
+      <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
         <div
           className="progress-bar h-2 rounded-full bg-blue-500"
           style={{ width: `${percentage}%` }}

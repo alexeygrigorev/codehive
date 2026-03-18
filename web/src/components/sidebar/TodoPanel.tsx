@@ -66,14 +66,14 @@ export default function TodoPanel({ sessionId }: TodoPanelProps) {
 
   return (
     <div>
-      <p className="mb-2 text-sm font-medium text-gray-700">
+      <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
         {doneCount}/{tasks.length} done
       </p>
       <ul className="space-y-2">
         {tasks.map((task) => (
           <li
             key={task.id}
-            className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1.5 text-sm"
+            className="flex items-center gap-2 rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-sm"
           >
             <span
               className={`task-status-indicator inline-block h-2.5 w-2.5 rounded-full ${STATUS_COLORS[task.status] ?? "bg-gray-400"}`}

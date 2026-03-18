@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi } from "vitest";
 import { Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "@/context/ThemeContext";
 import MainLayout from "@/layouts/MainLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import ProjectPage from "@/pages/ProjectPage";
@@ -31,15 +32,17 @@ vi.mock("@/context/AuthContext", () => ({
 function renderWithRouter(initialEntry: string) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects/:projectId" element={<ProjectPage />} />
-          <Route path="/sessions/:sessionId" element={<SessionPage />} />
-          <Route path="/questions" element={<QuestionsPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
+      <ThemeProvider>
+        <Routes>
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/projects/:projectId" element={<ProjectPage />} />
+            <Route path="/sessions/:sessionId" element={<SessionPage />} />
+            <Route path="/questions" element={<QuestionsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </ThemeProvider>
     </MemoryRouter>,
   );
 }

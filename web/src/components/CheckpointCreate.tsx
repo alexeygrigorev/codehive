@@ -32,7 +32,7 @@ export default function CheckpointCreate({
         placeholder="Label (optional)"
         value={label}
         onChange={(e) => setLabel(e.target.value)}
-        className="rounded border border-gray-300 px-2 py-1 text-sm"
+        className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm"
         aria-label="Checkpoint label"
       />
       <button

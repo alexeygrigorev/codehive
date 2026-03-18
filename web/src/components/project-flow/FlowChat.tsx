@@ -77,7 +77,7 @@ export default function FlowChat({
               </label>
               <textarea
                 id={`q-${q.id}`}
-                className="w-full border rounded p-2"
+                className="w-full border dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 rows={3}
                 value={answers[q.id] ?? ""}
                 onChange={(e) => handleAnswerChange(q.id, e.target.value)}

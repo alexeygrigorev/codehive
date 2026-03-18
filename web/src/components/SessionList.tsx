@@ -61,12 +61,12 @@ export default function SessionList({ sessions }: SessionListProps) {
 
   if (sessions.length === 0) {
     return (
-      <p className="text-gray-500 text-sm">No sessions for this project.</p>
+      <p className="text-gray-500 dark:text-gray-400 text-sm">No sessions for this project.</p>
     );
   }
 
   return (
-    <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg bg-white">
+    <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
       {sessions.map((session) => {
         const colorClass =
           statusColors[session.status] ?? "bg-gray-100 text-gray-700";
@@ -75,15 +75,15 @@ export default function SessionList({ sessions }: SessionListProps) {
           <li key={session.id}>
             <Link
               to={`/sessions/${session.id}`}
-              className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+              className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-900">
+                <span className="font-medium text-gray-900 dark:text-gray-100">
                   {session.name}
                 </span>
                 <div className="flex items-center gap-2">
                   {subCount > 0 && (
-                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                    <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
                       {subCount} sub-agent{subCount !== 1 ? "s" : ""}
                     </span>
                   )}
@@ -94,7 +94,7 @@ export default function SessionList({ sessions }: SessionListProps) {
                   </span>
                 </div>
               </div>
-              <div className="mt-1 text-xs text-gray-500">
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 <span>Mode: {session.mode}</span>
                 <span className="mx-2">|</span>
                 <span>Engine: {session.engine}</span>

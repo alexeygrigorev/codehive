@@ -139,7 +139,7 @@ export default function ProjectPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Project</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Project</h1>
         <p className="text-gray-500 mt-4">Loading project...</p>
       </div>
     );
@@ -148,7 +148,7 @@ export default function ProjectPage() {
   if (error || !project) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Project</h1>
+        <h1 className="text-2xl font-bold dark:text-gray-100">Project</h1>
         <p className="text-red-600 mt-4">
           {error ?? "Project not found"}
         </p>
@@ -172,7 +172,7 @@ export default function ProjectPage() {
       />
       <div>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{project.name}</h1>
+          <h1 className="text-2xl font-bold dark:text-gray-100">{project.name}</h1>
           {project.archetype && (
             <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
               {project.archetype}
@@ -180,7 +180,7 @@ export default function ProjectPage() {
           )}
         </div>
         {project.description && (
-          <p className="mt-1 text-gray-600">{project.description}</p>
+          <p className="mt-1 text-gray-600 dark:text-gray-400">{project.description}</p>
         )}
         {project.path && (
           <p className="mt-1 text-sm text-gray-500">Path: {project.path}</p>
@@ -188,7 +188,7 @@ export default function ProjectPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 border-b border-gray-200">
+      <div className="mt-6 border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-4" role="tablist">
           <button
             role="tab"
@@ -196,8 +196,8 @@ export default function ProjectPage() {
             onClick={() => setActiveTab("sessions")}
             className={`pb-2 text-sm font-medium border-b-2 ${
               activeTab === "sessions"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             }`}
           >
             Sessions
@@ -208,8 +208,8 @@ export default function ProjectPage() {
             onClick={() => setActiveTab("issues")}
             className={`pb-2 text-sm font-medium border-b-2 ${
               activeTab === "issues"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             }`}
           >
             Issues
@@ -234,10 +234,10 @@ export default function ProjectPage() {
             {showSessionForm && (
               <form
                 onSubmit={handleCreateSession}
-                className="mb-4 p-4 border border-gray-200 rounded-lg bg-white"
+                className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
               >
                 <div className="mb-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Name
                   </label>
                   <input
@@ -246,19 +246,19 @@ export default function ProjectPage() {
                     onChange={(e) => setSessionName(e.target.value)}
                     placeholder="Session name"
                     required
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label htmlFor="session-engine" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="session-engine" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Engine
                     </label>
                     <select
                       id="session-engine"
                       value={sessionEngine}
                       onChange={(e) => setSessionEngine(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     >
                       {engines.map((eng) => (
                         <option key={eng} value={eng}>
@@ -268,14 +268,14 @@ export default function ProjectPage() {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="session-mode" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="session-mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Mode
                     </label>
                     <select
                       id="session-mode"
                       value={sessionMode}
                       onChange={(e) => setSessionMode(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     >
                       {modes.map((m) => (
                         <option key={m} value={m}>
@@ -287,13 +287,13 @@ export default function ProjectPage() {
                 </div>
                 {issues.length > 0 && (
                   <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Link to Issue (optional)
                     </label>
                     <select
                       value={sessionIssueId}
                       onChange={(e) => setSessionIssueId(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     >
                       <option value="">None</option>
                       {issues.map((issue) => (
@@ -315,7 +315,7 @@ export default function ProjectPage() {
                   <button
                     type="button"
                     onClick={() => setShowSessionForm(false)}
-                    className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm"
+                    className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded text-sm"
                   >
                     Cancel
                   </button>
