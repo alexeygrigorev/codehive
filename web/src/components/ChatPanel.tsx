@@ -152,11 +152,30 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
     async (content: string) => {
       setSending(true);
       setIsThinking(true);
+
+      // Optimistic: inject user message immediately so it renders before SSE
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const optimisticEvent: SessionEvent = {
+        id: optimisticId,
+        session_id: sessionId,
+        type: "message.created",
+        data: { role: "user", content },
+        created_at: new Date().toISOString(),
+      };
+      injectEvents([optimisticEvent]);
+
       try {
         await sendMessage(sessionId, content, (rawEvent) => {
           const normalized = normalizeEvent(
             rawEvent as unknown as Record<string, unknown>,
           );
+          // Skip the server's user message echo to avoid duplicates
+          if (
+            normalized.type === "message.created" &&
+            normalized.data.role === "user"
+          ) {
+            return;
+          }
           injectEvents([normalized]);
           // Stop thinking on first assistant content
           if (

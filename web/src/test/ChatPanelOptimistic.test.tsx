@@ -68,7 +68,7 @@ function makeEvent(
   };
 }
 
-describe("ChatPanel Streaming", () => {
+describe("ChatPanel Optimistic User Message", () => {
   let mockInjectEvents: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -84,10 +84,9 @@ describe("ChatPanel Streaming", () => {
     });
   });
 
-  it("shows thinking indicator when sending a message", async () => {
+  it("injects optimistic user message before calling sendMessage", async () => {
     mockUseSessionEvents.mockReturnValue([]);
 
-    // Make sendMessage hang so we can observe the thinking state
     let resolveSend!: () => void;
     mockSendMessage.mockImplementation(() => {
       return new Promise<SessionEvent[]>((resolve) => {
@@ -97,10 +96,112 @@ describe("ChatPanel Streaming", () => {
 
     render(<ChatPanel sessionId="s1" />);
 
-    // No thinking indicator initially
-    expect(screen.queryByTestId("thinking-indicator")).not.toBeInTheDocument();
+    const input = screen.getByLabelText("Message input");
+    fireEvent.change(input, { target: { value: "Hello optimistic" } });
+    fireEvent.click(screen.getByText("Send"));
 
-    // Send a message
+    // The first call to injectEvents should be the optimistic user message
+    await waitFor(() => {
+      expect(mockInjectEvents).toHaveBeenCalled();
+    });
+
+    const firstCall = mockInjectEvents.mock.calls[0][0] as SessionEvent[];
+    expect(firstCall).toHaveLength(1);
+    expect(firstCall[0].type).toBe("message.created");
+    expect(firstCall[0].data.role).toBe("user");
+    expect(firstCall[0].data.content).toBe("Hello optimistic");
+    expect(firstCall[0].id).toMatch(/^optimistic-/);
+
+    // sendMessage should also have been called
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "s1",
+      "Hello optimistic",
+      expect.any(Function),
+    );
+
+    await act(async () => {
+      resolveSend();
+    });
+  });
+
+  it("skips server user message echo to prevent duplicates", async () => {
+    mockUseSessionEvents.mockReturnValue([]);
+
+    let capturedOnEvent: ((event: SessionEvent) => void) | undefined;
+    let resolveSend!: () => void;
+
+    mockSendMessage.mockImplementation(
+      (
+        _sessionId: string,
+        _content: string,
+        onEvent?: (event: SessionEvent) => void,
+      ) => {
+        capturedOnEvent = onEvent;
+        return new Promise<SessionEvent[]>((resolve) => {
+          resolveSend = () => resolve([]);
+        });
+      },
+    );
+
+    render(<ChatPanel sessionId="s1" />);
+
+    const input = screen.getByLabelText("Message input");
+    fireEvent.change(input, { target: { value: "Test dedup" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalled();
+    });
+
+    // Record inject calls count after the optimistic injection
+    const callsAfterOptimistic = mockInjectEvents.mock.calls.length;
+
+    // Simulate the server echoing back the user message
+    await act(async () => {
+      capturedOnEvent?.(
+        makeEvent("server-user-1", "message.created", {
+          role: "user",
+          content: "Test dedup",
+        }),
+      );
+    });
+
+    // The server user echo should NOT have been injected
+    expect(mockInjectEvents.mock.calls.length).toBe(callsAfterOptimistic);
+
+    // But a non-user event should still be injected
+    await act(async () => {
+      capturedOnEvent?.(
+        makeEvent("d1", "message.delta", { content: "Response" }),
+      );
+    });
+
+    expect(mockInjectEvents.mock.calls.length).toBe(
+      callsAfterOptimistic + 1,
+    );
+
+    await act(async () => {
+      resolveSend();
+    });
+  });
+
+  it("shows thinking indicator alongside optimistic user message", async () => {
+    mockUseSessionEvents.mockReturnValue([]);
+
+    let resolveSend!: () => void;
+    mockSendMessage.mockImplementation(() => {
+      return new Promise<SessionEvent[]>((resolve) => {
+        resolveSend = () => resolve([]);
+      });
+    });
+
+    render(<ChatPanel sessionId="s1" />);
+
+    // Placeholder visible initially
+    expect(
+      screen.getByText("No messages yet. Start the conversation."),
+    ).toBeInTheDocument();
+
     const input = screen.getByLabelText("Message input");
     fireEvent.change(input, { target: { value: "Hello" } });
     fireEvent.click(screen.getByText("Send"));
@@ -110,113 +211,28 @@ describe("ChatPanel Streaming", () => {
       expect(screen.getByTestId("thinking-indicator")).toBeInTheDocument();
     });
 
-    // Resolve the send
-    await act(async () => {
-      resolveSend();
-    });
-
-    // Thinking indicator should disappear after send completes
-    await waitFor(() => {
-      expect(screen.queryByTestId("thinking-indicator")).not.toBeInTheDocument();
-    });
-  });
-
-  it("hides thinking indicator when first delta event arrives via onEvent callback", async () => {
-    mockUseSessionEvents.mockReturnValue([]);
-
-    let capturedOnEvent: ((event: SessionEvent) => void) | undefined;
-    let resolveSend!: () => void;
-
-    mockSendMessage.mockImplementation(
-      (_sessionId: string, _content: string, onEvent?: (event: SessionEvent) => void) => {
-        capturedOnEvent = onEvent;
-        return new Promise<SessionEvent[]>((resolve) => {
-          resolveSend = () => resolve([]);
-        });
-      },
-    );
-
-    render(<ChatPanel sessionId="s1" />);
-
-    const input = screen.getByLabelText("Message input");
-    fireEvent.change(input, { target: { value: "Hello" } });
-    fireEvent.click(screen.getByText("Send"));
-
-    // Thinking indicator is visible
-    await waitFor(() => {
-      expect(screen.getByTestId("thinking-indicator")).toBeInTheDocument();
-    });
-
-    // Simulate a delta event arriving
-    await act(async () => {
-      capturedOnEvent?.(
-        makeEvent("d1", "message.delta", { content: "Hi" }),
-      );
-    });
-
-    // Thinking indicator should be gone
-    await waitFor(() => {
-      expect(screen.queryByTestId("thinking-indicator")).not.toBeInTheDocument();
-    });
-
-    // Clean up
-    await act(async () => {
-      resolveSend();
-    });
-  });
-
-  it("hides thinking indicator when tool.call.started arrives", async () => {
-    mockUseSessionEvents.mockReturnValue([]);
-
-    let capturedOnEvent: ((event: SessionEvent) => void) | undefined;
-    let resolveSend!: () => void;
-
-    mockSendMessage.mockImplementation(
-      (_sessionId: string, _content: string, onEvent?: (event: SessionEvent) => void) => {
-        capturedOnEvent = onEvent;
-        return new Promise<SessionEvent[]>((resolve) => {
-          resolveSend = () => resolve([]);
-        });
-      },
-    );
-
-    render(<ChatPanel sessionId="s1" />);
-
-    const input = screen.getByLabelText("Message input");
-    fireEvent.change(input, { target: { value: "Read file" } });
-    fireEvent.click(screen.getByText("Send"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("thinking-indicator")).toBeInTheDocument();
-    });
-
-    // Simulate a tool call event arriving
-    await act(async () => {
-      capturedOnEvent?.(
-        makeEvent("t1", "tool.call.started", {
-          call_id: "c1",
-          tool_name: "read_file",
-        }),
-      );
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByTestId("thinking-indicator")).not.toBeInTheDocument();
-    });
+    // Optimistic message was injected
+    expect(mockInjectEvents).toHaveBeenCalled();
+    const firstCall = mockInjectEvents.mock.calls[0][0] as SessionEvent[];
+    expect(firstCall[0].data.role).toBe("user");
 
     await act(async () => {
       resolveSend();
     });
   });
 
-  it("injects events one-by-one during streaming", async () => {
+  it("allows assistant message.created events through the filter", async () => {
     mockUseSessionEvents.mockReturnValue([]);
 
     let capturedOnEvent: ((event: SessionEvent) => void) | undefined;
     let resolveSend!: () => void;
 
     mockSendMessage.mockImplementation(
-      (_sessionId: string, _content: string, onEvent?: (event: SessionEvent) => void) => {
+      (
+        _sessionId: string,
+        _content: string,
+        onEvent?: (event: SessionEvent) => void,
+      ) => {
         capturedOnEvent = onEvent;
         return new Promise<SessionEvent[]>((resolve) => {
           resolveSend = () => resolve([]);
@@ -234,61 +250,24 @@ describe("ChatPanel Streaming", () => {
       expect(mockSendMessage).toHaveBeenCalled();
     });
 
-    // Simulate events arriving one-by-one
-    const event1 = makeEvent("d1", "message.delta", { content: "Hi" });
-    const event2 = makeEvent("d2", "message.delta", { content: " there" });
+    const callsAfterOptimistic = mockInjectEvents.mock.calls.length;
 
+    // Simulate assistant message.created -- should NOT be filtered
     await act(async () => {
-      capturedOnEvent?.(event1);
-    });
-    expect(mockInjectEvents).toHaveBeenCalledWith([event1]);
-
-    await act(async () => {
-      capturedOnEvent?.(event2);
-    });
-    expect(mockInjectEvents).toHaveBeenCalledWith([event2]);
-
-    // 1 optimistic user message + 2 delta events injected individually
-    expect(mockInjectEvents).toHaveBeenCalledTimes(3);
-
-    await act(async () => {
-      resolveSend();
-    });
-  });
-
-  it("disables input and send button while sending", async () => {
-    mockUseSessionEvents.mockReturnValue([]);
-
-    let resolveSend!: () => void;
-    mockSendMessage.mockImplementation(() => {
-      return new Promise<SessionEvent[]>((resolve) => {
-        resolveSend = () => resolve([]);
-      });
+      capturedOnEvent?.(
+        makeEvent("a1", "message.created", {
+          role: "assistant",
+          content: "Hi there",
+        }),
+      );
     });
 
-    render(<ChatPanel sessionId="s1" />);
-
-    const input = screen.getByLabelText("Message input");
-    const sendButton = screen.getByText("Send");
-
-    expect(input).not.toBeDisabled();
-    expect(sendButton).not.toBeDisabled();
-
-    fireEvent.change(input, { target: { value: "Hello" } });
-    fireEvent.click(sendButton);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("Message input")).toBeDisabled();
-      expect(screen.getByText("Send")).toBeDisabled();
-    });
+    expect(mockInjectEvents.mock.calls.length).toBe(
+      callsAfterOptimistic + 1,
+    );
 
     await act(async () => {
       resolveSend();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("Message input")).not.toBeDisabled();
-      expect(screen.getByText("Send")).not.toBeDisabled();
     });
   });
 });
