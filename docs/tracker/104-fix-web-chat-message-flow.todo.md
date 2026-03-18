@@ -30,6 +30,20 @@ The WebSocket path (which does have proper `SessionEvent` shape) should be recei
 - [ ] No duplicate messages (deduplication between HTTP response events and WebSocket events)
 - [ ] Works on page refresh (history loading already works from #97)
 
+## E2E Test (Playwright)
+
+A Playwright test must verify the full flow:
+1. Start the backend (`codehive serve`) and web dev server (`npm run dev`)
+2. Navigate to the dashboard
+3. Create a project
+4. Create a session (click "+ New Session")
+5. Type a question in the chat input
+6. Verify that streaming response tokens appear in the chat
+7. Verify the final message is displayed
+8. Verify tool calls appear if the agent uses tools
+
+This is the first Playwright test — set up the Playwright config and test infrastructure.
+
 ## Files involved
 
 - `web/src/components/ChatPanel.tsx` — handleSend discards return value
