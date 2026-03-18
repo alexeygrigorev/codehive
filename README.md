@@ -26,41 +26,66 @@ web/        React 19, Vite, TypeScript, Tailwind CSS
 mobile/     (planned)
 ```
 
-Infrastructure (PostgreSQL, Redis) is defined in `docker-compose.yml` at the repo root.
-
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.12+
 - Node.js 20+
-- Docker and Docker Compose
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - Git
 
-## Quick Start
+## Quick Start (SQLite — zero infrastructure)
+
+No Docker, no PostgreSQL, no Redis needed. Just Python and Node.
 
 ```bash
 # 1. Clone and enter the repo
 git clone <repo-url> && cd codehive
 
-# 2. Copy environment config
-cp .env.example .env
-# Edit .env with your values (see Environment Variables below)
+# 2. Set your API key
+echo "CODEHIVE_ANTHROPIC_API_KEY=your-key-here" > .env
+# Or for Z.ai:
+# echo "CODEHIVE_ANTHROPIC_API_KEY=your-zai-key" > .env
+# echo "CODEHIVE_ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic" >> .env
 
-# 3. Start infrastructure (PostgreSQL + Redis)
-docker compose up -d
-
-# 4. Install backend dependencies and start the API server
+# 3. Start the backend (uses SQLite by default)
 cd backend
 uv sync --dev
 uv run codehive serve
 
-# 5. In another terminal, start the web dev server
+# 4. In another terminal, start the web dev server
 cd web
 npm install
 npm run dev
 ```
 
 The API server runs at `http://127.0.0.1:7433` and the web app at `http://localhost:5173`.
+Data is stored in `backend/data/codehive.db` (SQLite, auto-created on first run).
+
+### Quick Start with PostgreSQL + Redis (optional)
+
+For production or multi-process deployments:
+
+```bash
+# Start infrastructure
+docker compose up -d
+
+# Set database URL in .env
+echo "CODEHIVE_DATABASE_URL=postgresql+asyncpg://codehive:codehive@localhost:5432/codehive" >> .env
+echo "CODEHIVE_REDIS_URL=redis://localhost:6379/0" >> .env
+
+# Start the backend
+cd backend && uv sync --dev && uv run codehive serve
+```
+
+### Terminal-only mode (no web server needed)
+
+```bash
+cd backend
+uv run codehive code           # start agent in current directory
+uv run codehive code ~/myapp   # start agent in a specific directory
+```
+
+This launches a Textual TUI with streaming, markdown rendering, and tool approval prompts. If the backend is running, sessions are shared with the web UI. If not, it runs standalone with a local engine.
 
 ### Default Login
 

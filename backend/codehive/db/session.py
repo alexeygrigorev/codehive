@@ -1,5 +1,7 @@
 """Async database session factory."""
 
+from pathlib import Path
+
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -21,6 +23,10 @@ def create_async_engine_from_settings(
     url = database_url or Settings().database_url
     if url.startswith("sqlite"):
         engine_kwargs.setdefault("connect_args", {"check_same_thread": False})
+        # Auto-create parent directory for SQLite DB file
+        db_path = url.split("///", 1)[-1] if "///" in url else None
+        if db_path:
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     engine = create_async_engine(url, **engine_kwargs)
     if url.startswith("sqlite"):
 
