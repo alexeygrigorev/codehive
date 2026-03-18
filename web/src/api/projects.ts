@@ -20,6 +20,7 @@ export async function fetchProjects(): Promise<ProjectRead[]> {
 
 export async function createProject(body: {
   name: string;
+  path?: string;
   description?: string;
 }): Promise<ProjectRead> {
   const response = await apiClient.post("/api/projects", body);

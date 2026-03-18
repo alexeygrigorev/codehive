@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   startFlow,
@@ -51,16 +51,43 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [initialInput, setInitialInput] = useState("");
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [showEmptyForm, setShowEmptyForm] = useState(false);
+  const [directoryPath, setDirectoryPath] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [pathError, setPathError] = useState<string | null>(null);
+  const [userEditedName, setUserEditedName] = useState(false);
+
+  useEffect(() => {
+    if (!userEditedName && directoryPath.trim()) {
+      const parts = directoryPath.replace(/\/+$/, "").split("/");
+      const basename = parts[parts.length - 1] || "";
+      setProjectName(basename);
+    }
+  }, [directoryPath, userEditedName]);
 
   async function handleCreateEmpty() {
-    const name = prompt("Project name:");
-    if (!name?.trim()) return;
+    setPathError(null);
+    const trimmedPath = directoryPath.trim();
+    if (!trimmedPath) {
+      setPathError("Directory path is required");
+      return;
+    }
+    if (!trimmedPath.startsWith("/")) {
+      setPathError("Path must be absolute (start with /)");
+      return;
+    }
+    const name =
+      projectName.trim() ||
+      trimmedPath
+        .replace(/\/+$/, "")
+        .split("/")
+        .pop() ||
+      "project";
+
     setLoading(true);
     setError(null);
     try {
-      const project = await createProject({
-        name: name.trim(),
-      });
+      const project = await createProject({ name, path: trimmedPath });
       navigate(`/projects/${project.id}`);
     } catch (err) {
       setError(
@@ -131,7 +158,7 @@ export default function NewProjectPage() {
       <h1 className="text-2xl font-bold dark:text-gray-100 mb-6">New Project</h1>
 
       <button
-        onClick={handleCreateEmpty}
+        onClick={() => setShowEmptyForm(!showEmptyForm)}
         disabled={loading}
         className="w-full border-2 border-dashed dark:border-gray-600 rounded-lg p-4 text-left hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 mb-4"
       >
@@ -140,6 +167,62 @@ export default function NewProjectPage() {
           Create a blank project and start chatting right away.
         </p>
       </button>
+
+      {showEmptyForm && (
+        <div className="mt-4 space-y-3 border dark:border-gray-600 rounded-lg p-4 mb-4">
+          <div>
+            <label htmlFor="dir-path" className="block font-medium dark:text-gray-200 mb-1">
+              Directory Path
+            </label>
+            <input
+              id="dir-path"
+              type="text"
+              className="w-full border dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="/home/user/projects/myapp"
+              value={directoryPath}
+              onChange={(e) => setDirectoryPath(e.target.value)}
+            />
+            {pathError && <p className="text-red-600 text-sm mt-1">{pathError}</p>}
+          </div>
+          <div>
+            <label htmlFor="proj-name" className="block font-medium dark:text-gray-200 mb-1">
+              Project Name <span className="text-sm text-gray-500 dark:text-gray-400">(optional)</span>
+            </label>
+            <input
+              id="proj-name"
+              type="text"
+              className="w-full border dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Auto-derived from directory name"
+              value={projectName}
+              onChange={(e) => {
+                setProjectName(e.target.value);
+                setUserEditedName(true);
+              }}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateEmpty}
+              disabled={loading}
+              className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+            >
+              {loading ? "Creating..." : "Create Project"}
+            </button>
+            <button
+              onClick={() => {
+                setShowEmptyForm(false);
+                setDirectoryPath("");
+                setProjectName("");
+                setPathError(null);
+                setUserEditedName(false);
+              }}
+              className="px-4 py-2 rounded border dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {FLOW_TYPES.map((flow) => (
@@ -185,7 +268,7 @@ export default function NewProjectPage() {
       )}
 
       {loading && !selectedType && (
-        <p className="text-gray-500 mt-4">Starting flow...</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-4">Starting flow...</p>
       )}
       {error && <p className="text-red-600 mt-4">{error}</p>}
     </div>

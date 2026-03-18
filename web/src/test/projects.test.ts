@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchProjects, fetchProject } from "@/api/projects";
+import { fetchProjects, fetchProject, createProject } from "@/api/projects";
 
 describe("API: projects", () => {
   beforeEach(() => {
@@ -78,5 +78,37 @@ describe("API: projects", () => {
     await expect(fetchProject("nonexistent")).rejects.toThrow(
       "Failed to fetch project: 404",
     );
+  });
+
+  it("createProject({ name, path }) sends POST with both name and path in body", async () => {
+    const mockProject = {
+      id: "p2",
+      name: "myapp",
+      path: "/home/user/git/myapp",
+      description: null,
+      archetype: null,
+      knowledge: null,
+      created_at: "2026-03-18T00:00:00Z",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(mockProject), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const result = await createProject({
+      name: "myapp",
+      path: "/home/user/git/myapp",
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:7433/api/projects",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "myapp", path: "/home/user/git/myapp" }),
+      }),
+    );
+    expect(result).toEqual(mockProject);
   });
 });
