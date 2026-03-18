@@ -7,15 +7,24 @@ vi.mock("@/api/projects", () => ({
   fetchProjects: vi.fn(),
 }));
 
-vi.mock("@/api/sessions", () => ({
-  fetchSessions: vi.fn(),
-}));
-
 import { fetchProjects } from "@/api/projects";
-import { fetchSessions } from "@/api/sessions";
 
 const mockFetchProjects = vi.mocked(fetchProjects);
-const mockFetchSessions = vi.mocked(fetchSessions);
+
+const now = new Date();
+const todayISO = now.toISOString();
+const yesterdayDate = new Date(now);
+yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+const yesterdayISO = yesterdayDate.toISOString();
+const lastWeekDate = new Date(now);
+lastWeekDate.setDate(lastWeekDate.getDate() - 5);
+const lastWeekISO = lastWeekDate.toISOString();
+const lastMonthDate = new Date(now);
+lastMonthDate.setDate(lastMonthDate.getDate() - 20);
+const lastMonthISO = lastMonthDate.toISOString();
+const olderDate = new Date(now);
+olderDate.setDate(olderDate.getDate() - 60);
+const olderISO = olderDate.toISOString();
 
 const projects = [
   {
@@ -25,7 +34,7 @@ const projects = [
     description: null,
     archetype: null,
     knowledge: null,
-    created_at: "2026-01-01T00:00:00Z",
+    created_at: todayISO,
   },
   {
     id: "p2",
@@ -34,34 +43,34 @@ const projects = [
     description: null,
     archetype: null,
     knowledge: null,
-    created_at: "2026-01-02T00:00:00Z",
-  },
-];
-
-const sessionsP1 = [
-  {
-    id: "s1",
-    project_id: "p1",
-    issue_id: null,
-    parent_session_id: null,
-    name: "Session One",
-    engine: "native",
-    mode: "execution",
-    status: "executing",
-    config: null,
-    created_at: "2026-01-01T00:00:00Z",
+    created_at: yesterdayISO,
   },
   {
-    id: "s2",
-    project_id: "p1",
-    issue_id: null,
-    parent_session_id: null,
-    name: "Session Two",
-    engine: "native",
-    mode: "execution",
-    status: "completed",
-    config: null,
-    created_at: "2026-01-02T00:00:00Z",
+    id: "p3",
+    name: "Project Gamma",
+    path: "/tmp/gamma",
+    description: null,
+    archetype: null,
+    knowledge: null,
+    created_at: lastWeekISO,
+  },
+  {
+    id: "p4",
+    name: "Project Delta",
+    path: "/tmp/delta",
+    description: null,
+    archetype: null,
+    knowledge: null,
+    created_at: lastMonthISO,
+  },
+  {
+    id: "p5",
+    name: "Project Epsilon",
+    path: "/tmp/epsilon",
+    description: null,
+    archetype: null,
+    knowledge: null,
+    created_at: olderISO,
   },
 ];
 
@@ -78,92 +87,110 @@ describe("Sidebar", () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockFetchProjects.mockResolvedValue(projects);
-    mockFetchSessions.mockResolvedValue(sessionsP1);
   });
 
-  it("renders list of projects fetched from API", async () => {
+  it("renders flat list of projects fetched from API", async () => {
     renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
     expect(screen.getByText("Project Beta")).toBeInTheDocument();
+    expect(screen.getByText("Project Gamma")).toBeInTheDocument();
+    expect(screen.getByText("Project Delta")).toBeInTheDocument();
+    expect(screen.getByText("Project Epsilon")).toBeInTheDocument();
   });
 
-  it("renders Dashboard link", () => {
+  it("renders Dashboard and Usage links", () => {
     mockFetchProjects.mockResolvedValue([]);
     renderSidebar();
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Usage")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Dashboard" });
     expect(link).toHaveAttribute("href", "/");
   });
 
-  it("clicking expand toggle shows session list under the project", async () => {
+  it("shows time group headers", async () => {
     renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    // Sessions not visible initially
-    expect(screen.queryByText("Session One")).not.toBeInTheDocument();
-
-    // Click toggle
-    fireEvent.click(screen.getByTestId("toggle-p1"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Session One")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Session Two")).toBeInTheDocument();
+    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.getByText("Yesterday")).toBeInTheDocument();
+    expect(screen.getByText("Previous 7 days")).toBeInTheDocument();
+    expect(screen.getByText("Previous 30 days")).toBeInTheDocument();
+    expect(screen.getByText("Older")).toBeInTheDocument();
   });
 
-  it("sessions show name and status dot", async () => {
+  it("groups are collapsible", async () => {
     renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId("toggle-p1"));
+    // Click "Today" group header to collapse
+    fireEvent.click(screen.getByTestId("time-group-toggle-today"));
 
-    await waitFor(() => {
-      expect(screen.getByText("Session One")).toBeInTheDocument();
-    });
+    // Alpha should be hidden
+    expect(screen.queryByText("Project Alpha")).not.toBeInTheDocument();
 
-    // Status dots should be present (aria-label = status)
-    expect(screen.getByLabelText("executing")).toBeInTheDocument();
-    expect(screen.getByLabelText("completed")).toBeInTheDocument();
+    // Click again to expand
+    fireEvent.click(screen.getByTestId("time-group-toggle-today"));
+
+    expect(screen.getByText("Project Alpha")).toBeInTheDocument();
   });
 
-  it("does not re-fetch sessions on every toggle", async () => {
+  it("search filters projects by name in real time", async () => {
     renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    // First expand
-    fireEvent.click(screen.getByTestId("toggle-p1"));
+    const searchInput = screen.getByTestId("sidebar-search");
+    fireEvent.change(searchInput, { target: { value: "Alpha" } });
+
+    expect(screen.getByText("Project Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Project Beta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project Gamma")).not.toBeInTheDocument();
+  });
+
+  it("search updates project count to filtered count", async () => {
+    renderSidebar();
+
     await waitFor(() => {
-      expect(screen.getByText("Session One")).toBeInTheDocument();
+      expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    // Collapse
-    fireEvent.click(screen.getByTestId("toggle-p1"));
+    const countEl = screen.getByTestId("sidebar-project-count");
+    expect(countEl.textContent).toBe("Projects (5)");
+
+    const searchInput = screen.getByTestId("sidebar-search");
+    fireEvent.change(searchInput, { target: { value: "Alpha" } });
+
+    expect(countEl.textContent).toBe("Projects (1 of 5)");
+  });
+
+  it("empty time groups are hidden when search filters them out", async () => {
+    renderSidebar();
+
     await waitFor(() => {
-      expect(screen.queryByText("Session One")).not.toBeInTheDocument();
+      expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    // Expand again
-    fireEvent.click(screen.getByTestId("toggle-p1"));
-    await waitFor(() => {
-      expect(screen.getByText("Session One")).toBeInTheDocument();
-    });
+    const searchInput = screen.getByTestId("sidebar-search");
+    fireEvent.change(searchInput, { target: { value: "Alpha" } });
 
-    // fetchSessions should have been called only once for p1
-    expect(mockFetchSessions).toHaveBeenCalledTimes(1);
-    expect(mockFetchSessions).toHaveBeenCalledWith("p1");
+    // Only "Today" group should be visible (Alpha is today)
+    expect(screen.getByTestId("time-group-today")).toBeInTheDocument();
+    expect(screen.queryByTestId("time-group-yesterday")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("time-group-previous-7-days"),
+    ).not.toBeInTheDocument();
   });
 
   it("active project is highlighted when on its page", async () => {
@@ -175,24 +202,39 @@ describe("Sidebar", () => {
 
     const projectLink = screen.getByRole("link", { name: "Project Alpha" });
     expect(projectLink.className).toContain("font-medium");
+    expect(projectLink.className).toContain("bg-gray-800");
   });
 
-  it("active session is highlighted when on its page", async () => {
-    renderSidebar("/sessions/s1");
+  it("New Project button navigates to /projects/new", async () => {
+    renderSidebar();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-new-project")).toBeInTheDocument();
+    });
+
+    const newProjectLink = screen.getByTestId("sidebar-new-project");
+    expect(newProjectLink).toHaveAttribute("href", "/projects/new");
+    expect(newProjectLink.textContent).toContain("New Project");
+  });
+
+  it("shows project count in header", async () => {
+    renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    // Expand project to see sessions
-    fireEvent.click(screen.getByTestId("toggle-p1"));
+    const countEl = screen.getByTestId("sidebar-project-count");
+    expect(countEl.textContent).toBe("Projects (5)");
+  });
+
+  it("shows empty state when no projects exist", async () => {
+    mockFetchProjects.mockResolvedValue([]);
+    renderSidebar();
 
     await waitFor(() => {
-      expect(screen.getByText("Session One")).toBeInTheDocument();
+      expect(screen.getByText("No projects yet")).toBeInTheDocument();
     });
-
-    const sessionLink = screen.getByRole("link", { name: /Session One/ });
-    expect(sessionLink.className).toContain("font-medium");
   });
 
   it("collapsed sidebar shows narrow width", async () => {
@@ -202,7 +244,6 @@ describe("Sidebar", () => {
       expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     });
 
-    // Click collapse toggle
     fireEvent.click(screen.getByTestId("sidebar-toggle"));
 
     const sidebar = screen.getByTestId("sidebar");
@@ -230,6 +271,22 @@ describe("Sidebar", () => {
     expect(sidebar.className).toContain("w-12");
   });
 
+  it("collapsed sidebar hides search input and time groups", async () => {
+    renderSidebar();
+
+    await waitFor(() => {
+      expect(screen.getByText("Project Alpha")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("sidebar-toggle"));
+
+    expect(screen.queryByTestId("sidebar-search")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("time-group-today")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sidebar-project-count"),
+    ).not.toBeInTheDocument();
+  });
+
   it("project links navigate to /projects/{id}", async () => {
     renderSidebar();
 
@@ -241,20 +298,28 @@ describe("Sidebar", () => {
     expect(link).toHaveAttribute("href", "/projects/p1");
   });
 
-  it("session links navigate to /sessions/{id}", async () => {
+  it("project list area has independent scroll", async () => {
     renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId("toggle-p1"));
+    // The project list container should have overflow-y-auto
+    const sidebar = screen.getByTestId("sidebar");
+    const scrollContainer = sidebar.querySelector(".overflow-y-auto");
+    expect(scrollContainer).toBeInTheDocument();
+  });
+
+  it("does not render sessions in the sidebar", async () => {
+    renderSidebar();
 
     await waitFor(() => {
-      expect(screen.getByText("Session One")).toBeInTheDocument();
+      expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     });
 
-    const link = screen.getByRole("link", { name: /Session One/ });
-    expect(link).toHaveAttribute("href", "/sessions/s1");
+    // No session toggle buttons or session lists
+    expect(screen.queryByTestId("toggle-p1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sessions-p1")).not.toBeInTheDocument();
   });
 });

@@ -1,20 +1,66 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { fetchProjects, type ProjectRead } from "@/api/projects";
-import { fetchSessions, type SessionRead } from "@/api/sessions";
+
 const SIDEBAR_COLLAPSED_KEY = "codehive-sidebar-collapsed";
 
-const statusDotColors: Record<string, string> = {
-  idle: "bg-gray-400",
-  planning: "bg-yellow-400",
-  executing: "bg-blue-400",
-  waiting_input: "bg-purple-400",
-  completed: "bg-green-400",
-  failed: "bg-red-400",
-};
+type TimeGroup =
+  | "Today"
+  | "Yesterday"
+  | "Previous 7 days"
+  | "Previous 30 days"
+  | "Older";
+
+const TIME_GROUP_ORDER: TimeGroup[] = [
+  "Today",
+  "Yesterday",
+  "Previous 7 days",
+  "Previous 30 days",
+  "Older",
+];
+
+function getTimeGroup(createdAt: string): TimeGroup {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const sevenDaysAgo = new Date(todayStart);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const thirtyDaysAgo = new Date(todayStart);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  if (created >= todayStart) return "Today";
+  if (created >= yesterdayStart) return "Yesterday";
+  if (created >= sevenDaysAgo) return "Previous 7 days";
+  if (created >= thirtyDaysAgo) return "Previous 30 days";
+  return "Older";
+}
+
+function groupProjectsByTime(
+  projects: ProjectRead[],
+): Map<TimeGroup, ProjectRead[]> {
+  const groups = new Map<TimeGroup, ProjectRead[]>();
+  for (const group of TIME_GROUP_ORDER) {
+    groups.set(group, []);
+  }
+  for (const project of projects) {
+    const group = getTimeGroup(project.created_at);
+    groups.get(group)!.push(project);
+  }
+  // Sort each group by created_at descending (most recent first)
+  for (const [, list] of groups) {
+    list.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+  }
+  return groups;
+}
 
 export default function Sidebar() {
   const location = useLocation();
+  const searchRef = useRef<HTMLInputElement>(null);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -23,13 +69,8 @@ export default function Sidebar() {
     }
   });
   const [projects, setProjects] = useState<ProjectRead[]>([]);
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
-    new Set(),
-  );
-  const [sessionsByProject, setSessionsByProject] = useState<
-    Record<string, SessionRead[]>
-  >({});
-  const [loadingSessions, setLoadingSessions] = useState<Set<string>>(
+  const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<TimeGroup>>(
     new Set(),
   );
 
@@ -49,6 +90,23 @@ export default function Sidebar() {
     };
   }, []);
 
+  // Keyboard shortcut: Ctrl+K or / to focus search
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (
+        (e.key === "k" && (e.ctrlKey || e.metaKey)) ||
+        (e.key === "/" &&
+          !(e.target instanceof HTMLInputElement) &&
+          !(e.target instanceof HTMLTextAreaElement))
+      ) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const toggleCollapse = useCallback(() => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -61,45 +119,43 @@ export default function Sidebar() {
     });
   }, []);
 
-  const toggleProject = useCallback(
-    async (projectId: string) => {
-      setExpandedProjects((prev) => {
-        const next = new Set(prev);
-        if (next.has(projectId)) {
-          next.delete(projectId);
-        } else {
-          next.add(projectId);
-        }
-        return next;
-      });
-
-      // Fetch sessions if not already cached
-      if (!sessionsByProject[projectId] && !loadingSessions.has(projectId)) {
-        setLoadingSessions((prev) => new Set(prev).add(projectId));
-        try {
-          const sessions = await fetchSessions(projectId);
-          setSessionsByProject((prev) => ({ ...prev, [projectId]: sessions }));
-        } catch {
-          // Keep empty on error
-        } finally {
-          setLoadingSessions((prev) => {
-            const next = new Set(prev);
-            next.delete(projectId);
-            return next;
-          });
-        }
+  const toggleGroup = useCallback((group: TimeGroup) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
       }
-    },
-    [sessionsByProject, loadingSessions],
+      return next;
+    });
+  }, []);
+
+  // Filter projects by search query
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery.trim()) return projects;
+    const q = searchQuery.toLowerCase();
+    return projects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [projects, searchQuery]);
+
+  // Group filtered projects by time
+  const groupedProjects = useMemo(
+    () => groupProjectsByTime(filteredProjects),
+    [filteredProjects],
   );
 
-  // Determine active project/session from URL
+  // Determine active project from URL
   const activeProjectId = location.pathname.match(
     /^\/projects\/([^/]+)/,
   )?.[1];
-  const activeSessionId = location.pathname.match(
-    /^\/sessions\/([^/]+)/,
-  )?.[1];
+
+  const totalCount = projects.length;
+  const filteredCount = filteredProjects.length;
+  const isFiltering = searchQuery.trim().length > 0;
+
+  const countLabel = isFiltering
+    ? `Projects (${filteredCount} of ${totalCount})`
+    : `Projects (${totalCount})`;
 
   return (
     <aside
@@ -108,6 +164,7 @@ export default function Sidebar() {
         collapsed ? "w-12" : "w-64"
       }`}
     >
+      {/* Header */}
       <div className="p-4 flex items-center justify-between">
         {!collapsed && <h2 className="text-lg font-semibold">Codehive</h2>}
         <button
@@ -119,108 +176,146 @@ export default function Sidebar() {
           {collapsed ? "\u25B6" : "\u25C0"}
         </button>
       </div>
-      <nav className="mt-2 flex-1 overflow-y-auto">
-        <ul className="space-y-0.5">
-          <li>
+
+      {/* Navigation links */}
+      <nav className="flex flex-col">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) =>
+            `block px-4 py-2 text-sm ${
+              isActive
+                ? "bg-gray-800 text-white font-medium"
+                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+            }`
+          }
+        >
+          {collapsed ? "D" : "Dashboard"}
+        </NavLink>
+        <NavLink
+          to="/usage"
+          className={({ isActive }) =>
+            `block px-4 py-2 text-sm ${
+              isActive
+                ? "bg-gray-800 text-white font-medium"
+                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+            }`
+          }
+        >
+          {collapsed ? "U" : "Usage"}
+        </NavLink>
+      </nav>
+
+      {!collapsed && (
+        <>
+          {/* Project count header */}
+          <div
+            className="px-4 pt-4 pb-2 text-xs text-gray-400 uppercase tracking-wider"
+            data-testid="sidebar-project-count"
+          >
+            {countLabel}
+          </div>
+
+          {/* Search input */}
+          <div className="px-4 pb-2">
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Search projects... (Ctrl+K)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm bg-gray-800 text-white placeholder-gray-500 rounded border border-gray-700 focus:border-blue-500 focus:outline-none"
+              data-testid="sidebar-search"
+            />
+          </div>
+
+          {/* New Project button */}
+          <div className="px-4 pb-2">
             <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `block px-4 py-2 text-sm ${
-                  isActive
-                    ? "bg-gray-800 text-white font-medium"
-                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                }`
-              }
+              to="/projects/new"
+              className="block w-full text-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
+              data-testid="sidebar-new-project"
             >
-              {collapsed ? "D" : "Dashboard"}
+              + New Project
             </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/usage"
-              className={({ isActive }) =>
-                `block px-4 py-2 text-sm ${
-                  isActive
-                    ? "bg-gray-800 text-white font-medium"
-                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                }`
-              }
-            >
-              {collapsed ? "U" : "Usage"}
-            </NavLink>
-          </li>
-          {projects.map((project) => {
-            const isActiveProject = activeProjectId === project.id;
-            const isExpanded = expandedProjects.has(project.id);
-            const sessions = sessionsByProject[project.id];
+          </div>
+        </>
+      )}
+
+      {/* Project list */}
+      <div className="flex-1 overflow-y-auto">
+        {!collapsed && projects.length === 0 && (
+          <div className="px-4 py-4 text-sm text-gray-400">
+            No projects yet
+          </div>
+        )}
+
+        {!collapsed && projects.length > 0 && filteredProjects.length === 0 && (
+          <div className="px-4 py-4 text-sm text-gray-400">
+            No matching projects
+          </div>
+        )}
+
+        {!collapsed &&
+          TIME_GROUP_ORDER.map((group) => {
+            const groupProjects = groupedProjects.get(group) ?? [];
+            if (groupProjects.length === 0) return null;
+            const isGroupCollapsed = collapsedGroups.has(group);
+            const groupSlug = group.toLowerCase().replace(/\s+/g, "-");
 
             return (
-              <li key={project.id}>
-                <div className="flex items-center">
-                  <button
-                    onClick={() => toggleProject(project.id)}
-                    className="px-2 py-2 text-gray-400 hover:text-white text-xs flex-shrink-0"
-                    aria-label={`Toggle ${project.name} sessions`}
-                    data-testid={`toggle-${project.id}`}
-                  >
-                    {isExpanded ? "\u25BC" : "\u25B6"}
-                  </button>
-                  <NavLink
-                    to={`/projects/${project.id}`}
-                    className={`flex-1 block py-2 pr-4 text-sm truncate ${
-                      isActiveProject
-                        ? "text-white font-medium"
-                        : "text-gray-300 hover:text-white"
-                    }`}
-                  >
-                    {collapsed
-                      ? project.name.charAt(0).toUpperCase()
-                      : project.name}
-                  </NavLink>
-                </div>
-                {isExpanded && !collapsed && (
-                  <ul className="ml-6 space-y-0.5" data-testid={`sessions-${project.id}`}>
-                    {loadingSessions.has(project.id) && (
-                      <li className="px-4 py-1 text-xs text-gray-400">
-                        Loading...
-                      </li>
-                    )}
-                    {sessions?.map((session) => {
-                      const isActiveSession = activeSessionId === session.id;
-                      const dotColor =
-                        statusDotColors[session.status] ?? "bg-gray-400";
+              <div key={group} data-testid={`time-group-${groupSlug}`}>
+                <button
+                  onClick={() => toggleGroup(group)}
+                  className="w-full flex items-center px-4 py-1.5 text-xs text-gray-400 uppercase tracking-wider hover:text-gray-200"
+                  data-testid={`time-group-toggle-${groupSlug}`}
+                >
+                  <span className="mr-1.5 text-[10px]">
+                    {isGroupCollapsed ? "\u25B6" : "\u25BC"}
+                  </span>
+                  {group}
+                </button>
+                {!isGroupCollapsed && (
+                  <ul className="space-y-0.5">
+                    {groupProjects.map((project) => {
+                      const isActive = activeProjectId === project.id;
                       return (
-                        <li key={session.id}>
+                        <li key={project.id}>
                           <NavLink
-                            to={`/sessions/${session.id}`}
-                            className={`block px-4 py-1.5 text-xs truncate flex items-center gap-2 ${
-                              isActiveSession
-                                ? "text-white font-medium bg-gray-800"
-                                : "text-gray-400 hover:text-white hover:bg-gray-800"
+                            to={`/projects/${project.id}`}
+                            className={`block px-4 py-2 text-sm truncate ${
+                              isActive
+                                ? "bg-gray-800 text-white font-medium"
+                                : "text-gray-300 hover:bg-gray-800 hover:text-white"
                             }`}
                           >
-                            <span
-                              className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`}
-                              aria-label={session.status}
-                            />
-                            {session.name}
+                            {project.name}
                           </NavLink>
                         </li>
                       );
                     })}
-                    {sessions?.length === 0 && (
-                      <li className="px-4 py-1 text-xs text-gray-400">
-                        No sessions
-                      </li>
-                    )}
                   </ul>
                 )}
-              </li>
+              </div>
             );
           })}
-        </ul>
-      </nav>
+
+        {collapsed &&
+          projects.map((project) => (
+            <NavLink
+              key={project.id}
+              to={`/projects/${project.id}`}
+              className={`block px-2 py-2 text-xs text-center truncate ${
+                activeProjectId === project.id
+                  ? "bg-gray-800 text-white font-medium"
+                  : "text-gray-300 hover:bg-gray-800 hover:text-white"
+              }`}
+              title={project.name}
+            >
+              {project.name.charAt(0).toUpperCase()}
+            </NavLink>
+          ))}
+      </div>
     </aside>
   );
 }
