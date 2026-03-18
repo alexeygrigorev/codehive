@@ -319,6 +319,56 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
             working_dir=str(project_root),
         )
 
+    if engine_type == "codex":
+        from openai import AsyncOpenAI
+
+        from codehive.config import Settings
+        from codehive.core.events import EventBus
+        from codehive.engine.codex import CodexEngine
+        from codehive.execution.file_ops import FileOps
+        from codehive.execution.git_ops import GitOps
+        from codehive.execution.shell import ShellRunner
+
+        settings = Settings()
+
+        api_key = settings.openai_api_key
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="OpenAI provider not configured: missing API key",
+            )
+        base_url = settings.openai_base_url
+
+        client_kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = AsyncOpenAI(**client_kwargs)
+
+        redis_client: Any = None
+        try:
+            from redis.asyncio import Redis
+
+            redis_client = Redis.from_url(settings.redis_url)
+        except Exception:
+            pass
+
+        event_bus = EventBus(redis_client) if redis_client else None  # type: ignore[arg-type]
+        file_ops = FileOps(project_root=project_root)
+        shell_runner = ShellRunner()
+        git_ops = GitOps(repo_path=project_root)
+
+        model = session_config.get("model", "") or "codex-mini-latest"
+
+        return CodexEngine(
+            client=client,
+            event_bus=event_bus,  # type: ignore[arg-type]
+            file_ops=file_ops,
+            shell_runner=shell_runner,
+            git_ops=git_ops,
+            diff_service=diff_service,
+            model=model,
+        )
+
     if engine_type == "native":
         from anthropic import AsyncAnthropic
 

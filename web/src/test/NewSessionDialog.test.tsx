@@ -22,6 +22,12 @@ const providers = [
     api_key_set: true,
     default_model: "glm-4.7",
   },
+  {
+    name: "openai",
+    base_url: "https://api.openai.com",
+    api_key_set: true,
+    default_model: "codex-mini-latest",
+  },
 ];
 
 describe("NewSessionDialog", () => {
@@ -74,7 +80,7 @@ describe("NewSessionDialog", () => {
     });
 
     const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    expect(select.options).toHaveLength(2);
+    expect(select.options).toHaveLength(3);
   });
 
   it("default provider is anthropic with correct model", async () => {
@@ -118,6 +124,49 @@ describe("NewSessionDialog", () => {
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
     expect(modelInput.value).toBe("glm-4.7");
+  });
+
+  it("selecting OpenAI updates model to codex-mini-latest", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-select")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByTestId("provider-select"), {
+      target: { value: "openai" },
+    });
+
+    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
+    expect(modelInput.value).toBe("codex-mini-latest");
+  });
+
+  it("displays OpenAI label in dropdown", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-select")).toBeInTheDocument();
+    });
+
+    const select = screen.getByTestId("provider-select") as HTMLSelectElement;
+    const options = Array.from(select.options);
+    const openaiOption = options.find((o) => o.value === "openai");
+    expect(openaiOption).toBeDefined();
+    expect(openaiOption!.textContent).toContain("OpenAI");
   });
 
   it("calls onSubmit with correct data when form is submitted", async () => {
@@ -198,6 +247,7 @@ describe("NewSessionDialog", () => {
     const providersWithMissingKey = [
       { ...providers[0] },
       { ...providers[1], api_key_set: false },
+      { ...providers[2] },
     ];
     mockFetchProviders.mockResolvedValue(providersWithMissingKey);
 

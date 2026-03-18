@@ -12,7 +12,7 @@ def _isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     for key in list(os.environ):
         if key.startswith("CODEHIVE_"):
             monkeypatch.delenv(key)
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY"):
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
 
@@ -22,8 +22,8 @@ class TestProvidersEndpoint:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_list_providers_returns_both(self, monkeypatch):
-        """Endpoint returns both anthropic and zai providers."""
+    async def test_list_providers_returns_all(self, monkeypatch):
+        """Endpoint returns anthropic, zai, and openai providers."""
         monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test")
         monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-test")
 
@@ -31,10 +31,11 @@ class TestProvidersEndpoint:
 
         result = await list_providers()
 
-        assert len(result) == 2
+        assert len(result) == 3
         names = [p.name for p in result]
         assert "anthropic" in names
         assert "zai" in names
+        assert "openai" in names
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
@@ -242,3 +243,160 @@ class TestBuildEngineProviderRouting:
                 pass
 
         assert captured_kwargs.get("api_key") == "sk-ant-explicit"
+
+    @pytest.mark.asyncio
+    async def test_codex_engine_type_returns_codex_engine(self, monkeypatch):
+        """engine_type=codex returns a CodexEngine instance."""
+        monkeypatch.setenv("CODEHIVE_OPENAI_API_KEY", "sk-openai-test")
+
+        captured_kwargs = {}
+
+        class FakeAsyncOpenAI:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+
+        with patch("openai.AsyncOpenAI", FakeAsyncOpenAI):
+            from codehive.api.routes.sessions import _build_engine
+
+            try:
+                await _build_engine({"provider": "openai"}, engine_type="codex")
+            except Exception:
+                pass
+
+        assert captured_kwargs.get("api_key") == "sk-openai-test"
+
+    @pytest.mark.asyncio
+    async def test_codex_engine_no_key_raises_503(self, monkeypatch):
+        """engine_type=codex without API key raises 503."""
+        monkeypatch.delenv("CODEHIVE_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        for key in list(os.environ):
+            if key.startswith("CODEHIVE_OPENAI"):
+                monkeypatch.delenv(key)
+
+        from fastapi import HTTPException
+
+        from codehive.api.routes.sessions import _build_engine
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _build_engine({"provider": "openai"}, engine_type="codex")
+        assert exc_info.value.status_code == 503
+        assert "OpenAI" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_codex_engine_custom_model(self, monkeypatch):
+        """engine_type=codex with explicit model uses that model."""
+        monkeypatch.setenv("CODEHIVE_OPENAI_API_KEY", "sk-openai-test")
+
+        captured_engine_kwargs = {}
+
+        from codehive.engine.codex import CodexEngine
+
+        def capturing_init(self_engine, **kwargs):
+            captured_engine_kwargs.update(kwargs)
+
+        with (
+            patch("openai.AsyncOpenAI", MagicMock),
+            patch.object(CodexEngine, "__init__", capturing_init),
+        ):
+            from codehive.api.routes.sessions import _build_engine
+
+            try:
+                await _build_engine({"provider": "openai", "model": "gpt-4o"}, engine_type="codex")
+            except Exception:
+                pass
+
+        assert captured_engine_kwargs.get("model") == "gpt-4o"
+
+    @pytest.mark.asyncio
+    async def test_codex_engine_default_model(self, monkeypatch):
+        """engine_type=codex defaults to codex-mini-latest model."""
+        monkeypatch.setenv("CODEHIVE_OPENAI_API_KEY", "sk-openai-test")
+
+        captured_engine_kwargs = {}
+
+        from codehive.engine.codex import CodexEngine
+
+        def capturing_init(self_engine, **kwargs):
+            captured_engine_kwargs.update(kwargs)
+
+        with (
+            patch("openai.AsyncOpenAI", MagicMock),
+            patch.object(CodexEngine, "__init__", capturing_init),
+        ):
+            from codehive.api.routes.sessions import _build_engine
+
+            try:
+                await _build_engine({"provider": "openai"}, engine_type="codex")
+            except Exception:
+                pass
+
+        assert captured_engine_kwargs.get("model") == "codex-mini-latest"
+
+
+class TestOpenAIProviderEndpoint:
+    """Tests for OpenAI provider in the providers list."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_provider_present(self):
+        """OpenAI provider appears in provider list."""
+        from codehive.api.routes.providers import list_providers
+
+        result = await list_providers()
+        names = [p.name for p in result]
+        assert "openai" in names
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_default_model(self):
+        """OpenAI provider default model is codex-mini-latest."""
+        from codehive.api.routes.providers import list_providers
+
+        result = await list_providers()
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.default_model == "codex-mini-latest"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_base_url_default(self):
+        """OpenAI provider base URL defaults to api.openai.com."""
+        from codehive.api.routes.providers import list_providers
+
+        result = await list_providers()
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.base_url == "https://api.openai.com"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_key_set_true(self, monkeypatch):
+        """OpenAI api_key_set is True when key is configured."""
+        monkeypatch.setenv("CODEHIVE_OPENAI_API_KEY", "sk-openai-test")
+
+        from codehive.api.routes.providers import list_providers
+
+        result = await list_providers()
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.api_key_set is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_key_set_false(self):
+        """OpenAI api_key_set is False when key is not configured."""
+        from codehive.api.routes.providers import list_providers
+
+        result = await list_providers()
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.api_key_set is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_custom_base_url(self, monkeypatch):
+        """Custom OpenAI base_url is reflected."""
+        monkeypatch.setenv("CODEHIVE_OPENAI_BASE_URL", "https://my-openai-proxy.com")
+
+        from codehive.api.routes.providers import list_providers
+
+        result = await list_providers()
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.base_url == "https://my-openai-proxy.com"

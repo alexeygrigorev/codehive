@@ -34,8 +34,14 @@ async def list_providers() -> list[ProviderInfo]:
         or os.environ.get("CODEHIVE_ZAI_API_KEY", "")
         or os.environ.get("ZAI_API_KEY", "")
     )
+    openai_key_set = bool(
+        settings.openai_api_key
+        or os.environ.get("CODEHIVE_OPENAI_API_KEY", "")
+        or os.environ.get("OPENAI_API_KEY", "")
+    )
 
     anthropic_base = settings.anthropic_base_url or "https://api.anthropic.com"
+    openai_base = settings.openai_base_url or "https://api.openai.com"
 
     return [
         ProviderInfo(
@@ -49,5 +55,11 @@ async def list_providers() -> list[ProviderInfo]:
             base_url=settings.zai_base_url,
             api_key_set=zai_key_set,
             default_model="glm-4.7",
+        ),
+        ProviderInfo(
+            name="openai",
+            base_url=openai_base,
+            api_key_set=openai_key_set,
+            default_model="codex-mini-latest",
         ),
     ]

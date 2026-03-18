@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
 
+    openai_api_key: str = ""
+    openai_base_url: str = ""
+
     zai_api_key: str = ""
     zai_base_url: str = "https://api.z.ai/api/anthropic"
     default_model: str = "claude-sonnet-4-20250514"

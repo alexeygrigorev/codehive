@@ -122,12 +122,20 @@ export default function NewSessionDialog({
                   className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100"
                   data-testid="provider-select"
                 >
-                  {providers.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name === "anthropic" ? "Anthropic" : "Z.ai"}
-                      {p.api_key_set ? " \u2713" : " (no key)"}
-                    </option>
-                  ))}
+                  {providers.map((p) => {
+                    const label =
+                      p.name === "anthropic"
+                        ? "Anthropic"
+                        : p.name === "openai"
+                          ? "OpenAI"
+                          : "Z.ai";
+                    return (
+                      <option key={p.name} value={p.name}>
+                        {label}
+                        {p.api_key_set ? " \u2713" : " (no key)"}
+                      </option>
+                    );
+                  })}
                 </select>
               )}
             </div>
