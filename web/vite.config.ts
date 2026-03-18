@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     watch: {
-      ignored: ["**/backend/**", "**/data/**", "**/*.db", "**/*.db-wal", "**/*.db-shm"],
+      ignored: ["!**/web/src/**", "**/test/**", "**/e2e/**", "**/backend/**", "**/data/**", "**/docs/**", "**/*.db", "**/*.db-wal", "**/*.db-shm", "**/node_modules/**"],
     },
   },
   resolve: {

@@ -336,3 +336,56 @@ Apply the specific fixes listed in the Category C table.
   - Lint clean (tsc --noEmit): YES
 - Follow-up issues created: none needed
 - VERDICT: ACCEPT
+
+### [QA Visual] 2026-03-18 17:15
+- Method: Playwright screenshots of every page in both light and dark mode
+- Screenshots saved to /tmp/dark-theme-screenshots/ (14 files, 7 pages x 2 themes)
+- Pages tested: Dashboard, New Project, Project, Session, Search, Questions, Roles
+- API proxy used to ensure data-populated pages (not just error states)
+
+#### Dashboard (/)
+- LIGHT: bg-gray-50 page background, white project cards with gray-200 borders, dark text for project names, muted text for session counts, blue "New Project" button, search input with visible border. PASS
+- DARK: bg-gray-900 page background, bg-gray-800 project cards with gray-700 borders, white/light text for project names, muted gray-400 text for session counts, dark header with visible search input. Theme toggle shows "Moon". PASS
+- No white backgrounds in dark mode. No contrast issues.
+
+#### New Project (/projects/new)
+- LIGHT: White flow-selection cards with readable text and visible dashed borders. PASS
+- DARK: Dark cards (bg-gray-800) with visible dashed borders, readable card titles (light text), readable description text (gray-400). PASS
+- No white backgrounds in dark mode.
+
+#### Project Page (/projects/:id)
+- LIGHT: Breadcrumbs visible, project name dark text, path in muted text, Sessions/Issues tabs with blue active state, session list with white card, "idle" status badge (gray-100 bg, gray-700 text), "execution" mode badge (blue), metadata text visible. PASS
+- DARK: Same layout with dark backgrounds. Session card has dark bg with visible border. "idle" badge has dark variant (gray-700 bg, gray-300 text) -- readable. "execution" badge has dark blue variant. Breadcrumb links visible. PASS
+- Status badges readable in both themes.
+
+#### Session Page (/sessions/:id)
+- LIGHT: Breadcrumbs, session name, "idle" status badge, "execution" mode badge, Chat/Export header, sidebar tabs (ToDo, Changed Files, Activity, Sub-agents), "No messages yet" and "No tasks yet" empty states, message input with visible border, Mic and Send buttons. PASS
+- DARK: All elements properly themed. Status badge "idle" has dark bg with readable text. Mode badge "execution" has dark blue variant. Chat area is dark with visible input area (dark bg, visible border). Sidebar tabs readable. Empty state text visible (gray-400 on gray-900). PASS
+- Chat input area has proper dark background and border contrast.
+
+#### Search Page (/search)
+- LIGHT: "Search Results" heading, tab bar (All, Sessions, Messages, Issues, Events) with blue active indicator, light background. PASS
+- DARK: Heading white on dark bg, tab bar visible with dark text (gray-400) and blue active tab. PASS
+
+#### Questions Page (/questions)
+- LIGHT: "Pending Questions" heading, "No pending questions across any session." empty state text visible in gray-500. PASS
+- DARK: Same layout, empty state text visible in gray-400 against gray-900 background. PASS
+
+#### Roles Page (/roles)
+- Could not capture with data (API timeout in Playwright proxy). Structural theme coverage verified via grep in prior QA pass. NOT BLOCKED -- this is a test infrastructure limitation, not a theme issue.
+
+#### Common Elements (all pages)
+- Sidebar: Consistent bg-gray-900 in both themes (sidebar is always dark). Project list items in gray-400 text, readable.
+- Header: Light mode has white bg with gray-200 border; dark mode has gray-800 bg with gray-700 border. Theme toggle button visible in both.
+- Search input: Light mode has white bg with gray-300 border; dark mode has gray-700 bg with gray-600 border. Placeholder text visible.
+
+#### Issues Found: NONE
+- No white backgrounds in dark mode
+- All text readable against dark backgrounds
+- Borders visible but subtle in dark mode
+- Status badges readable in both themes
+- No visual glitches detected
+- Theme toggle works correctly (Sun in light, Moon in dark)
+- FOUC prevention confirmed (dark pages load with dark class already applied)
+
+- VERDICT: PASS (Visual QA)
