@@ -113,3 +113,18 @@ Add a navigation sidebar to `MainLayout` that shows a collapsible project/sessio
 - Sessions already have `project_id` so the breadcrumb can fetch the parent project
 - Keep the sidebar responsive -- do not break the MobileLayout (it uses a separate component)
 - This is a single-user self-hosted tool -- no need for workspace switching or multi-user features
+
+## Log
+
+### [SWE] 2026-03-18 11:29
+- Created Sidebar component with collapsible project/session tree, localStorage-persisted collapse state, status dots, active page highlighting
+- Created Breadcrumb component with clickable link segments and aria-current on last segment
+- Updated MainLayout to use new Sidebar component (replaced static sidebar)
+- Updated ProjectPage to show breadcrumb (Dashboard > Project Name), replacing old "Back to Dashboard" link
+- Updated SessionPage to show breadcrumb (Dashboard > Project Name > Session Name), fetching parent project for breadcrumb context
+- Updated existing ProjectPage tests to use getByRole("heading") since project name now appears in both breadcrumb and h1
+- Files created: web/src/components/Sidebar.tsx, web/src/components/Breadcrumb.tsx, web/src/test/Breadcrumb.test.tsx, web/src/test/Sidebar.test.tsx
+- Files modified: web/src/layouts/MainLayout.tsx, web/src/pages/ProjectPage.tsx, web/src/pages/SessionPage.tsx, web/src/test/ProjectPage.test.tsx
+- Tests added: 17 new tests (5 Breadcrumb, 12 Sidebar)
+- Build results: 514 tests pass, 0 fail, tsc clean
+- Known limitations: none

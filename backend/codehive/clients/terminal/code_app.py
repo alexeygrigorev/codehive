@@ -199,6 +199,9 @@ class CodeApp(App):
         api_key: str = "",
         base_url: str = "",
         auto_approve: bool = False,
+        backend_url: str | None = None,
+        session_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(**kwargs)  # type: ignore[arg-type]
@@ -210,13 +213,15 @@ class CodeApp(App):
         self._always_approved: set[str] = set()
         self._approval_event: asyncio.Event = asyncio.Event()
         self._approval_result: str = ""
-        self._session_id = uuid.uuid4()
+        self._session_id = session_id or uuid.uuid4()
         self._engine: Any = None
         self._busy = False
         self._streaming_widget: _AssistantMarkdown | None = None
         self._streaming_buffer: str = ""
         self._user_scrolled_up = False
         self._awaiting_approval = False
+        self._backend_url: str | None = backend_url
+        self._project_id: uuid.UUID | None = project_id
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -232,6 +237,11 @@ class CodeApp(App):
         self.query_one("#code-input", _ChatInput).focus()
 
     async def _init_engine(self) -> None:
+        if self._backend_url is not None:
+            # Backend mode: no local engine needed
+            self._engine = None
+            return
+
         from codehive.engine.native import NativeEngine
         from codehive.execution.diff import DiffService
         from codehive.execution.file_ops import FileOps
@@ -432,12 +442,70 @@ class CodeApp(App):
     async def action_new_session(self) -> None:
         """Start a new session -- reset engine state and clear the UI."""
         self.action_clear_chat()
-        self._session_id = uuid.uuid4()
         self._always_approved = set()
-        if self._engine is not None:
-            await self._engine.create_session(self._session_id)
+
+        if self._backend_url is not None and self._project_id is not None:
+            # Backend mode: create a new session via the API
+            import httpx as _httpx
+
+            try:
+                async with _httpx.AsyncClient(base_url=self._backend_url, timeout=30.0) as client:
+                    resp = await client.post(
+                        f"/api/projects/{self._project_id}/sessions",
+                        json={
+                            "name": "code-session",
+                            "engine": "native",
+                            "mode": "execution",
+                        },
+                    )
+                    if resp.status_code in (200, 201):
+                        self._session_id = uuid.UUID(resp.json()["id"])
+                    else:
+                        self._append_system(
+                            f"Failed to create new session (HTTP {resp.status_code})"
+                        )
+                        return
+            except Exception as exc:
+                self._append_system(f"Error creating session: {exc}")
+                return
+        else:
+            self._session_id = uuid.uuid4()
+            if self._engine is not None:
+                await self._engine.create_session(self._session_id)
+
         self._append_system(f"New session started in {self._project_dir}")
         self._set_status(f"[dim]project: {self._project_dir}[/dim]")
+
+    # ---- Backend message sending ------------------------------------------
+
+    async def _send_backend_message(self, message: str) -> Any:
+        """Send a message to the backend API and yield events from the response."""
+        import httpx as _httpx
+
+        async with _httpx.AsyncClient(
+            base_url=self._backend_url,  # type: ignore[arg-type]
+            timeout=300.0,
+        ) as client:
+            resp = await client.post(
+                f"/api/sessions/{self._session_id}/messages",
+                json={"content": message},
+            )
+            if resp.status_code != 200:
+                detail = ""
+                try:
+                    detail = resp.json().get("detail", resp.text)
+                except Exception:
+                    detail = resp.text
+                yield {
+                    "type": "message.created",
+                    "role": "assistant",
+                    "content": f"Error from backend (HTTP {resp.status_code}): {detail}",
+                }
+                return
+
+            events = resp.json()
+            for event in events:
+                yield event
 
     # ---- Event handling ---------------------------------------------------
 
@@ -477,7 +545,11 @@ class CodeApp(App):
         t_start = time.monotonic()
         received_deltas = False
         try:
-            async for event in self._engine.send_message(self._session_id, message):
+            if self._backend_url is not None:
+                event_iter = self._send_backend_message(message)
+            else:
+                event_iter = self._engine.send_message(self._session_id, message)
+            async for event in event_iter:
                 etype = event.get("type", "")
 
                 if etype == "message.delta" and event.get("role") == "assistant":

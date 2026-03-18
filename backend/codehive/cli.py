@@ -466,6 +466,19 @@ def main() -> None:
         default=False,
         help="Skip all tool confirmation prompts",
     )
+    # Mutually exclusive session flags
+    code_session_group = code_parser.add_mutually_exclusive_group()
+    code_session_group.add_argument(
+        "--session",
+        default=None,
+        help="Connect to a specific existing session (UUID)",
+    )
+    code_session_group.add_argument(
+        "--new",
+        action="store_true",
+        default=False,
+        help="Always create a new session (don't resume the latest)",
+    )
 
     # providers subcommand group
     providers_parser = subparsers.add_parser("providers", help="Manage LLM providers")
@@ -640,8 +653,113 @@ def _resolve_provider(args: argparse.Namespace) -> tuple[str, str, str]:
     return api_key, base_url, model
 
 
+def _probe_backend(backend_url: str) -> bool:
+    """Probe GET /api/system/health on the backend. Returns True if reachable and 200."""
+    try:
+        resp = httpx.get(f"{backend_url}/api/system/health", timeout=3.0)
+        return resp.status_code == 200
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.ConnectTimeout):
+        return False
+    except Exception:
+        return False
+
+
+def _resolve_project_and_session(
+    backend_url: str,
+    project_dir: str,
+    session_flag: str | None,
+    new_flag: bool,
+) -> tuple[str, str]:
+    """Resolve project_id and session_id from the backend.
+
+    Returns (project_id, session_id) as strings.
+    Raises SystemExit on errors.
+    """
+    import uuid as _uuid
+
+    client = httpx.Client(base_url=backend_url, timeout=30.0)
+
+    # Get or create project by path
+    try:
+        resp = client.post("/api/projects/by-path", json={"path": project_dir})
+    except httpx.ConnectError:
+        print("Backend not available, starting local-only session", file=sys.stderr)
+        raise SystemExit(None)
+
+    if resp.status_code not in (200, 201):
+        print(
+            f"Warning: Failed to resolve project (HTTP {resp.status_code}), "
+            "starting local-only session",
+            file=sys.stderr,
+        )
+        raise SystemExit(None)
+
+    project = resp.json()
+    project_id = project["id"]
+
+    # Session resolution
+    if session_flag:
+        # Validate it looks like a UUID
+        try:
+            _uuid.UUID(session_flag)
+        except ValueError:
+            print(f"Error: Invalid session UUID: {session_flag}", file=sys.stderr)
+            sys.exit(1)
+        session_id = session_flag
+    elif new_flag:
+        resp = client.post(
+            f"/api/projects/{project_id}/sessions",
+            json={"name": "code-session", "engine": "native", "mode": "execution"},
+        )
+        if resp.status_code not in (200, 201):
+            print(
+                f"Warning: Failed to create session (HTTP {resp.status_code}), "
+                "starting local-only session",
+                file=sys.stderr,
+            )
+            raise SystemExit(None)
+        session_id = resp.json()["id"]
+    else:
+        # List sessions, pick most recent
+        resp = client.get(f"/api/projects/{project_id}/sessions")
+        if resp.status_code == 200:
+            sessions = resp.json()
+            if sessions:
+                # Pick the most recent by created_at
+                most_recent = max(sessions, key=lambda s: s.get("created_at", ""))
+                session_id = most_recent["id"]
+            else:
+                # No sessions exist, create one
+                resp = client.post(
+                    f"/api/projects/{project_id}/sessions",
+                    json={
+                        "name": "code-session",
+                        "engine": "native",
+                        "mode": "execution",
+                    },
+                )
+                if resp.status_code not in (200, 201):
+                    print(
+                        f"Warning: Failed to create session (HTTP {resp.status_code}), "
+                        "starting local-only session",
+                        file=sys.stderr,
+                    )
+                    raise SystemExit(None)
+                session_id = resp.json()["id"]
+        else:
+            print(
+                f"Warning: Failed to list sessions (HTTP {resp.status_code}), "
+                "starting local-only session",
+                file=sys.stderr,
+            )
+            raise SystemExit(None)
+
+    client.close()
+    return project_id, session_id
+
+
 def _code(args: argparse.Namespace) -> None:
-    import os
+    import uuid as _uuid
 
     from codehive.clients.terminal.code_app import CodeApp
 
@@ -650,23 +768,59 @@ def _code(args: argparse.Namespace) -> None:
         print(f"Error: {project_dir} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    api_key, base_url, model = _resolve_provider(args)
+    backend_url = _get_base_url(args)
+    session_flag = getattr(args, "session", None)
+    new_flag = getattr(args, "new", False)
 
-    if not api_key:
+    # Probe backend
+    backend_available = _probe_backend(backend_url)
+
+    if not backend_available:
         print(
-            "Error: No API key found. Set CODEHIVE_ANTHROPIC_API_KEY or "
-            "ANTHROPIC_API_KEY environment variable.",
+            "Backend not available, starting local-only session",
             file=sys.stderr,
         )
-        sys.exit(1)
 
-    app = CodeApp(
-        project_dir=project_dir,
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        auto_approve=getattr(args, "auto_approve", False),
-    )
+    if backend_available:
+        try:
+            project_id, session_id = _resolve_project_and_session(
+                backend_url, project_dir, session_flag, new_flag
+            )
+        except SystemExit:
+            # Fall back to local mode
+            backend_available = False
+            project_id = None
+            session_id = None
+        else:
+            project_id_uuid = _uuid.UUID(project_id)
+            session_id_uuid = _uuid.UUID(session_id)
+
+    if backend_available:
+        app = CodeApp(
+            project_dir=project_dir,
+            auto_approve=getattr(args, "auto_approve", False),
+            backend_url=backend_url,
+            project_id=project_id_uuid,  # type: ignore[possibly-undefined]
+            session_id=session_id_uuid,  # type: ignore[possibly-undefined]
+        )
+    else:
+        api_key, base_url, model = _resolve_provider(args)
+
+        if not api_key:
+            print(
+                "Error: No API key found. Set CODEHIVE_ANTHROPIC_API_KEY or "
+                "ANTHROPIC_API_KEY environment variable.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        app = CodeApp(
+            project_dir=project_dir,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            auto_approve=getattr(args, "auto_approve", False),
+        )
     app.run()
 
 
