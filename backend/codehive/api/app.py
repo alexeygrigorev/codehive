@@ -51,6 +51,17 @@ def create_app() -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Run first-run setup and session recovery on startup; mark sessions on shutdown."""
+        from codehive.db.models import Base
+        from codehive.db.session import create_async_engine_from_settings
+
+        # Auto-create tables for SQLite (no Alembic needed for dev)
+        settings = Settings()
+        if settings.database_url.startswith("sqlite"):
+            engine = create_async_engine_from_settings(settings.database_url)
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            await engine.dispose()
+
         session_maker = async_session_factory()
         async with session_maker() as db:
             credentials = await seed_first_run(db)
