@@ -39,6 +39,7 @@ from codehive.api.routes.tasks import session_tasks_router, tasks_router
 from codehive.api.routes.error_tracking import router as error_tracking_router
 from codehive.api.routes.project_flow import router as project_flow_router
 from codehive.api.routes.transcript import transcript_router
+from codehive.api.routes.async_dispatch import async_dispatch_router
 from codehive.api.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,16 @@ def create_app() -> FastAPI:
             logger.info("Startup recovery: %d session(s) marked as interrupted", count)
 
         yield
+
+        # Cancel any background engine tasks
+        from codehive.api.routes.async_dispatch import get_running_tasks
+
+        running = get_running_tasks()
+        if running:
+            logger.info("Shutdown: cancelling %d background engine task(s)", len(running))
+            for task in running.values():
+                task.cancel()
+            running.clear()
 
         # Graceful shutdown: mark executing sessions as interrupted
         async with session_maker() as db:
@@ -128,5 +139,6 @@ def create_app() -> FastAPI:
     app.include_router(project_flow_router, dependencies=_auth)
     app.include_router(transcript_router, dependencies=_auth)
     app.include_router(error_tracking_router, dependencies=_auth)
+    app.include_router(async_dispatch_router, dependencies=_auth)
 
     return app

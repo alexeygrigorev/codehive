@@ -222,6 +222,8 @@ class CodeApp(App):
         self._awaiting_approval = False
         self._backend_url: str | None = backend_url
         self._project_id: uuid.UUID | None = project_id
+        self._last_history_timestamp: str = ""  # for deduplication with WebSocket
+        self._ws_task: asyncio.Task | None = None  # type: ignore[type-arg]
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -233,7 +235,10 @@ class CodeApp(App):
 
     async def on_mount(self) -> None:
         await self._init_engine()
-        self._append_system(f"Session started in {self._project_dir}")
+        if self._backend_url is not None:
+            await self._load_backend_session()
+        else:
+            self._append_system(f"Session started in {self._project_dir}")
         self.query_one("#code-input", _ChatInput).focus()
 
     async def _init_engine(self) -> None:
@@ -278,6 +283,232 @@ class CodeApp(App):
             approval_callback=self._approval_callback,
         )
         await self._engine.create_session(self._session_id)
+
+    # ---- Backend session loading ------------------------------------------
+
+    async def _load_backend_session(self) -> None:
+        """Load session status and transcript history from the backend.
+
+        If the session is still executing, starts a WebSocket listener to
+        stream live events after the historical entries.
+        """
+        import httpx as _httpx
+
+        self._set_status("[dim]reconnected (loading history...)[/dim]")
+
+        try:
+            async with _httpx.AsyncClient(
+                base_url=self._backend_url,  # type: ignore[arg-type]
+                timeout=30.0,
+            ) as client:
+                # 1. Check session status
+                status_resp = await client.get(f"/api/sessions/{self._session_id}")
+                if status_resp.status_code != 200:
+                    self._append_system(f"Session started in {self._project_dir}")
+                    self._set_status(f"[dim]project: {self._project_dir}[/dim]")
+                    return
+
+                session_data = status_resp.json()
+                session_status = session_data.get("status", "idle")
+
+                # 2. Load transcript
+                transcript_resp = await client.get(
+                    f"/api/sessions/{self._session_id}/transcript",
+                    params={"format": "json"},
+                )
+                if transcript_resp.status_code == 200:
+                    transcript = transcript_resp.json()
+                    entries = transcript.get("entries", [])
+                    if entries:
+                        self._render_transcript_entries(entries)
+                        # Record last timestamp for deduplication
+                        last = entries[-1]
+                        self._last_history_timestamp = last.get("timestamp", "")
+                        # Separator
+                        self._append_system("--- reconnected ---")
+                    else:
+                        self._append_system(f"Session started in {self._project_dir}")
+                else:
+                    self._append_system(f"Session started in {self._project_dir}")
+
+            # 3. If session is executing, connect WebSocket for live events
+            if session_status == "executing":
+                self._set_status("[dim]reconnected (catching up)[/dim]")
+                self._busy = True
+                inp = self.query_one("#code-input", _ChatInput)
+                inp.disabled = True
+                inp.read_only = True
+                self._ws_task = asyncio.create_task(self._stream_ws_events())
+            elif session_status == "failed":
+                self._set_status("[bold red]session failed[/bold red]")
+            else:
+                self._set_status("[dim]idle[/dim]")
+
+        except Exception as exc:
+            self._append_system(f"Error loading session: {exc}")
+            self._set_status(f"[dim]project: {self._project_dir}[/dim]")
+
+    def _render_transcript_entries(self, entries: list[dict]) -> None:
+        """Render historical transcript entries into the chat area."""
+        for entry in entries:
+            entry_type = entry.get("type", "")
+            if entry_type == "message":
+                role = entry.get("role", "system")
+                content = entry.get("content", "")
+                if not content:
+                    continue
+                if role == "user":
+                    self._append_user(content)
+                elif role == "assistant":
+                    self._append_assistant(content)
+                else:
+                    self._append_system(content)
+            elif entry_type == "tool_call":
+                tool_name = entry.get("tool_name", "?")
+                tool_input = entry.get("input", "")
+                summary = tool_input[:100] if tool_input else "..."
+                self._append_tool(tool_name, summary)
+
+    async def _stream_ws_events(self) -> None:
+        """Connect to the session WebSocket and render live events.
+
+        Skips events that overlap with already-loaded history (deduplication
+        by timestamp).
+        """
+        import json as _json
+
+        try:
+            import websockets  # type: ignore[import-untyped]
+        except ImportError:
+            # Fallback: poll session status instead
+            self._append_system("WebSocket library not available, polling for completion...")
+            await self._poll_session_status()
+            return
+
+        ws_url = self._backend_url or ""
+        ws_url = ws_url.replace("http://", "ws://").replace("https://", "wss://")
+        ws_url = f"{ws_url}/api/sessions/{self._session_id}/ws"
+
+        try:
+            async with websockets.connect(ws_url) as ws:
+                self._set_status("[dim]connected (live)[/dim]")
+                async for raw_msg in ws:
+                    try:
+                        event = _json.loads(raw_msg)
+                    except (ValueError, TypeError):
+                        continue
+
+                    # Deduplication: skip events with timestamps <= last history entry
+                    event_ts = event.get("created_at", "") or event.get("timestamp", "")
+                    if (
+                        event_ts
+                        and self._last_history_timestamp
+                        and event_ts <= self._last_history_timestamp
+                    ):
+                        continue
+
+                    self._process_ws_event(event)
+        except Exception:
+            pass  # WebSocket closed or errored -- that's fine
+        finally:
+            self._busy = False
+            self._streaming_widget = None
+            self._streaming_buffer = ""
+            self._set_status("[dim]idle[/dim]")
+            inp = self.query_one("#code-input", _ChatInput)
+            inp.disabled = False
+            inp.read_only = False
+            inp.focus()
+
+    async def _poll_session_status(self) -> None:
+        """Fallback: poll GET /api/sessions/{id} until status is no longer executing."""
+        import httpx as _httpx
+
+        try:
+            async with _httpx.AsyncClient(
+                base_url=self._backend_url,  # type: ignore[arg-type]
+                timeout=10.0,
+            ) as client:
+                while True:
+                    resp = await client.get(f"/api/sessions/{self._session_id}")
+                    if resp.status_code == 200:
+                        status = resp.json().get("status", "idle")
+                        if status != "executing":
+                            break
+                    await asyncio.sleep(2.0)
+        except Exception:
+            pass
+        finally:
+            self._busy = False
+            self._set_status("[dim]idle[/dim]")
+            inp = self.query_one("#code-input", _ChatInput)
+            inp.disabled = False
+            inp.read_only = False
+            inp.focus()
+
+    def _process_ws_event(self, event: dict) -> None:
+        """Process a single WebSocket event and render it in the UI."""
+        etype = event.get("type", "")
+
+        if etype == "message.delta" and event.get("role") == "assistant":
+            content = event.get("content", "")
+            if content:
+                if self._streaming_widget is None:
+                    self._start_streaming_widget()
+                    self._set_status("[bold green]streaming...[/bold green]")
+                self._append_streaming_delta(content)
+
+        elif etype == "message.created" and event.get("role") == "assistant":
+            content = event.get("content", "")
+            if content:
+                if self._streaming_widget is not None:
+                    self._finalize_streaming(content)
+                else:
+                    self._append_assistant(content)
+
+        elif etype == "tool.call.started":
+            if self._streaming_widget is not None:
+                self._finalize_streaming(self._streaming_buffer)
+            tool_name = event.get("tool_name", "?")
+            tool_input = event.get("tool_input", {})
+            summary = _tool_summary(tool_name, tool_input)
+            self._append_tool(tool_name, summary)
+            self._set_status(f"[bold magenta]running {tool_name}...[/bold magenta]")
+
+        elif etype == "tool.call.finished":
+            tool_name = event.get("tool_name", "?")
+            result = event.get("result", {})
+            is_error = result.get("is_error", False)
+            if is_error:
+                content = result.get("content", "")[:200]
+                self._append_tool(tool_name, f"[red]error: {content}[/red]")
+
+    # ---- Backend async message dispatch -----------------------------------
+
+    async def _send_backend_message_async(self, message: str) -> None:
+        """Send a message via the async dispatch endpoint and stream results via WebSocket."""
+        import httpx as _httpx
+
+        async with _httpx.AsyncClient(
+            base_url=self._backend_url,  # type: ignore[arg-type]
+            timeout=30.0,
+        ) as client:
+            resp = await client.post(
+                f"/api/sessions/{self._session_id}/messages/async",
+                json={"content": message},
+            )
+            if resp.status_code == 202:
+                # Engine started -- connect WebSocket to stream events
+                await self._stream_ws_events()
+            elif resp.status_code == 409:
+                self._append_system("Session already has a running engine task.")
+            else:
+                detail = ""
+                try:
+                    detail = resp.json().get("detail", resp.text)
+                except Exception:
+                    detail = resp.text
+                self._append_system(f"Error from backend (HTTP {resp.status_code}): {detail}")
 
     # ---- Approval callback ------------------------------------------------
 
@@ -546,7 +777,9 @@ class CodeApp(App):
         received_deltas = False
         try:
             if self._backend_url is not None:
-                event_iter = self._send_backend_message(message)
+                # Use async dispatch + WebSocket so engine survives TUI disconnect
+                await self._send_backend_message_async(message)
+                return
             else:
                 event_iter = self._engine.send_message(self._session_id, message)
             async for event in event_iter:

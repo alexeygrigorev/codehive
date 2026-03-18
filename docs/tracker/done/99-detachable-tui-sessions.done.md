@@ -130,6 +130,25 @@ Currently `POST /api/sessions/{id}/messages` runs the engine synchronously and r
 - Reconnect: verify history includes the message and response
 - Verify status indicator shows `"reconnected (loading history...)"` then transitions appropriately
 
+## Log
+
+### [SWE] 2026-03-18 10:50
+- Implemented all three parts: async dispatch (A), history loading (B), live streaming resume (C)
+- Part A: New endpoint POST /api/sessions/{id}/messages/async in a separate route file (async_dispatch.py) to avoid conflicts with #94c. Returns 202 Accepted, runs engine as asyncio background task. Rejects 409 if already running. Updates session status to executing/waiting_input/failed. Task registry with shutdown cleanup.
+- Part B: CodeApp._load_backend_session() loads transcript via GET /api/sessions/{id}/transcript?format=json on mount. Renders user/assistant messages and tool calls. Shows "--- reconnected ---" separator. Empty transcript shows normal start message.
+- Part C: If session status is "executing" on connect, starts WebSocket listener (_stream_ws_events) for live events. Deduplication by timestamp comparison. Fallback to polling if websockets library unavailable. Status bar indicators: "reconnected (loading history...)", "connected (live)", "idle".
+- Backend mode now uses async dispatch + WebSocket instead of synchronous POST, so engine survives TUI disconnect.
+- Files modified:
+  - backend/codehive/api/routes/async_dispatch.py (NEW - async dispatch endpoint + background task management)
+  - backend/codehive/api/app.py (register async_dispatch_router, add shutdown cleanup)
+  - backend/codehive/clients/terminal/code_app.py (history loading, WebSocket streaming, async dispatch, deduplication)
+- Files created:
+  - backend/tests/test_async_dispatch.py (9 tests: 202 response, 404, 409 conflict, executing status, waiting_input after completion, failed on error, disconnect resilience, task cleanup, full lifecycle)
+  - backend/tests/test_detachable_sessions.py (16 tests: history loading, empty transcript, error handling, executing/idle/failed/completed reconnect, deduplication, WS event processing, async dispatch from TUI, transcript rendering)
+- Tests added: 25 new tests across 2 files
+- Build results: 1747 tests pass, 0 fail, ruff clean
+- Known limitations: WebSocket streaming requires the `websockets` library (falls back to polling if not available). cli.py was not modified (no changes needed -- existing _code() function already handles session resolution).
+
 ## Implementation Notes
 
 - The existing `POST /api/sessions/{id}/messages` endpoint can remain as-is for backward compatibility (web clients may use it synchronously). The new async variant is specifically for the detachable TUI workflow.
