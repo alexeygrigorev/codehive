@@ -10,6 +10,7 @@ import RolesPage from "@/pages/RolesPage";
 import SearchPage from "@/pages/SearchPage";
 import NewProjectPage from "@/pages/NewProjectPage";
 import NotFoundPage from "@/pages/NotFoundPage";
+import UsagePage from "@/pages/UsagePage";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 
@@ -32,6 +33,7 @@ function AppRoutes() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/questions" element={<QuestionsPage />} />
         <Route path="/roles" element={<RolesPage />} />
+        <Route path="/usage" element={<UsagePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

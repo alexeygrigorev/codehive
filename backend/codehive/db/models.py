@@ -140,6 +140,7 @@ class Session(Base):
     events: Mapped[list["Event"]] = relationship(back_populates="session")
     checkpoints: Mapped[list["Checkpoint"]] = relationship(back_populates="session")
     pending_questions: Mapped[list["PendingQuestion"]] = relationship(back_populates="session")
+    usage_records: Mapped[list["UsageRecord"]] = relationship(back_populates="session")
 
 
 class Task(Base):
@@ -287,6 +288,25 @@ class PushSubscription(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
+
+
+class UsageRecord(Base):
+    __tablename__ = "usage_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        PortableUUID, ForeignKey("sessions.id"), nullable=False
+    )
+    model: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+
+    session: Mapped["Session"] = relationship(back_populates="usage_records")
 
 
 class DeviceToken(Base):

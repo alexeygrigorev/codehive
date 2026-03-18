@@ -7,6 +7,7 @@ import QuestionsPanel from "./QuestionsPanel";
 import CheckpointPanel from "./CheckpointPanel";
 import AgentCommPanel from "./AgentCommPanel";
 import SessionHistorySearch from "@/components/SessionHistorySearch";
+import UsagePanel from "./UsagePanel";
 
 export type TabKey =
   | "todo"
@@ -16,7 +17,8 @@ export type TabKey =
   | "comms"
   | "questions"
   | "checkpoints"
-  | "search";
+  | "search"
+  | "usage";
 
 interface TabDef {
   key: TabKey;
@@ -32,6 +34,7 @@ const TABS: TabDef[] = [
   { key: "questions", label: "Questions" },
   { key: "checkpoints", label: "Checkpoints" },
   { key: "search", label: "Search" },
+  { key: "usage", label: "Usage" },
 ];
 
 interface SidebarTabsProps {
@@ -92,6 +95,7 @@ export default function SidebarTabs({
         {activeTab === "search" && (
           <SessionHistorySearch sessionId={sessionId} />
         )}
+        {activeTab === "usage" && <UsagePanel sessionId={sessionId} />}
       </div>
     </div>
   );

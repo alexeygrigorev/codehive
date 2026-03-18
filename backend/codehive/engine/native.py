@@ -352,6 +352,26 @@ class NativeEngine:
 
                 response = await stream.get_final_message()
 
+            # Record usage data
+            if db is not None and hasattr(response, "usage") and response.usage:
+                try:
+                    from codehive.db.models import UsageRecord
+
+                    usage_record = UsageRecord(
+                        session_id=session_id,
+                        model=response.model or self._model,
+                        input_tokens=response.usage.input_tokens or 0,
+                        output_tokens=response.usage.output_tokens or 0,
+                    )
+                    db.add(usage_record)
+                    await db.commit()
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to record usage for session %s: %s",
+                        session_id,
+                        exc,
+                    )
+
             # Process content blocks for tool_use
             tool_use_blocks = []
             for block in response.content:

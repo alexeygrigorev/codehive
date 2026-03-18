@@ -136,6 +136,20 @@ export default function Sidebar() {
               {collapsed ? "D" : "Dashboard"}
             </NavLink>
           </li>
+          <li>
+            <NavLink
+              to="/usage"
+              className={({ isActive }) =>
+                `block px-4 py-2 text-sm ${
+                  isActive
+                    ? "bg-gray-800 text-white font-medium"
+                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                }`
+              }
+            >
+              {collapsed ? "U" : "Usage"}
+            </NavLink>
+          </li>
           {projects.map((project) => {
             const isActiveProject = activeProjectId === project.id;
             const isExpanded = expandedProjects.has(project.id);
