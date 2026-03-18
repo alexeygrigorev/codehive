@@ -130,3 +130,24 @@ This issue covers the **project page layout redesign** only. It adds tabbed navi
 - Tests added: 5 issues API tests, 6 IssueList component tests, 11 ProjectPage tests (rewritten to cover tabs, session form, issue creation)
 - Build results: 497 tests pass, 0 fail, TypeScript clean
 - Known limitations: issue link dropdown in session form only populates if issues have been loaded (switching to Issues tab first or having issues already fetched)
+
+### [QA] 2026-03-18 14:16
+- Tests: 567 passed, 0 failed (web vitest)
+- TypeScript build: clean (no errors)
+- Backend tests: 1747 passed, 3 skipped, 0 failed
+- Ruff check: clean
+- Ruff format: clean
+- Acceptance criteria:
+  - Project page renders with two tabs "Sessions" and "Issues": PASS
+  - Sessions tab shows session list with name, status badge, engine, mode, and created_at: PASS
+  - Sessions tab shows sub-agent count per session (0=nothing, 1+=badge): PASS
+  - Issues tab lists issues from backend API with title, status badge, and created_at: PASS
+  - Issues tab has status filter (All/Open/In Progress/Closed) that filters the list: PASS
+  - Issues tab has "New Issue" button that creates issue via API and adds to list: PASS
+  - Session creation uses form/modal instead of browser prompt(), with engine and mode selection: PASS
+  - `web/src/api/issues.ts` exists with fetchIssues and createIssue functions: PASS
+  - `web/src/components/IssueList.tsx` exists and renders issue data: PASS
+  - `cd web && npx vitest run` passes with new tests covering tabbed layout, issues list, and session creation: PASS (5 issues API tests + 6 IssueList tests + 11 ProjectPage tests)
+  - Existing ProjectPage.test.tsx tests still pass (updated for new layout): PASS
+  - No TypeScript errors (`npx tsc --noEmit`): PASS
+- VERDICT: PASS

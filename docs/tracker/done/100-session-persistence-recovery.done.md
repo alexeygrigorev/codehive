@@ -130,3 +130,19 @@ This issue covers backend-only changes: session status lifecycle, startup recove
   - 4 integration tests for resume-interrupted endpoint (200, 409 wrong status, 404, 409 no messages)
 - Build results: 1713 tests pass, 0 fail, 3 skipped, ruff clean
 - Known limitations: none
+
+### [QA] 2026-03-18 12:20
+- Tests: 1747 passed, 3 skipped, 0 failed (full backend); ruff clean; format clean
+- New tests: 16 in test_session_persistence.py (criterion: 8+)
+- Acceptance criteria:
+  1. 8+ new tests pass: PASS (16 new tests)
+  2. ruff check passes clean: PASS
+  3. Session status transitions to executing when engine starts: PASS
+  4. Session status transitions to waiting_input when engine finishes: PASS
+  5. On startup, executing sessions marked interrupted: PASS
+  6. On SIGTERM, executing sessions marked interrupted: PASS (graceful shutdown in lifespan)
+  7. POST /api/sessions/{id}/resume-interrupted on interrupted returns 200: PASS
+  8. POST /api/sessions/{id}/resume-interrupted on non-interrupted returns 409: PASS
+  9. mark_interrupted_sessions() bulk-updates only executing sessions: PASS
+  10. Startup recovery logged at INFO level with count: PASS
+- VERDICT: PASS

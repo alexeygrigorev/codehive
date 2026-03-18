@@ -150,3 +150,24 @@ Improve the session page layout and replace the raw timeline with a clean tool c
 - Tests added: 25 new tests (14 ActivityPanel, 4 buildActivityEntry/formatEventType, 7 collapsible sidebar)
 - Build results: 546 tests pass, 0 fail, tsc --noEmit clean
 - TimelinePanel component retained in codebase (not deleted) for backward compatibility; simply no longer referenced by SidebarTabs
+
+### [QA] 2026-03-18 12:15
+- Tests: 567 passed, 0 failed (all tests including 25 new ActivityPanel + SessionSidebar tests)
+- TypeScript: `tsc -b` clean
+- ESLint: fixed 2 `react-refresh/only-export-components` errors in ActivityPanel.tsx by extracting `buildActivityEntry` and `formatEventType` to a separate `activityUtils.ts` file. After fix: clean.
+- Acceptance criteria:
+  - Timeline tab is renamed to "Activity" in SidebarTabs: PASS
+  - Activity panel shows human-readable descriptions instead of raw event type strings: PASS
+  - Tool calls show the tool name (not just `tool.call.started`): PASS
+  - File change events show the filename: PASS
+  - Right sidebar has a collapse/expand toggle button: PASS
+  - When collapsed, the chat panel takes full width; a thin strip with the toggle remains visible: PASS
+  - Sidebar collapse state persists in localStorage: PASS
+  - Session header shows the parent project name as a clickable link: PASS
+  - Session header groups elements cleanly: name/status on left, mode/approval on right: PASS
+  - SessionHistorySearch is moved out of the main content flow (into sidebar tab): PASS
+  - `cd web && npx vitest run` passes with tests for the new activity panel and collapsible sidebar: PASS
+  - No TypeScript errors: `cd web && npx tsc --noEmit` passes: PASS
+  - Existing session page tests still pass: PASS
+- Fix applied: Extracted `buildActivityEntry` and `formatEventType` from `ActivityPanel.tsx` into `activityUtils.ts` to resolve react-refresh lint rule. Updated test imports accordingly.
+- VERDICT: PASS

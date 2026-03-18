@@ -128,3 +128,24 @@ Add a navigation sidebar to `MainLayout` that shows a collapsible project/sessio
 - Tests added: 17 new tests (5 Breadcrumb, 12 Sidebar)
 - Build results: 514 tests pass, 0 fail, tsc clean
 - Known limitations: none
+
+### [QA] 2026-03-18 12:15
+- Tests: 567 passed, 0 failed (all tests including 17 new Sidebar + Breadcrumb tests)
+- TypeScript: `tsc -b` clean
+- ESLint: clean on all changed files
+- Acceptance criteria:
+  - MainLayout sidebar shows a list of projects fetched from the API: PASS
+  - Clicking a project chevron expands to show its sessions: PASS
+  - Clicking a project name navigates to the project page: PASS
+  - Clicking a session name navigates to the session page: PASS
+  - Current page (project or session) is visually highlighted in the sidebar: PASS
+  - Sidebar has a collapse/expand toggle; collapsed state shows minimal width: PASS
+  - Collapse state persists across page loads (localStorage): PASS
+  - ProjectPage shows breadcrumb: Dashboard > Project Name: PASS
+  - SessionPage shows breadcrumb: Dashboard > Project Name > Session Name: PASS
+  - Breadcrumb segments (except current page) are clickable links: PASS
+  - DashboardPage shows no breadcrumb: PASS
+  - `cd web && npx vitest run` passes with tests for Breadcrumb and sidebar tree: PASS
+  - No TypeScript errors: `cd web && npx tsc --noEmit` passes: PASS
+  - Existing tests still pass: PASS
+- VERDICT: PASS

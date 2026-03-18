@@ -102,3 +102,19 @@ Web app only. This issue adds a waveform visualization component and recording t
 - All four visual states implemented: idle (no overlay), recording (waveform + timer + stop), processing (spinner + "Processing..."), done (transcript preview)
 - Graceful fallback when getUserMedia unavailable or permission denied (error state, no crash)
 - No audio processing libraries added -- only Web Audio API and Canvas API
+
+### [QA] 2026-03-18 12:20
+- Tests: 567 passed, 0 failed (web); tsc clean
+- Ruff: N/A (web-only issue)
+- Acceptance criteria:
+  1. `cd web && npx vitest run` passes with 8+ new tests: PASS (16 new tests: 7 useAudioWaveform + 5 AudioWaveform + 4 RecordingOverlay)
+  2. `useAudioWaveform` hook exists and manages AudioContext/AnalyserNode/MediaStream lifecycle: PASS
+  3. `AudioWaveform` component exists and renders canvas with waveform data: PASS
+  4. Recording starts shows waveform, elapsed timer (mm:ss), stop button: PASS
+  5. Recording stops cleans up audio resources: PASS
+  6. Elapsed time displays mm:ss and increments each second: PASS
+  7. Waveform is responsive (canvas width adapts via ResizeObserver): PASS
+  8. Handles getUserMedia unavailable/permission denied gracefully: PASS
+  9. No audio processing libraries added: PASS
+  10. All four visual states distinguishable (idle/recording/processing/done): PASS
+- VERDICT: PASS

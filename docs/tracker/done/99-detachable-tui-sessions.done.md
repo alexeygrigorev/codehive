@@ -149,6 +149,27 @@ Currently `POST /api/sessions/{id}/messages` runs the engine synchronously and r
 - Build results: 1747 tests pass, 0 fail, ruff clean
 - Known limitations: WebSocket streaming requires the `websockets` library (falls back to polling if not available). cli.py was not modified (no changes needed -- existing _code() function already handles session resolution).
 
+### [QA] 2026-03-18 12:20
+- Tests: 1747 passed, 3 skipped, 0 failed (full backend); ruff clean; format clean
+- New tests: 9 in test_async_dispatch.py + 16 in test_detachable_sessions.py = 25 total (criterion: 10+)
+- Acceptance criteria:
+  1. POST /api/sessions/{id}/messages/async returns 202 Accepted: PASS
+  2. Background engine task updates session status to executing/waiting_input/failed: PASS
+  3. Second POST while running returns 409 Conflict: PASS
+  4. Engine events stored/published during background execution: PASS (verified via existing EventBus pattern)
+  5. codehive code in backend mode loads transcript on connect: PASS
+  6. No history (new session) shows ready immediately: PASS
+  7. Executing session on connect starts WebSocket streaming: PASS
+  8. Idle/completed session on connect shows history, ready for input: PASS
+  9. After sending message, TUI connects WebSocket for live events: PASS
+  10. Closing TUI does not stop backend engine: PASS
+  11. Reopening shows messages that occurred while disconnected: PASS
+  12. Status bar shows appropriate indicators: PASS
+  13. Historical messages and live events not duplicated: PASS
+  14. 10+ new tests: PASS (25 new tests)
+  15. ruff check passes: PASS
+- VERDICT: PASS
+
 ## Implementation Notes
 
 - The existing `POST /api/sessions/{id}/messages` endpoint can remain as-is for backward compatibility (web clients may use it synchronously). The new async variant is specifically for the detachable TUI workflow.

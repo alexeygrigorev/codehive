@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ActivityPanel from "@/components/sidebar/ActivityPanel";
-import { buildActivityEntry, formatEventType } from "@/components/sidebar/ActivityPanel";
+import { buildActivityEntry, formatEventType } from "@/components/sidebar/activityUtils";
 import type { EventRead } from "@/api/events";
 
 vi.mock("@/api/events", () => ({
