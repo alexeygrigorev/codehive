@@ -9,6 +9,11 @@ from typing import Any, AsyncIterator, Callable
 
 from anthropic import AsyncAnthropic
 
+from codehive.core.compaction import (
+    ContextCompactor,
+    create_anthropic_summarizer,
+    should_compact,
+)
 from codehive.core.knowledge import build_knowledge_context
 from codehive.core.approval import (
     ApprovalPolicy,
@@ -368,6 +373,60 @@ class ZaiEngine:
                 except Exception as exc:
                     logger.warning(
                         "Failed to record usage for session %s: %s",
+                        session_id,
+                        exc,
+                    )
+
+            # Check if compaction is needed
+            if (
+                db is not None
+                and hasattr(response, "usage")
+                and response.usage
+                and response.usage.input_tokens
+            ):
+                try:
+                    from codehive.core.usage import get_context_window
+                    from codehive.db.models import Session as SessionModel
+
+                    session_row = await db.get(SessionModel, session_id)
+                    threshold = 0.80
+                    if session_row is not None:
+                        threshold = (session_row.config or {}).get("compaction_threshold", 0.80)
+
+                    context_window = get_context_window(self._model)
+                    input_tokens = response.usage.input_tokens
+
+                    if should_compact(input_tokens, context_window, threshold):
+                        summarize_fn = await create_anthropic_summarizer(self._client)
+                        compactor = ContextCompactor(summarize_fn)
+                        result = await compactor.compact(state.messages, model=self._model)
+                        if result.compacted:
+                            state.messages = result.messages
+                            # Emit compaction event
+                            if self._event_bus is not None:
+                                await self._event_bus.publish(
+                                    db,
+                                    session_id,
+                                    "context.compacted",
+                                    {
+                                        "messages_compacted": result.messages_compacted,
+                                        "messages_preserved": result.messages_preserved,
+                                        "summary_length": len(result.summary_text),
+                                        "threshold_percent": round(
+                                            (input_tokens / context_window) * 100, 1
+                                        ),
+                                        "summary_text": result.summary_text,
+                                    },
+                                )
+                            yield {
+                                "type": "context.compacted",
+                                "messages_compacted": result.messages_compacted,
+                                "messages_preserved": result.messages_preserved,
+                                "session_id": str(session_id),
+                            }
+                except Exception as exc:
+                    logger.warning(
+                        "Compaction check failed for session %s: %s",
                         session_id,
                         exc,
                     )

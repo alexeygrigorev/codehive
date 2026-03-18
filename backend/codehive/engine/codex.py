@@ -9,6 +9,11 @@ from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
 
+from codehive.core.compaction import (
+    ContextCompactor,
+    create_openai_summarizer,
+    should_compact,
+)
 from codehive.core.events import EventBus
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -222,6 +227,7 @@ class CodexEngine:
             # Call OpenAI Responses API with streaming
             text_content = ""
             function_calls: list[dict[str, Any]] = []
+            last_input_tokens: int = 0
 
             stream = await self._client.responses.create(
                 model=self._model,
@@ -278,6 +284,9 @@ class CodexEngine:
                                     exc,
                                 )
 
+                        if usage is not None:
+                            last_input_tokens = getattr(usage, "input_tokens", 0) or 0
+
                         # Extract function call items from output
                         output_items = getattr(response, "output", []) or []
                         for item in output_items:
@@ -290,6 +299,55 @@ class CodexEngine:
                                         "arguments": getattr(item, "arguments", "{}"),
                                     }
                                 )
+
+            # Check if compaction is needed
+            if db is not None and last_input_tokens > 0:
+                try:
+                    from codehive.core.usage import get_context_window
+                    from codehive.db.models import Session as SessionModel
+
+                    session_row = await db.get(SessionModel, session_id)
+                    threshold = 0.80
+                    if session_row is not None:
+                        threshold = (session_row.config or {}).get("compaction_threshold", 0.80)
+
+                    context_window = get_context_window(self._model)
+
+                    if should_compact(last_input_tokens, context_window, threshold):
+                        summarize_fn = await create_openai_summarizer(self._client)
+                        compactor = ContextCompactor(summarize_fn)
+                        compact_result = await compactor.compact(state.input, model=self._model)
+                        if compact_result.compacted:
+                            state.input = compact_result.messages
+                            # Emit compaction event
+                            if self._event_bus is not None:
+                                await self._event_bus.publish(
+                                    db,
+                                    session_id,
+                                    "context.compacted",
+                                    {
+                                        "messages_compacted": compact_result.messages_compacted,
+                                        "messages_preserved": compact_result.messages_preserved,
+                                        "summary_length": len(compact_result.summary_text),
+                                        "threshold_percent": round(
+                                            (last_input_tokens / context_window) * 100,
+                                            1,
+                                        ),
+                                        "summary_text": compact_result.summary_text,
+                                    },
+                                )
+                            yield {
+                                "type": "context.compacted",
+                                "messages_compacted": compact_result.messages_compacted,
+                                "messages_preserved": compact_result.messages_preserved,
+                                "session_id": str(session_id),
+                            }
+                except Exception as exc:
+                    logger.warning(
+                        "Compaction check failed for session %s: %s",
+                        session_id,
+                        exc,
+                    )
 
             # If there are function calls, execute them
             if function_calls:
