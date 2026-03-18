@@ -1,16 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProject, type ProjectRead } from "@/api/projects";
 import { createSession, fetchSessions, type SessionRead } from "@/api/sessions";
+import {
+  fetchIssues,
+  createIssue,
+  type IssueRead,
+  type IssueStatus,
+} from "@/api/issues";
 import SessionList from "@/components/SessionList";
+import IssueList from "@/components/IssueList";
+
+type Tab = "sessions" | "issues";
+
+const engines = ["native", "claude_code"] as const;
+const modes = [
+  "execution",
+  "brainstorm",
+  "interview",
+  "planning",
+  "review",
+] as const;
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [sessions, setSessions] = useState<SessionRead[]>([]);
+  const [issues, setIssues] = useState<IssueRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>("sessions");
+
+  // Session creation form state
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [sessionName, setSessionName] = useState("");
+  const [sessionEngine, setSessionEngine] = useState<string>("native");
+  const [sessionMode, setSessionMode] = useState<string>("execution");
+  const [sessionIssueId, setSessionIssueId] = useState<string>("");
+  const [creatingSession, setCreatingSession] = useState(false);
+
+  // Issues filter state
+  const [issueFilter, setIssueFilter] = useState<IssueStatus | null>(null);
+  const [issuesLoaded, setIssuesLoaded] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -41,6 +72,69 @@ export default function ProjectPage() {
     };
   }, [projectId]);
 
+  // Load issues when switching to issues tab
+  const loadIssues = useCallback(
+    async (status?: IssueStatus | null) => {
+      if (!projectId) return;
+      try {
+        const result = await fetchIssues(
+          projectId,
+          status ?? undefined,
+        );
+        setIssues(result);
+        setIssuesLoaded(true);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load issues",
+        );
+      }
+    },
+    [projectId],
+  );
+
+  useEffect(() => {
+    if (activeTab === "issues" && !issuesLoaded) {
+      loadIssues(issueFilter);
+    }
+  }, [activeTab, issuesLoaded, issueFilter, loadIssues]);
+
+  function handleFilterChange(status: IssueStatus | null) {
+    setIssueFilter(status);
+    loadIssues(status);
+  }
+
+  async function handleCreateSession(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sessionName.trim() || !projectId) return;
+    setCreatingSession(true);
+    try {
+      const session = await createSession(projectId, {
+        name: sessionName.trim(),
+        engine: sessionEngine,
+        mode: sessionMode,
+        ...(sessionIssueId ? { issue_id: sessionIssueId } : {}),
+      });
+      setSessions((prev) => [...prev, session]);
+      setSessionName("");
+      setSessionEngine("native");
+      setSessionMode("execution");
+      setSessionIssueId("");
+      setShowSessionForm(false);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create session",
+      );
+    } finally {
+      setCreatingSession(false);
+    }
+  }
+
+  async function handleCreateIssue(title: string, description?: string) {
+    if (!projectId) return;
+    const issue = await createIssue(projectId, { title, description });
+    setIssues((prev) => [...prev, issue]);
+  }
+
   if (loading) {
     return (
       <div>
@@ -57,7 +151,10 @@ export default function ProjectPage() {
         <p className="text-red-600 mt-4">
           {error ?? "Project not found"}
         </p>
-        <Link to="/" className="text-blue-600 hover:underline mt-2 inline-block">
+        <Link
+          to="/"
+          className="text-blue-600 hover:underline mt-2 inline-block"
+        >
           Back to Dashboard
         </Link>
       </div>
@@ -85,30 +182,155 @@ export default function ProjectPage() {
           <p className="mt-1 text-sm text-gray-500">Path: {project.path}</p>
         )}
       </div>
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Sessions</h2>
+
+      {/* Tabs */}
+      <div className="mt-6 border-b border-gray-200">
+        <nav className="flex gap-4" role="tablist">
           <button
-            onClick={async () => {
-              const name = prompt("Session name:", "New Session");
-              if (!name?.trim()) return;
-              setCreating(true);
-              try {
-                const session = await createSession(projectId!, { name: name.trim() });
-                setSessions((prev) => [...prev, session]);
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to create session");
-              } finally {
-                setCreating(false);
-              }
-            }}
-            disabled={creating}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+            role="tab"
+            aria-selected={activeTab === "sessions"}
+            onClick={() => setActiveTab("sessions")}
+            className={`pb-2 text-sm font-medium border-b-2 ${
+              activeTab === "sessions"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
           >
-            {creating ? "Creating..." : "+ New Session"}
+            Sessions
           </button>
-        </div>
-        <SessionList sessions={sessions} />
+          <button
+            role="tab"
+            aria-selected={activeTab === "issues"}
+            onClick={() => setActiveTab("issues")}
+            className={`pb-2 text-sm font-medium border-b-2 ${
+              activeTab === "issues"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Issues
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab content */}
+      <div className="mt-4">
+        {activeTab === "sessions" && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">Sessions</h2>
+              <button
+                onClick={() => setShowSessionForm(!showSessionForm)}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm"
+              >
+                + New Session
+              </button>
+            </div>
+
+            {showSessionForm && (
+              <form
+                onSubmit={handleCreateSession}
+                className="mb-4 p-4 border border-gray-200 rounded-lg bg-white"
+              >
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={sessionName}
+                    onChange={(e) => setSessionName(e.target.value)}
+                    placeholder="Session name"
+                    required
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label htmlFor="session-engine" className="block text-sm font-medium text-gray-700 mb-1">
+                      Engine
+                    </label>
+                    <select
+                      id="session-engine"
+                      value={sessionEngine}
+                      onChange={(e) => setSessionEngine(e.target.value)}
+                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                    >
+                      {engines.map((eng) => (
+                        <option key={eng} value={eng}>
+                          {eng}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="session-mode" className="block text-sm font-medium text-gray-700 mb-1">
+                      Mode
+                    </label>
+                    <select
+                      id="session-mode"
+                      value={sessionMode}
+                      onChange={(e) => setSessionMode(e.target.value)}
+                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                    >
+                      {modes.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {issues.length > 0 && (
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Link to Issue (optional)
+                    </label>
+                    <select
+                      value={sessionIssueId}
+                      onChange={(e) => setSessionIssueId(e.target.value)}
+                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                    >
+                      <option value="">None</option>
+                      {issues.map((issue) => (
+                        <option key={issue.id} value={issue.id}>
+                          {issue.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={creatingSession || !sessionName.trim()}
+                    className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+                  >
+                    {creatingSession ? "Creating..." : "Create Session"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSessionForm(false)}
+                    className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <SessionList sessions={sessions} />
+          </div>
+        )}
+
+        {activeTab === "issues" && (
+          <IssueList
+            issues={issues}
+            statusFilter={issueFilter}
+            onFilterChange={handleFilterChange}
+            onCreateIssue={handleCreateIssue}
+          />
+        )}
       </div>
     </div>
   );
