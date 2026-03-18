@@ -5,6 +5,11 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    watch: {
+      ignored: ["**/backend/**", "**/data/**", "**/*.db", "**/*.db-wal", "**/*.db-shm"],
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
