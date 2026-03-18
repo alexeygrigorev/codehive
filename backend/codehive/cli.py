@@ -437,6 +437,15 @@ def main() -> None:
         "--yes", "-y", action="store_true", help="Skip confirmation prompt"
     )
 
+    # dev subcommand
+    dev_parser = subparsers.add_parser(
+        "dev", help="Start backend and frontend dev servers together"
+    )
+    dev_parser.add_argument("--host", type=str, default=None, help="Backend bind host")
+    dev_parser.add_argument("--port", type=int, default=None, help="Backend bind port")
+    dev_parser.add_argument("--no-frontend", action="store_true", help="Only start the backend")
+    dev_parser.add_argument("--no-backend", action="store_true", help="Only start the frontend")
+
     # tui subcommand
     subparsers.add_parser("tui", help="Launch the interactive terminal dashboard")
 
@@ -492,6 +501,8 @@ def main() -> None:
 
     if args.command == "serve":
         _serve(args)
+    elif args.command == "dev":
+        _dev(args)
     elif args.command == "backup":
         if args.action == "create" or args.action is None:
             _backup_create(args)
@@ -883,6 +894,147 @@ def _tui(args: argparse.Namespace) -> None:
     base_url = _get_base_url(args)
     app = CodehiveApp(base_url=base_url)
     app.run()
+
+
+def _dev(args: argparse.Namespace) -> None:
+    """Start backend and frontend dev servers as subprocesses."""
+    import shutil
+    import signal
+    import subprocess
+    import threading
+
+    from codehive.config import Settings
+
+    settings = Settings()
+    host = args.host or settings.host
+    port = args.port or settings.port
+
+    procs: list[Any] = []
+
+    # Find project root (parent of backend/)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    web_dir = os.path.join(project_root, "web")
+
+    def _stream_output(proc: Any, label: str, color: str) -> None:
+        """Read lines from proc stdout and print with a label prefix."""
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            sys.stdout.write(f"{color}[{label}]{_RESET} {line}")
+            sys.stdout.flush()
+
+    _BLUE = "\033[34m"
+    _GREEN = "\033[32m"
+    _RESET = "\033[0m"
+
+    def _cleanup(signum: int | None = None, frame: object = None) -> None:
+        """Terminate all child processes."""
+        for p in procs:
+            try:
+                p.terminate()
+            except OSError:
+                pass
+        for p in procs:
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+
+    signal.signal(signal.SIGINT, _cleanup)
+    signal.signal(signal.SIGTERM, _cleanup)
+
+    threads: list[threading.Thread] = []
+
+    # Start backend
+    if not args.no_backend:
+        backend_cmd = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "codehive.api.app:create_app",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--reload",
+            "--factory",
+        ]
+        backend_proc = subprocess.Popen(
+            backend_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        procs.append(backend_proc)
+        t = threading.Thread(
+            target=_stream_output, args=(backend_proc, "backend", _BLUE), daemon=True
+        )
+        t.start()
+        threads.append(t)
+        print(f"{_BLUE}[backend]{_RESET} Starting on http://{host}:{port}")
+
+    # Start frontend
+    if not args.no_frontend:
+        if not os.path.isdir(web_dir):
+            print(
+                f"Warning: web directory not found at {web_dir}, skipping frontend",
+                file=sys.stderr,
+            )
+        else:
+            npm_bin = shutil.which("npm")
+            npx_bin = shutil.which("npx")
+            if npx_bin:
+                frontend_cmd = [npx_bin, "vite"]
+            elif npm_bin:
+                frontend_cmd = [npm_bin, "run", "dev"]
+            else:
+                print(
+                    "Warning: npm/npx not found, skipping frontend",
+                    file=sys.stderr,
+                )
+                frontend_cmd = []
+
+            if frontend_cmd:
+                frontend_proc = subprocess.Popen(
+                    frontend_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    cwd=web_dir,
+                )
+                procs.append(frontend_proc)
+                t = threading.Thread(
+                    target=_stream_output,
+                    args=(frontend_proc, "frontend", _GREEN),
+                    daemon=True,
+                )
+                t.start()
+                threads.append(t)
+                print(f"{_GREEN}[frontend]{_RESET} Starting on http://localhost:5173")
+
+    if not procs:
+        print("Nothing to start (both --no-backend and --no-frontend given).")
+        return
+
+    print("\nPress Ctrl+C to stop all servers.\n")
+
+    # Wait for any process to exit
+    try:
+        while True:
+            for p in procs:
+                ret = p.poll()
+                if ret is not None:
+                    # One process exited, shut down the rest
+                    _cleanup()
+                    sys.exit(ret)
+            import time
+
+            time.sleep(0.5)
+    except SystemExit:
+        raise
+    except BaseException:
+        _cleanup()
 
 
 def _serve(args: argparse.Namespace) -> None:

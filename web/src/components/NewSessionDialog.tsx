@@ -20,7 +20,7 @@ export default function NewSessionDialog({
 }: Props) {
   const [name, setName] = useState("New Session");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState("anthropic");
+  const [selectedProvider, setSelectedProvider] = useState("claude");
   const [model, setModel] = useState("");
   const [loadingProviders, setLoadingProviders] = useState(false);
 
@@ -35,7 +35,7 @@ export default function NewSessionDialog({
         if (cancelled) return;
         setProviders(data);
         // Set default model from the default provider
-        const defaultProv = data.find((p) => p.name === "anthropic");
+        const defaultProv = data.find((p) => p.name === "claude");
         if (defaultProv) {
           setModel(defaultProv.default_model);
         }
@@ -123,16 +123,17 @@ export default function NewSessionDialog({
                   data-testid="provider-select"
                 >
                   {providers.map((p) => {
-                    const label =
-                      p.name === "anthropic"
-                        ? "Anthropic"
-                        : p.name === "openai"
-                          ? "OpenAI"
-                          : "Z.ai";
+                    const labels: Record<string, string> = {
+                      claude: "Claude",
+                      codex: "Codex",
+                      openai: "OpenAI",
+                      zai: "Z.ai",
+                    };
+                    const label = labels[p.name] || p.name;
                     return (
                       <option key={p.name} value={p.name}>
                         {label}
-                        {p.api_key_set ? " \u2713" : " (no key)"}
+                        {p.available ? " \u2713" : ` (${p.reason})`}
                       </option>
                     );
                   })}

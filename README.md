@@ -56,18 +56,22 @@ cp .env.example .env
 # For Z.ai: uncomment and set CODEHIVE_ZAI_API_KEY in .env
 # For OpenAI API: uncomment and set CODEHIVE_OPENAI_API_KEY in .env
 
-# 3. Start the backend (uses SQLite by default)
-cd backend
-uv sync --dev
-uv run codehive serve
+# 3. Install dependencies
+cd backend && uv sync --dev && cd ..
+cd web && npm install && cd ..
 
-# 4. In another terminal, start the web dev server
-cd web
-npm install
-npm run dev
+# 4. Start both servers with a single command
+cd backend
+uv run codehive dev
 ```
 
-The API server runs at `http://127.0.0.1:7433` and the web app at `http://localhost:5173`.
+This starts the backend (uvicorn with auto-reload on `http://127.0.0.1:7433`) and the frontend dev server (`http://localhost:5173`) together. Press Ctrl+C to stop both. You can also start them separately:
+
+```bash
+uv run codehive dev --no-frontend   # backend only
+uv run codehive dev --no-backend    # frontend only
+```
+
 Data is stored in `backend/data/codehive.db` (SQLite, auto-created on first run).
 
 ### Quick Start with PostgreSQL + Redis (optional)
@@ -183,6 +187,7 @@ All commands are available via `codehive` (or `uv run codehive` from the `backen
 
 | Command | Description |
 |---|---|
+| `codehive dev` | Start backend + frontend dev servers together |
 | `codehive code [directory]` | Start a lightweight coding agent session |
 | `codehive serve` | Start the API server |
 | `codehive tui` | Launch interactive terminal dashboard |

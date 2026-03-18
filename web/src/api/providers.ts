@@ -2,8 +2,9 @@ import { apiClient } from "./client";
 
 export interface ProviderInfo {
   name: string;
-  base_url: string;
-  api_key_set: boolean;
+  type: string;
+  available: boolean;
+  reason: string;
   default_model: string;
 }
 
