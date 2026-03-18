@@ -163,6 +163,7 @@ Concrete, checkable items. Each criterion must be verifiable by running the app 
 - [ ] If e2e tests could not be run: explicitly state "NOT RUN — reason" (never silently skip)
 - [ ] **Screenshots taken** via Playwright for UI features — saved to `/tmp/` and paths listed in log
 - [ ] The app starts without errors after changes
+- [ ] **Bug fixes: TDD approach** — write a test that reproduces the bug FIRST, confirm it FAILS, then fix, confirm it PASSES. Include both failing and passing output in log.
 - [ ] Log entry appended to issue file with all evidence
 
 "It compiles" is NOT done. "I ran the app, ran the e2e tests, and here's the Playwright output and screenshots" IS done.

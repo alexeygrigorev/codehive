@@ -8,6 +8,7 @@ import MessageBubble from "./MessageBubble";
 import ToolCallResult from "./ToolCallResult";
 import ApprovalPrompt from "./ApprovalPrompt";
 import type { ApprovalStatus } from "./ApprovalPrompt";
+import ThinkingIndicator from "./ThinkingIndicator";
 import ChatInput from "./ChatInput";
 import ExportButton from "./ExportButton";
 import { sendMessage } from "@/api/messages";
@@ -41,6 +42,7 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
   const autoScrollRef = useRef(true);
   const firstMessageSentRef = useRef(false);
   const [sending, setSending] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [approvalStates, setApprovalStates] = useState<
     Record<string, { status: ApprovalStatus; loading: boolean }>
   >({});
@@ -144,23 +146,35 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
     if (autoScrollRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [chatItems]);
+  }, [chatItems, isThinking]);
 
   const handleSend = useCallback(
     async (content: string) => {
       setSending(true);
+      setIsThinking(true);
       try {
-        const rawEvents = await sendMessage(sessionId, content);
-        const normalized = rawEvents.map((e) =>
-          normalizeEvent(e as unknown as Record<string, unknown>),
-        );
-        injectEvents(normalized);
+        await sendMessage(sessionId, content, (rawEvent) => {
+          const normalized = normalizeEvent(
+            rawEvent as unknown as Record<string, unknown>,
+          );
+          injectEvents([normalized]);
+          // Stop thinking on first assistant content
+          if (
+            normalized.type === "message.delta" ||
+            (normalized.type === "message.created" &&
+              normalized.data.role === "assistant") ||
+            normalized.type === "tool.call.started"
+          ) {
+            setIsThinking(false);
+          }
+        });
         if (!firstMessageSentRef.current) {
           firstMessageSentRef.current = true;
           onFirstMessage?.(content);
         }
       } finally {
         setSending(false);
+        setIsThinking(false);
       }
     },
     [sessionId, injectEvents, onFirstMessage],
@@ -268,6 +282,7 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
             />
           );
         })}
+        {isThinking && <ThinkingIndicator />}
         <div ref={bottomRef} />
       </div>
       <ChatInput onSend={handleSend} disabled={sending} />

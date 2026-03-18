@@ -176,7 +176,7 @@ describe("ChatPanel", () => {
     fireEvent.click(screen.getByText("Send"));
 
     await waitFor(() => {
-      expect(mockSendMessage).toHaveBeenCalledWith("s1", "Hello world");
+      expect(mockSendMessage).toHaveBeenCalledWith("s1", "Hello world", expect.any(Function));
     });
     expect(onFirstMessage).toHaveBeenCalledWith("Hello world");
   });
@@ -230,7 +230,7 @@ describe("ChatPanel", () => {
     fireEvent.click(screen.getByText("Send"));
 
     await waitFor(() => {
-      expect(mockSendMessage).toHaveBeenCalledWith("s1", "New message");
+      expect(mockSendMessage).toHaveBeenCalledWith("s1", "New message", expect.any(Function));
     });
     expect(onFirstMessage).not.toHaveBeenCalled();
   });

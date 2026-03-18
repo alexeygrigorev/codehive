@@ -119,6 +119,7 @@ You are personally responsible for the quality of every line of code you write. 
 - **When writing e2e tests, verify selectors against the actual DOM.** Read the components, find the actual IDs, classes, data attributes. Never write selectors from a spec template without checking the real code.
 - **Run every test you write.** If you can't run it (e.g., needs a running server), explicitly state "NOT RUN — needs verification" in your report. Never claim tests pass if you didn't run them.
 - **Be honest about what you verified and what you didn't.** Partial verification honestly reported is better than full verification falsely claimed.
+- **Bug fixes follow TDD: test first, then fix.** For every bug fix, write a test that reproduces the bug FIRST. Run it and confirm it FAILS (proving the bug exists). Then apply the fix and confirm the test PASSES. Include both the failing and passing test output in your log. If the test doesn't fail before the fix, it's not testing the bug.
 
 ## Rules
 
