@@ -3,15 +3,15 @@ import { apiClient } from "./client";
 export type EntityType = "session" | "message" | "issue" | "event";
 
 export interface SearchResultItem {
+  type: EntityType;
   id: string;
-  entity_type: EntityType;
-  entity_id: string;
   snippet: string;
-  project_id: string | null;
-  project_name: string | null;
-  session_id: string | null;
   score: number;
   created_at: string;
+  project_id: string | null;
+  session_id: string | null;
+  project_name: string | null;
+  session_name: string | null;
 }
 
 export interface SearchResponse {
@@ -28,15 +28,17 @@ export interface SearchFilters {
 }
 
 export interface SessionHistoryItem {
+  type: string;
   id: string;
-  role: string;
-  content: string;
+  snippet: string;
+  score: number;
   created_at: string;
 }
 
 export interface SessionHistoryResponse {
   results: SessionHistoryItem[];
   total: number;
+  has_more: boolean;
 }
 
 export async function searchAll(

@@ -68,9 +68,9 @@ export default function SessionHistorySearch({
               data-testid="history-result"
             >
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-1">
-                {item.role}:
+                {item.type}:
               </span>
-              <span className="text-gray-700 dark:text-gray-300">{item.content}</span>
+              <span className="text-gray-700 dark:text-gray-300">{item.snippet}</span>
             </li>
           ))}
         </ul>

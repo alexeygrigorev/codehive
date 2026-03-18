@@ -6,15 +6,15 @@ import type { SearchResultItem } from "@/api/search";
 
 function makeResult(overrides: Partial<SearchResultItem> = {}): SearchResultItem {
   return {
-    id: "r1",
-    entity_type: "session",
-    entity_id: "s1",
+    type: "session",
+    id: "s1",
     snippet: "Test snippet text",
-    project_id: "p1",
-    project_name: "My Project",
-    session_id: null,
     score: 0.9,
     created_at: new Date().toISOString(),
+    project_id: "p1",
+    session_id: null,
+    project_name: "My Project",
+    session_name: null,
     ...overrides,
   };
 }
@@ -29,17 +29,17 @@ function renderResult(result: SearchResultItem, query = "test") {
 
 describe("SearchResult", () => {
   it("renders type badge text", () => {
-    renderResult(makeResult({ entity_type: "session" }));
+    renderResult(makeResult({ type: "session" }));
     expect(screen.getByTestId("type-badge")).toHaveTextContent("Session");
   });
 
   it("renders message type badge", () => {
-    renderResult(makeResult({ entity_type: "message" }));
+    renderResult(makeResult({ type: "message" }));
     expect(screen.getByTestId("type-badge")).toHaveTextContent("Message");
   });
 
   it("renders issue type badge", () => {
-    renderResult(makeResult({ entity_type: "issue" }));
+    renderResult(makeResult({ type: "issue" }));
     expect(screen.getByTestId("type-badge")).toHaveTextContent("Issue");
   });
 
@@ -56,8 +56,8 @@ describe("SearchResult", () => {
     expect(screen.getByText(/just now|ago/)).toBeInTheDocument();
   });
 
-  it("session-type result links to /sessions/{entity_id}", () => {
-    renderResult(makeResult({ entity_type: "session", entity_id: "s42" }));
+  it("session-type result links to /sessions/{id}", () => {
+    renderResult(makeResult({ type: "session", id: "s42" }));
     const link = screen.getByTestId("search-result");
     expect(link).toHaveAttribute("href", "/sessions/s42");
   });
@@ -65,8 +65,8 @@ describe("SearchResult", () => {
   it("message-type result links to /sessions/{session_id}", () => {
     renderResult(
       makeResult({
-        entity_type: "message",
-        entity_id: "m1",
+        type: "message",
+        id: "m1",
         session_id: "s99",
       }),
     );
@@ -76,7 +76,7 @@ describe("SearchResult", () => {
 
   it("issue-type result links to /projects/{project_id}", () => {
     renderResult(
-      makeResult({ entity_type: "issue", entity_id: "i1", project_id: "p5" }),
+      makeResult({ type: "issue", id: "i1", project_id: "p5" }),
     );
     const link = screen.getByTestId("search-result");
     expect(link).toHaveAttribute("href", "/projects/p5");

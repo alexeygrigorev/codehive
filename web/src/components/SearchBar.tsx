@@ -70,13 +70,13 @@ export default function SearchBar() {
   function handleResultClick(result: SearchResultItem) {
     setShowDropdown(false);
     setQuery("");
-    switch (result.entity_type) {
+    switch (result.type) {
       case "session":
-        navigate(`/sessions/${result.entity_id}`);
+        navigate(`/sessions/${result.id}`);
         break;
       case "message":
         navigate(
-          `/sessions/${result.session_id ?? result.entity_id}`,
+          `/sessions/${result.session_id ?? result.id}`,
         );
         break;
       case "issue":
@@ -86,7 +86,7 @@ export default function SearchBar() {
         break;
       case "event":
         navigate(
-          `/sessions/${result.session_id ?? result.entity_id}`,
+          `/sessions/${result.session_id ?? result.id}`,
         );
         break;
     }
@@ -129,7 +129,7 @@ export default function SearchBar() {
                 data-testid="dropdown-result"
               >
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  {result.entity_type}
+                  {result.type}
                 </span>
                 <p className="text-sm text-gray-700 dark:text-gray-300 truncate">
                   {result.snippet}

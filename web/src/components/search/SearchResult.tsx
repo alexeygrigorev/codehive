@@ -22,13 +22,13 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 function getResultUrl(result: SearchResultItem): string {
-  switch (result.entity_type) {
+  switch (result.type) {
     case "session":
-      return `/sessions/${result.entity_id}`;
+      return `/sessions/${result.id}`;
     case "message":
       return result.session_id
         ? `/sessions/${result.session_id}`
-        : `/sessions/${result.entity_id}`;
+        : `/sessions/${result.id}`;
     case "issue":
       return result.project_id
         ? `/projects/${result.project_id}`
@@ -36,7 +36,7 @@ function getResultUrl(result: SearchResultItem): string {
     case "event":
       return result.session_id
         ? `/sessions/${result.session_id}`
-        : `/sessions/${result.entity_id}`;
+        : `/sessions/${result.id}`;
     default:
       return "/";
   }
@@ -59,9 +59,9 @@ function formatTimestamp(iso: string): string {
 
 export default function SearchResult({ result, query }: SearchResultProps) {
   const url = getResultUrl(result);
-  const typeLabel = TYPE_LABELS[result.entity_type] ?? result.entity_type;
+  const typeLabel = TYPE_LABELS[result.type] ?? result.type;
   const typeColor =
-    TYPE_COLORS[result.entity_type] ?? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+    TYPE_COLORS[result.type] ?? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
 
   return (
     <Link
