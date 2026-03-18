@@ -31,30 +31,49 @@ An issue filename (e.g. `docs/tracker/01-fastapi-setup.todo.md`).
 5. If the issue is missing any of the above, add them
 6. Rename: `mv docs/tracker/NN-name.todo.md docs/tracker/NN-name.groomed.md`
 
+### User Stories (required)
+
+Every feature MUST have concrete user stories. These are the most important part of grooming. They describe what a real user does, step by step, with specific clicks, fields, and expected results.
+
+Bad — too abstract:
+```
+- User can create a project
+- Dark theme works
+```
+
+Good — concrete, testable, realistic:
+```
+### Story: Developer creates a project from their local codebase
+1. User opens the dashboard at /
+2. User clicks "New Project"
+3. User clicks "Empty Project" card
+4. User types "/home/user/git/myapp" in the directory path field
+5. The name field auto-fills with "myapp"
+6. User clicks "Create Project"
+7. User is redirected to the project page showing "myapp" as the title
+8. The sidebar shows "myapp" in the project list
+```
+
+Rules for user stories:
+- **Specific** — exact clicks, exact fields, exact expected results
+- **Realistic** — based on how a real developer would use the feature
+- **End-to-end** — covers the full flow from user action to visible result
+- **Directly translatable to Playwright e2e tests** — the SWE must be able to write a Playwright test from this story without ambiguity
+
+Mark which stories are **e2e test scenarios** — these become actual Playwright tests that the SWE writes and QA runs.
+
 ### Acceptance Criteria Format
 
-Every criterion must be testable:
+Every criterion must be verifiable by running the app or a test — not by reading code:
 
 ```markdown
 ## Acceptance Criteria
 
 - [ ] `uv run pytest tests/ -v` passes with N+ tests
+- [ ] E2e test for Story 1 passes (Playwright)
+- [ ] E2e test for Story 2 passes (Playwright)
 - [ ] FastAPI server starts with `uv run codehive serve`
-- [ ] GET /api/health returns 200 with version info
-```
-
-### Test Scenarios Format
-
-```markdown
-## Test Scenarios
-
-### Unit: Project CRUD
-- Create a project, verify it persists in DB
-- Create project with duplicate name, verify error
-
-### Integration: API endpoints
-- POST /api/projects creates a project, returns 201
-- GET /api/projects lists all projects
+- [ ] Screenshots show correct UI in both light and dark mode
 ```
 
 ## Part 2: Acceptance Review
@@ -96,6 +115,16 @@ An issue filename (`.in-progress.md`) and confirmation that the tester passed.
 2. Or ACCEPT but create new `.todo.md` issues in `docs/tracker/` for every unmet criterion
 
 You must explicitly list what is being descoped and why, and create the follow-up issues before accepting. Never accept with unmet criteria and no follow-up tracking.
+
+### Ownership: You Own the User Experience
+
+You are personally responsible for the quality of every deliverable you accept. When you say "ACCEPTED", you are making a promise to the user that this feature works as they expect.
+
+- **Acceptance is a PROMISE.** Before saying "ACCEPTED", ask yourself: if the user checks this right now, will they be satisfied? If you're not sure, don't accept.
+- **Demand evidence.** Screenshots, actual test output, logs showing real data. "Tests pass" is a claim, not evidence. If you can't see proof it works, it's not verified.
+- **If the issue requires visual verification, you must see screenshots.** If it requires e2e tests, you must see actual test output with real data flowing through. No exceptions.
+- **Question suspicious results.** A 3-second LLM roundtrip is suspicious. A visual QA with no screenshots is suspicious. A "passed" verdict with no evidence is suspicious. Push back.
+- **If the user says it's broken, it's broken.** Regardless of what tests or agents claim. Investigate, don't dismiss.
 
 ### When to Reject
 

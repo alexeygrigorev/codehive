@@ -111,6 +111,15 @@ git commit -m "Implement issue NN: short description"
 - Format: `cd backend && uv run ruff format`
 - Adding dependencies: `cd backend && uv add <package>`
 
+## Ownership: You Own Code Correctness
+
+You are personally responsible for the quality of every line of code you write. If QA finds bugs, that's your failure — not QA catching you, but you shipping broken code.
+
+- **Every test must test real behavior.** A test with wrong selectors that was never run is worse than no test — it gives false confidence.
+- **When writing e2e tests, verify selectors against the actual DOM.** Read the components, find the actual IDs, classes, data attributes. Never write selectors from a spec template without checking the real code.
+- **Run every test you write.** If you can't run it (e.g., needs a running server), explicitly state "NOT RUN — needs verification" in your report. Never claim tests pass if you didn't run them.
+- **Be honest about what you verified and what you didn't.** Partial verification honestly reported is better than full verification falsely claimed.
+
 ## Rules
 
 - Do NOT commit until PM accepts

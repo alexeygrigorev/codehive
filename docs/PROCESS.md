@@ -51,6 +51,40 @@ The orchestrator NEVER writes or modifies code (backend/, web/). It only touches
 - Task panel items
 - Git commits (after PM accepts)
 
+### Responsibility Model
+
+**Every role owns their deliverable.** Quality is not centralized — it is distributed across the team. Each agent is accountable for the quality of their specific output:
+
+| Role | Owns | Accountable For |
+|------|------|----------------|
+| PM | The whole application — UX, functionality, quality | Ensuring the feature actually works as the user expects. The PM is the user's last line of defense. If PM says "accepted" and the user finds it broken, that's a PM failure. |
+| SWE | Code correctness, tests | Writing code that works and tests that prove it. If QA finds bugs, that's an SWE failure. |
+| QA/Tester | Verification, evidence | Providing proof that things work — not claims. If QA says "passed" without running the test, that's a QA failure. |
+| Orchestrator | The team | Managing the pipeline and verifying that each agent did their job properly. If any agent cuts corners and the orchestrator accepts it, that's an orchestrator failure. |
+
+**The PM owns the user experience.** The PM is the user's advocate. When accepting a deliverable, the PM must verify that the feature works from the user's perspective — not just that code was written and tests pass. The PM should:
+- Verify the actual UI/UX matches what the user asked for
+- Check screenshots, test output, and logs — not just agent claims
+- Reject if the deliverable doesn't meet the user's expectations
+- Think "if the user checks this right now, will they be satisfied?"
+
+**The Orchestrator manages the team.** The orchestrator doesn't own quality directly — the PM does. But the orchestrator is responsible for ensuring the PM (and every other agent) does their job properly. If the PM rubber-stamps something, the orchestrator must catch it and send it back. The orchestrator:
+- Verifies agent results against acceptance criteria before accepting
+- Questions suspicious results (too fast, missing evidence, contradicts user feedback)
+- Sends agents back with specific feedback when their work is insufficient
+- Never forwards an agent's claim without critical evaluation
+
+### False Confidence is the Worst Outcome
+
+The single worst thing the orchestrator can do is tell the user "it works" when it doesn't. This destroys trust. When the user checks and finds it broken, they lose confidence in the entire pipeline — and rightfully so.
+
+**Rules to prevent false confidence:**
+
+1. **Never say "it works" unless you have firsthand evidence.** An agent saying "passed" is not firsthand evidence. Actual test output showing real data, screenshots showing real UI, logs showing real requests — that is evidence.
+2. **If you're not sure, say you're not sure.** "The agent reports it passed but I haven't independently verified" is always better than "it works." Honesty about uncertainty is valued. False certainty is not.
+3. **If something contradicts user experience, the user is right.** The user is testing the real app. If they say it's broken, it's broken — regardless of what any test or agent claims. Investigate why the test passed when the feature is broken.
+4. **Treat every "it works" claim as a promise.** Before making that promise, ask yourself: "If the user checks right now, will it actually work?" If you can't answer yes with evidence, don't make the claim.
+
 **NEVER wait for user input.** The pipeline runs autonomously. If something needs user action (e.g. configuring a secret, testing on their machine, confirming a deployment), note it in the issue file as a "USER ACTION REQUIRED" item and keep moving to the next issue. Do not stop the pipeline.
 
 **NEVER block on dependencies within a batch.** If issue A is groomed but issue B is still grooming, launch the SWE agent for A immediately. Don't wait for B. Each issue's pipeline is independent — launch agents as soon as their predecessor step completes, regardless of the other issue in the batch.
@@ -69,15 +103,133 @@ The orchestrator NEVER writes or modifies code (backend/, web/). It only touches
 8. If PM accepts: Orchestrator renames to `.done.md` and commits
 9. Pick next 2 issues and repeat
 
-### Done Means DONE
+### Definition of Groomed
 
-An issue moves to `.done.md` ONLY when ALL acceptance criteria are fully satisfied and verified. Writing code is not done. Passing tests is not done. The actual deliverable must be complete:
+A `.groomed.md` issue must contain the following before an engineer can pick it up:
 
-- "API endpoint" is done when it returns correct responses — not when the route is registered
-- "Database migration" is done when the schema is applied and queries work — not when the migration file exists
-- "WebSocket streaming" is done when events stream to connected clients — not when the handler is written
+#### User Stories (required)
 
-If the deliverable requires actual verification beyond tests, the issue stays `.in-progress.md` until that happens.
+Every feature must have concrete user stories that describe **what a real user does step by step**. These are NOT abstract requirements — they are specific, realistic scenarios written from the user's perspective.
+
+Bad (too abstract):
+```
+- [ ] Page loads correctly
+- [ ] User can create a project
+```
+
+Good (concrete user story):
+```
+### Story: Developer creates a project from their local codebase
+1. User opens the dashboard at /
+2. User clicks "New Project"
+3. User clicks "Empty Project"
+4. User types "/home/user/git/myapp" in the directory path field
+5. The name field auto-fills with "myapp"
+6. User clicks "Create Project"
+7. User is redirected to the project page showing "myapp" as the title
+8. The sidebar shows "myapp" in the project list
+```
+
+Each story must be:
+- **Specific** — exact clicks, exact fields, exact expected results
+- **Realistic** — based on how a real developer would use the feature
+- **Testable** — can be directly translated into a Playwright e2e test
+- **End-to-end** — covers the full flow from user action to visible result
+
+#### E2E Test Scenarios (required for UI features)
+
+The PM must define which user stories become Playwright e2e tests. Each scenario maps 1:1 to a user story and specifies:
+- Preconditions (what state the app must be in)
+- Steps (user actions)
+- Assertions (what the user should see)
+
+These scenarios are the **contract between PM and SWE** — the SWE implements them as actual Playwright tests, and QA verifies they pass.
+
+#### Acceptance Criteria Checklist (required)
+
+Concrete, checkable items. Each criterion must be verifiable by running the app or running a test — not by reading code.
+
+### Definition of Done
+
+"Done" has a specific meaning at each stage. Each role has concrete checkboxes.
+
+#### SWE Done
+
+- [ ] Code written and follows existing patterns
+- [ ] Unit tests written and passing — **actual `pytest`/`vitest` output included in log**
+- [ ] Lint clean — `ruff check` and `tsc --noEmit` output shown
+- [ ] **E2e tests written** from the PM's scenarios (for any UI feature)
+- [ ] **E2e tests actually run** against real app (backend + frontend started, Playwright executed) — **actual Playwright output included in log**
+- [ ] If e2e tests could not be run: explicitly state "NOT RUN — reason" (never silently skip)
+- [ ] **Screenshots taken** via Playwright for UI features — saved to `/tmp/` and paths listed in log
+- [ ] The app starts without errors after changes
+- [ ] Log entry appended to issue file with all evidence
+
+"It compiles" is NOT done. "I ran the app, ran the e2e tests, and here's the Playwright output and screenshots" IS done.
+
+#### QA Done
+
+- [ ] Read all user stories from the groomed spec
+- [ ] **Run every e2e test** that the SWE wrote — show full Playwright output
+- [ ] **View every screenshot** the SWE took — describe what you see, flag any issues
+- [ ] If any e2e test was marked "NOT RUN" by SWE: **run it now** or explain why it can't run
+- [ ] Run unit tests — show actual output with counts
+- [ ] Run lint — show actual output
+- [ ] **Walk through each user story manually** via Playwright: start the app, follow the steps, take screenshots at each step, verify the expected result
+- [ ] Each acceptance criterion marked PASS/FAIL with evidence (screenshot path, test output line, log excerpt)
+- [ ] All evidence attached to issue log
+- [ ] Any suspicious results investigated and explained
+
+"I read the diff and it looks right" is NOT done. "I ran every test, walked through every user story, took screenshots at each step, and here's the evidence" IS done.
+
+#### PM Done
+
+- [ ] Review QA's evidence — **look at every screenshot**, read every test output
+- [ ] Verify each user story has a corresponding e2e test that passed
+- [ ] Verify each user story's expected result matches the screenshot evidence
+- [ ] **Walk through the feature from the user's perspective**: would the user be satisfied?
+- [ ] Check for edge cases the stories might have missed
+- [ ] No scope silently dropped — any descoped items tracked as new issues
+- [ ] If the user reported a bug: verify the fix by checking the specific scenario the user described
+- [ ] Verdict: "If the user checks this right now, they will be satisfied" — yes or no?
+
+"QA said it passed" is NOT done. "I reviewed every screenshot, verified every user story matches the evidence, and I guarantee the user will be satisfied" IS done.
+
+#### Orchestrator Done
+
+- [ ] PM provided a concrete verdict with evidence references (not just "ACCEPTED")
+- [ ] PM's evidence actually matches the acceptance criteria (orchestrator spot-checks)
+- [ ] No contradictions with user feedback (if user said "it's broken", evidence shows it's fixed)
+- [ ] All user stories have corresponding e2e tests that were actually run
+- [ ] Commit only after all boxes checked
+
+#### Issue Done = All Four
+
+An issue moves to `.done.md` ONLY when:
+1. SWE built it and ran e2e tests with evidence
+2. QA verified every user story with screenshots and test output
+3. PM reviewed evidence and guarantees user satisfaction
+4. Orchestrator verified the PM did their job
+
+If any layer skipped their verification, the issue is NOT done.
+
+### Orchestrator Must Verify Agent Results
+
+When a QA or PM agent reports back, the orchestrator MUST NOT rubber-stamp the result. Before accepting:
+
+1. **Re-read the issue's acceptance criteria line by line**
+2. **Check each criterion against the agent's report** — did the agent actually address it, or just say "tests pass"?
+3. **Reject and re-launch if any criterion was skipped** — with specific instructions about what was missed
+
+Common failures to watch for:
+- AC says "run e2e test" → agent wrote the test file but never ran it. **REJECT.**
+- AC says "verify visually with screenshots" → agent only did grep checks. **REJECT.**
+- AC says "streaming works" → agent checked that code compiles. **REJECT.**
+- AC says "no white backgrounds in dark mode" → agent ran unit tests. **REJECT.**
+
+"Tests pass" is NEVER sufficient if the AC requires runtime or visual verification. The orchestrator is the last line of defense — if it doesn't enforce the AC, nobody will.
+
+**Sanity-check agent claims.** If an agent reports success but the result seems too fast, too easy, or contradicts user feedback — question it. Ask for evidence: logs, screenshots, actual output content. A 3-second "LLM roundtrip" is a red flag. A "visual QA passed" with no screenshots is a red flag. Don't forward "passed" without critical thinking.
 
 **IMPORTANT: One agent per issue.** Every agent invocation handles exactly ONE issue. When working on 2 issues in a batch, launch 2 separate agents in parallel — never combine multiple issues into a single agent call.
 

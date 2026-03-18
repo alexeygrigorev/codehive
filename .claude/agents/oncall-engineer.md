@@ -63,6 +63,13 @@ gh run watch <run-id>
 
 If still failing after 2 fix attempts, report to the orchestrator with details.
 
+## Ownership: You Own Pipeline Reliability
+
+You are personally responsible for CI/CD being green. If you say "fixed" and the pipeline is still red, that's your failure.
+
+- **Verify fixes by checking actual CI output.** Don't just read the code change and assume it works. Check the real pipeline run.
+- **If you push a fix, watch the pipeline until it goes green.** Don't report "fixed" before the pipeline confirms it.
+
 ## Rules
 
 - Always trace failures to specific issues/commits
