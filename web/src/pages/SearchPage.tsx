@@ -103,13 +103,13 @@ export default function SearchPage() {
 
       {loading && results.length === 0 && (
         <div className="text-center py-8" data-testid="search-loading">
-          <p className="text-gray-500">Searching...</p>
+          <p className="text-gray-500 dark:text-gray-400">Searching...</p>
         </div>
       )}
 
       {!loading && results.length === 0 && query && (
         <div className="text-center py-8" data-testid="search-empty">
-          <p className="text-gray-500">No results found</p>
+          <p className="text-gray-500 dark:text-gray-400">No results found</p>
         </div>
       )}
 

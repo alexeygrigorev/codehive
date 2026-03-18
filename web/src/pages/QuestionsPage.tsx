@@ -50,7 +50,7 @@ export default function QuestionsPage() {
     return (
       <div>
         <h1 className="text-2xl font-bold dark:text-gray-100">Pending Questions</h1>
-        <p className="mt-4 text-gray-500">Loading questions...</p>
+        <p className="mt-4 text-gray-500 dark:text-gray-400">Loading questions...</p>
       </div>
     );
   }
@@ -68,7 +68,7 @@ export default function QuestionsPage() {
     return (
       <div>
         <h1 className="text-2xl font-bold dark:text-gray-100">Pending Questions</h1>
-        <p className="mt-4 text-gray-500">
+        <p className="mt-4 text-gray-500 dark:text-gray-400">
           No pending questions across any session.
         </p>
       </div>

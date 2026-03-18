@@ -50,7 +50,7 @@ export default function ActivityPanel({ sessionId }: ActivityPanelProps) {
   }, [sessionId]);
 
   if (loading) {
-    return <p className="text-gray-500">Loading activity...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading activity...</p>;
   }
 
   if (error) {
@@ -58,7 +58,7 @@ export default function ActivityPanel({ sessionId }: ActivityPanelProps) {
   }
 
   if (events.length === 0) {
-    return <p className="text-gray-500">No activity yet</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No activity yet</p>;
   }
 
   // Most recent events first

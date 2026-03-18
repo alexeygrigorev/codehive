@@ -54,7 +54,7 @@ export default function RoleList({ onEdit, onCreate }: RoleListProps) {
   }
 
   if (loading) {
-    return <p className="text-gray-500">Loading roles...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading roles...</p>;
   }
 
   if (error) {
@@ -74,7 +74,7 @@ export default function RoleList({ onEdit, onCreate }: RoleListProps) {
         </button>
       </div>
       {roles.length === 0 ? (
-        <p className="text-gray-500">No roles</p>
+        <p className="text-gray-500 dark:text-gray-400">No roles</p>
       ) : (
         <ul className="space-y-2">
           {roles.map((role) => (
@@ -85,15 +85,15 @@ export default function RoleList({ onEdit, onCreate }: RoleListProps) {
               <div>
                 <span className="font-medium">{role.name}</span>
                 {role.description && (
-                  <span className="ml-2 text-gray-500">
+                  <span className="ml-2 text-gray-500 dark:text-gray-400">
                     {role.description}
                   </span>
                 )}
                 <span
                   className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                     role.is_builtin
-                      ? "bg-gray-100 text-gray-700"
-                      : "bg-blue-100 text-blue-700"
+                      ? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200"
                   }`}
                 >
                   {role.is_builtin ? "Built-in" : "Custom"}

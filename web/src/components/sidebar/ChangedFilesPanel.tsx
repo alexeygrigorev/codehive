@@ -44,7 +44,7 @@ export default function ChangedFilesPanel({
   }, [sessionId]);
 
   if (loading) {
-    return <p className="text-gray-500">Loading changed files...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading changed files...</p>;
   }
 
   if (error) {
@@ -52,7 +52,7 @@ export default function ChangedFilesPanel({
   }
 
   if (files.length === 0) {
-    return <p className="text-gray-500">No changed files</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No changed files</p>;
   }
 
   return (

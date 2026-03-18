@@ -45,7 +45,7 @@ export default function AgentCommPanel({ sessionId }: AgentCommPanelProps) {
   }, [sessionId]);
 
   if (loading) {
-    return <p className="text-gray-500">Loading agent communications...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading agent communications...</p>;
   }
 
   if (error) {
@@ -53,7 +53,7 @@ export default function AgentCommPanel({ sessionId }: AgentCommPanelProps) {
   }
 
   if (events.length === 0) {
-    return <p className="text-gray-500">No agent communications</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No agent communications</p>;
   }
 
   return (

@@ -34,7 +34,7 @@ export default function RoleAssigner({ value, onChange }: RoleAssignerProps) {
   }, []);
 
   if (loading) {
-    return <p className="text-gray-500">Loading roles...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading roles...</p>;
   }
 
   return (

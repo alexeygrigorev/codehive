@@ -47,7 +47,7 @@ export default function TimelinePanel({ sessionId }: TimelinePanelProps) {
   }, [sessionId]);
 
   if (loading) {
-    return <p className="text-gray-500">Loading timeline...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading timeline...</p>;
   }
 
   if (error) {
@@ -55,7 +55,7 @@ export default function TimelinePanel({ sessionId }: TimelinePanelProps) {
   }
 
   if (events.length === 0) {
-    return <p className="text-gray-500">No events yet</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No events yet</p>;
   }
 
   return (

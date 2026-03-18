@@ -35,7 +35,7 @@ export default function AgentMessageItem({
       className={`agent-message-item max-w-[80%] rounded-lg px-4 py-2 ${alignmentClass} ${queryClass}`}
       data-type={event.type}
     >
-      <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
+      <div className="mb-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span className="font-medium">
           {isOutgoing ? "To" : "From"}:{" "}
           {isOutgoing
@@ -43,7 +43,7 @@ export default function AgentMessageItem({
             : event.data.sender_session_id}
         </span>
         {isQuery && (
-          <span className="agent-query-label rounded bg-yellow-200 px-1 text-yellow-800">
+          <span className="agent-query-label rounded bg-yellow-200 dark:bg-yellow-800 px-1 text-yellow-800 dark:text-yellow-200">
             query
           </span>
         )}

@@ -51,7 +51,7 @@ export default function QuestionsPanel({ sessionId }: QuestionsPanelProps) {
   }
 
   if (loading) {
-    return <p className="text-gray-500">Loading questions...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading questions...</p>;
   }
 
   if (error) {
@@ -59,7 +59,7 @@ export default function QuestionsPanel({ sessionId }: QuestionsPanelProps) {
   }
 
   if (questions.length === 0) {
-    return <p className="text-gray-500">No pending questions</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No pending questions</p>;
   }
 
   const unanswered = questions.filter((q) => !q.answered);

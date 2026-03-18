@@ -46,7 +46,7 @@ export default function SubAgentPanel({ sessionId }: SubAgentPanelProps) {
   }, [sessionId]);
 
   if (loading) {
-    return <p className="text-gray-500">Loading sub-agents...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading sub-agents...</p>;
   }
 
   if (error) {
@@ -54,7 +54,7 @@ export default function SubAgentPanel({ sessionId }: SubAgentPanelProps) {
   }
 
   if (subAgents.length === 0) {
-    return <p className="text-gray-500">No sub-agents</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No sub-agents</p>;
   }
 
   const completedCount = subAgents.filter(

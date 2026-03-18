@@ -71,7 +71,7 @@ export default function CheckpointList({ sessionId }: CheckpointListProps) {
   }
 
   if (loading) {
-    return <p className="text-gray-500">Loading checkpoints...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading checkpoints...</p>;
   }
 
   if (error) {
@@ -82,7 +82,7 @@ export default function CheckpointList({ sessionId }: CheckpointListProps) {
     <div>
       <CheckpointCreate sessionId={sessionId} onCreated={load} />
       {checkpoints.length === 0 ? (
-        <p className="text-gray-500">No checkpoints</p>
+        <p className="text-gray-500 dark:text-gray-400">No checkpoints</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {checkpoints.map((cp) => (

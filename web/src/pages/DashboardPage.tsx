@@ -68,7 +68,7 @@ export default function DashboardPage() {
     return (
       <div>
         <DashboardHeader />
-        <p className="text-gray-500 mt-4">Loading projects...</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-4">Loading projects...</p>
       </div>
     );
   }
@@ -77,7 +77,7 @@ export default function DashboardPage() {
     return (
       <div>
         <DashboardHeader />
-        <p className="text-red-600 mt-4">{error}</p>
+        <p className="text-red-600 dark:text-red-400 mt-4">{error}</p>
       </div>
     );
   }
@@ -86,7 +86,7 @@ export default function DashboardPage() {
     return (
       <div>
         <DashboardHeader />
-        <p className="text-gray-500 mt-4">
+        <p className="text-gray-500 dark:text-gray-400 mt-4">
           No projects yet. Create your first project to get started.
         </p>
       </div>

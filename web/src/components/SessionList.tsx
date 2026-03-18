@@ -8,14 +8,14 @@ export interface SessionListProps {
 }
 
 const statusColors: Record<string, string> = {
-  idle: "bg-gray-100 text-gray-700",
-  planning: "bg-yellow-100 text-yellow-800",
-  executing: "bg-blue-100 text-blue-800",
-  waiting_input: "bg-purple-100 text-purple-800",
-  waiting_approval: "bg-purple-100 text-purple-800",
-  blocked: "bg-red-100 text-red-800",
-  completed: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
+  idle: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+  planning: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  executing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  waiting_input: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  waiting_approval: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  blocked: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
 function formatRelativeTime(dateStr: string): string {
@@ -69,7 +69,7 @@ export default function SessionList({ sessions }: SessionListProps) {
     <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
       {sessions.map((session) => {
         const colorClass =
-          statusColors[session.status] ?? "bg-gray-100 text-gray-700";
+          statusColors[session.status] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
         const subCount = subAgentCounts[session.id] ?? 0;
         return (
           <li key={session.id}>

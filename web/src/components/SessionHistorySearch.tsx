@@ -54,10 +54,10 @@ export default function SessionHistorySearch({
         aria-label="Search session messages"
       />
       {loading && (
-        <p className="text-xs text-gray-500 mt-1">Searching...</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Searching...</p>
       )}
       {!loading && searched && results.length === 0 && (
-        <p className="text-xs text-gray-500 mt-1">No matching messages</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">No matching messages</p>
       )}
       {!loading && results.length > 0 && (
         <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto">

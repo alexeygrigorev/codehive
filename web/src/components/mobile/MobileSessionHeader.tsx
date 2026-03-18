@@ -8,12 +8,12 @@ export interface MobileSessionHeaderProps {
 }
 
 const statusColors: Record<string, string> = {
-  idle: "bg-gray-100 text-gray-700",
-  planning: "bg-yellow-100 text-yellow-800",
-  executing: "bg-blue-100 text-blue-800",
-  waiting_input: "bg-purple-100 text-purple-800",
-  completed: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
+  idle: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+  planning: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  executing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  waiting_input: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
 export default function MobileSessionHeader({
@@ -22,7 +22,7 @@ export default function MobileSessionHeader({
   mode,
   pendingApprovals,
 }: MobileSessionHeaderProps) {
-  const statusClass = statusColors[status] ?? "bg-gray-100 text-gray-700";
+  const statusClass = statusColors[status] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
 
   return (
     <div
@@ -39,7 +39,7 @@ export default function MobileSessionHeader({
       </span>
       <SessionModeIndicator mode={mode} />
       {pendingApprovals > 0 && (
-        <span className="flex-shrink-0 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+        <span className="flex-shrink-0 inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">
           {pendingApprovals}
         </span>
       )}

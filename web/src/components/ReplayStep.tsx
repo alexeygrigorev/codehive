@@ -51,7 +51,7 @@ export default function ReplayStep({ step }: ReplayStepProps) {
             )}
           </div>
           {typeof step.data.diff === "string" && (
-            <pre className="file-diff mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-600">
+            <pre className="file-diff mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-600 dark:text-gray-400">
               {step.data.diff as string}
             </pre>
           )}
@@ -64,7 +64,7 @@ export default function ReplayStep({ step }: ReplayStepProps) {
           <div className="font-semibold text-gray-600 dark:text-gray-400">
             {step.step_type}
           </div>
-          <pre className="json-view mt-1 overflow-x-auto whitespace-pre-wrap text-xs text-gray-500">
+          <pre className="json-view mt-1 overflow-x-auto whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
             {JSON.stringify(step.data, null, 2)}
           </pre>
         </div>

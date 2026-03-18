@@ -62,7 +62,7 @@ export default function ReplayPage() {
     return (
       <div>
         <h1 className="text-2xl font-bold dark:text-gray-100">Session Replay</h1>
-        <p className="text-gray-500 mt-4">Loading replay...</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-4">Loading replay...</p>
       </div>
     );
   }
@@ -92,7 +92,7 @@ export default function ReplayPage() {
         {currentStep ? (
           <ReplayStepComponent step={currentStep} />
         ) : (
-          <p className="text-gray-500">No steps to display</p>
+          <p className="text-gray-500 dark:text-gray-400">No steps to display</p>
         )}
       </div>
       <div className="border-t border-gray-200 dark:border-gray-700">

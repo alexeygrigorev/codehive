@@ -13,7 +13,7 @@ export default function DiffSummary({ files, onFileClick }: DiffSummaryProps) {
   if (files.length === 0) {
     return (
       <div
-        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-500"
+        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400"
         data-testid="diff-summary"
       >
         No changes

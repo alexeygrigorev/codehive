@@ -175,7 +175,7 @@ export default function Sidebar() {
                 {isExpanded && !collapsed && (
                   <ul className="ml-6 space-y-0.5" data-testid={`sessions-${project.id}`}>
                     {loadingSessions.has(project.id) && (
-                      <li className="px-4 py-1 text-xs text-gray-500">
+                      <li className="px-4 py-1 text-xs text-gray-400">
                         Loading...
                       </li>
                     )}
@@ -203,7 +203,7 @@ export default function Sidebar() {
                       );
                     })}
                     {sessions?.length === 0 && (
-                      <li className="px-4 py-1 text-xs text-gray-500">
+                      <li className="px-4 py-1 text-xs text-gray-400">
                         No sessions
                       </li>
                     )}

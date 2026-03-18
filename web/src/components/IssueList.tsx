@@ -9,9 +9,9 @@ export interface IssueListProps {
 }
 
 const issueStatusColors: Record<string, string> = {
-  open: "bg-blue-100 text-blue-800",
-  in_progress: "bg-yellow-100 text-yellow-800",
-  closed: "bg-green-100 text-green-800",
+  open: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  closed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
 };
 
 const filters: { label: string; value: IssueStatus | null }[] = [
@@ -141,7 +141,7 @@ export default function IssueList({
         <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
           {issues.map((issue) => {
             const colorClass =
-              issueStatusColors[issue.status] ?? "bg-gray-100 text-gray-700";
+              issueStatusColors[issue.status] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
             return (
               <li key={issue.id} className="px-4 py-3">
                 <div className="flex items-center justify-between">

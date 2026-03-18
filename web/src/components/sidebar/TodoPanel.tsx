@@ -51,7 +51,7 @@ export default function TodoPanel({ sessionId }: TodoPanelProps) {
   }, [sessionId]);
 
   if (loading) {
-    return <p className="text-gray-500">Loading tasks...</p>;
+    return <p className="text-gray-500 dark:text-gray-400">Loading tasks...</p>;
   }
 
   if (error) {
@@ -59,7 +59,7 @@ export default function TodoPanel({ sessionId }: TodoPanelProps) {
   }
 
   if (tasks.length === 0) {
-    return <p className="text-gray-500">No tasks yet</p>;
+    return <p className="text-gray-500 dark:text-gray-400">No tasks yet</p>;
   }
 
   const doneCount = tasks.filter((t) => t.status === "done").length;

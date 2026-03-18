@@ -64,8 +64,8 @@ export default function QuestionCard({
         <span
           className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
             localQuestion.answered
-              ? "bg-green-100 text-green-800"
-              : "bg-yellow-100 text-yellow-800"
+              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
           }`}
         >
           {localQuestion.answered ? "Answered" : "Unanswered"}
@@ -80,7 +80,7 @@ export default function QuestionCard({
       </p>
 
       {localQuestion.context && (
-        <p className="mt-1 text-xs text-gray-500">{localQuestion.context}</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{localQuestion.context}</p>
       )}
 
       {showSessionId && (

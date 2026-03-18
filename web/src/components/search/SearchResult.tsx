@@ -15,10 +15,10 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  session: "bg-blue-100 text-blue-800",
-  message: "bg-green-100 text-green-800",
-  issue: "bg-yellow-100 text-yellow-800",
-  event: "bg-purple-100 text-purple-800",
+  session: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  message: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  issue: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  event: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
 };
 
 function getResultUrl(result: SearchResultItem): string {
@@ -61,7 +61,7 @@ export default function SearchResult({ result, query }: SearchResultProps) {
   const url = getResultUrl(result);
   const typeLabel = TYPE_LABELS[result.entity_type] ?? result.entity_type;
   const typeColor =
-    TYPE_COLORS[result.entity_type] ?? "bg-gray-100 text-gray-800";
+    TYPE_COLORS[result.entity_type] ?? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
 
   return (
     <Link
@@ -77,7 +77,7 @@ export default function SearchResult({ result, query }: SearchResultProps) {
           {typeLabel}
         </span>
         {result.project_name && (
-          <span className="text-xs text-gray-500">{result.project_name}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{result.project_name}</span>
         )}
         <span className="text-xs text-gray-400 ml-auto">
           {formatTimestamp(result.created_at)}

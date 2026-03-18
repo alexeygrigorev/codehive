@@ -34,6 +34,16 @@ describe("SessionModeIndicator", () => {
     const span = container.querySelector(".mode-indicator");
     expect(span).toHaveClass("bg-gray-100");
     expect(span).toHaveClass("text-gray-700");
+    expect(span).toHaveClass("dark:bg-gray-700");
+    expect(span).toHaveClass("dark:text-gray-300");
     expect(screen.getByText("unknown-mode")).toBeInTheDocument();
+  });
+
+  it("all mode styles include dark variants", () => {
+    for (const mode of SESSION_MODES) {
+      const style = MODE_STYLES[mode];
+      expect(style).toContain("dark:bg-");
+      expect(style).toContain("dark:text-");
+    }
   });
 });
