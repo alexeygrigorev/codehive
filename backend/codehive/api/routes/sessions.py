@@ -381,8 +381,9 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
 
         settings = Settings()
 
-        # Determine provider from session config (default: anthropic)
-        provider = session_config.get("provider", "anthropic")
+        # NativeEngine uses the Anthropic-compatible SDK.
+        # The only supported provider is "zai" (Z.ai uses an Anthropic-compatible API).
+        provider = session_config.get("provider", "zai")
 
         if provider == "zai":
             api_key = settings.zai_api_key
@@ -394,12 +395,11 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
             base_url = settings.zai_base_url
             default_model = "glm-4.7"
         else:
-            # Default: anthropic
-            api_key = settings.anthropic_api_key
-            if not api_key:
-                raise HTTPException(status_code=503, detail="Engine not configured")
-            base_url = settings.anthropic_base_url
-            default_model = settings.default_model
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported provider for native engine: {provider}. "
+                "Use 'zai' for NativeEngine, or 'claude_code' for Claude CLI.",
+            )
 
         client_kwargs: dict[str, Any] = {"api_key": api_key}
         if base_url:

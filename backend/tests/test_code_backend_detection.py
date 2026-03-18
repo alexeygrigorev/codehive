@@ -100,15 +100,21 @@ class TestCodeBackendDetection:
                 assert "backend_url" not in call_kwargs or call_kwargs.get("backend_url") is None
                 assert "Backend not available" in stderr
 
-    def test_backend_unavailable_no_api_key_errors(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When backend unavailable and no API key, exit with error."""
+    def test_backend_unavailable_no_api_key_uses_claude_cli(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When backend unavailable and no API key, falls back to Claude CLI (no error)."""
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             with (
                 patch("codehive.cli._probe_backend", return_value=False),
                 patch("codehive.cli._resolve_provider", return_value=("", "", "")),
+                patch("codehive.clients.terminal.code_app.CodeApp") as mock_app_cls,
             ):
+                mock_app_cls.return_value = MagicMock()
                 _, stderr, code = _run_cli(["code", tmpdir], monkeypatch)
-                assert code != 0
-                assert "No API key found" in stderr
+                assert code == 0
+                mock_app_cls.assert_called_once()
+                call_kwargs = mock_app_cls.call_args[1]
+                assert call_kwargs.get("api_key") == ""

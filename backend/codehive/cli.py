@@ -457,8 +457,8 @@ def main() -> None:
     code_parser.add_argument(
         "--provider",
         default="",
-        choices=["anthropic", "zai", ""],
-        help="Provider shortcut: anthropic (default) or zai",
+        choices=["zai", ""],
+        help="Provider shortcut: zai (uses Z.ai API). Default: Claude CLI.",
     )
     code_parser.add_argument(
         "--auto-approve",
@@ -615,6 +615,10 @@ def _resolve_provider(args: argparse.Namespace) -> tuple[str, str, str]:
     """Resolve provider, api_key, base_url, and model from CLI args and env.
 
     Returns (api_key, base_url, model).
+
+    For CLI-based providers (claude, codex) or when no provider is specified,
+    returns empty api_key -- the caller should default to ClaudeCodeEngine.
+    For "zai", returns the Z.ai API key and base URL.
     """
     provider = getattr(args, "provider", "") or ""
     model = getattr(args, "model", "") or ""
@@ -633,24 +637,8 @@ def _resolve_provider(args: argparse.Namespace) -> tuple[str, str, str]:
             model = "glm-4.7"
         return api_key, base_url, model
 
-    # Default: anthropic provider
-    api_key = os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "") or os.environ.get(
-        "ANTHROPIC_API_KEY", ""
-    )
-    base_url = os.environ.get("CODEHIVE_ANTHROPIC_BASE_URL", "") or os.environ.get(
-        "ANTHROPIC_BASE_URL", ""
-    )
-    if not api_key:
-        try:
-            from codehive.config import Settings
-
-            settings = Settings()
-            api_key = settings.anthropic_api_key
-            base_url = base_url or settings.anthropic_base_url
-        except Exception:
-            pass
-
-    return api_key, base_url, model
+    # Default: no API key needed (ClaudeCodeEngine uses claude CLI)
+    return "", "", model
 
 
 def _probe_backend(backend_url: str) -> bool:
@@ -806,10 +794,13 @@ def _code(args: argparse.Namespace) -> None:
     else:
         api_key, base_url, model = _resolve_provider(args)
 
-        if not api_key:
+        # If provider is "zai" and no key found, error out.
+        # Otherwise (default), CodeApp will use ClaudeCodeEngine (no key needed).
+        provider = getattr(args, "provider", "") or ""
+        if provider == "zai" and not api_key:
             print(
-                "Error: No API key found. Set CODEHIVE_ANTHROPIC_API_KEY or "
-                "ANTHROPIC_API_KEY environment variable.",
+                "Error: No Z.ai API key found. Set CODEHIVE_ZAI_API_KEY "
+                "or ZAI_API_KEY environment variable.",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -826,42 +817,56 @@ def _code(args: argparse.Namespace) -> None:
 
 def _providers_list(args: argparse.Namespace) -> None:
     """Print a table of configured LLM providers."""
+    import shutil
+
     from codehive.config import Settings
 
     settings = Settings()
 
-    anthropic_key_set = bool(
-        settings.anthropic_api_key
-        or os.environ.get("CODEHIVE_ANTHROPIC_API_KEY", "")
-        or os.environ.get("ANTHROPIC_API_KEY", "")
-    )
+    claude_cli = shutil.which("claude")
+    codex_cli = shutil.which("codex")
     zai_key_set = bool(
         settings.zai_api_key
         or os.environ.get("CODEHIVE_ZAI_API_KEY", "")
         or os.environ.get("ZAI_API_KEY", "")
     )
-
-    anthropic_base = settings.anthropic_base_url or "default"
+    openai_key_set = bool(
+        settings.openai_api_key
+        or os.environ.get("CODEHIVE_OPENAI_API_KEY", "")
+        or os.environ.get("OPENAI_API_KEY", "")
+    )
 
     providers = [
         {
-            "name": "anthropic",
-            "base_url": anthropic_base,
-            "api_key": "yes" if anthropic_key_set else "no",
+            "name": "claude",
+            "type": "cli",
+            "available": "yes" if claude_cli else "no",
             "default_model": settings.default_model,
         },
         {
+            "name": "codex",
+            "type": "cli",
+            "available": "yes" if codex_cli else "no",
+            "default_model": "codex-mini-latest",
+        },
+        {
+            "name": "openai",
+            "type": "api",
+            "available": "yes" if openai_key_set else "no",
+            "default_model": "codex-mini-latest",
+        },
+        {
             "name": "zai",
-            "base_url": settings.zai_base_url,
-            "api_key": "yes" if zai_key_set else "no",
+            "type": "api",
+            "available": "yes" if zai_key_set else "no",
             "default_model": "glm-4.7",
         },
     ]
 
-    print(f"{'Provider':<12} {'Base URL':<40} {'API Key':<10} {'Default Model'}")
-    print("-" * 95)
+    print(f"{'Provider':<12} {'Type':<8} {'Available':<12} {'Default Model'}")
+    print("-" * 60)
     for p in providers:
-        print(f"{p['name']:<12} {p['base_url']:<40} {p['api_key']:<10} {p['default_model']}")
+        print(f"{p['name']:<12} {p['type']:<8} {p['available']:<12} {p['default_model']}")
 
 
 def _rescue(args: argparse.Namespace) -> None:

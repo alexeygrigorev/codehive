@@ -461,15 +461,17 @@ class TestEngineSelection:
 
     @pytest.mark.asyncio
     async def test_build_engine_returns_native_engine(self) -> None:
-        """_build_engine returns NativeEngine for 'native'."""
+        """_build_engine returns NativeEngine for 'native' with zai provider."""
         from codehive.api.routes.sessions import _build_engine
         from codehive.engine.native import NativeEngine
 
         with patch.dict(
             "os.environ",
-            {"ANTHROPIC_API_KEY": "test-key", "CODEHIVE_ANTHROPIC_API_KEY": "test-key"},
+            {"CODEHIVE_ZAI_API_KEY": "test-key"},
         ):
-            engine = await _build_engine({"project_root": "/tmp"}, engine_type="native")
+            engine = await _build_engine(
+                {"project_root": "/tmp", "provider": "zai"}, engine_type="native"
+            )
             assert isinstance(engine, NativeEngine)
 
     @pytest.mark.asyncio

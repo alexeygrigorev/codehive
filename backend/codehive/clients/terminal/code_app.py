@@ -1,4 +1,4 @@
-"""Lightweight coding agent TUI — runs NativeEngine directly without the backend server."""
+"""Lightweight coding agent TUI — runs engine directly without the backend server."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from anthropic import AsyncAnthropic
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
@@ -247,42 +246,53 @@ class CodeApp(App):
             self._engine = None
             return
 
-        from codehive.engine.native import NativeEngine
         from codehive.execution.diff import DiffService
-        from codehive.execution.file_ops import FileOps
-        from codehive.execution.git_ops import GitOps
-        from codehive.execution.shell import ShellRunner
 
-        # Build Anthropic client
-        client_kwargs: dict[str, Any] = {}
+        # If an API key is provided (e.g. for Z.ai), use NativeEngine.
+        # Otherwise, default to ClaudeCodeEngine (uses `claude` CLI, no key needed).
         if self._api_key:
-            client_kwargs["api_key"] = self._api_key
-        if self._base_url:
-            client_kwargs["base_url"] = self._base_url
-        client = AsyncAnthropic(**client_kwargs)
+            from anthropic import AsyncAnthropic
 
-        from codehive.config import Settings as _Settings
-        from codehive.engine.native import DEFAULT_MODEL
+            from codehive.engine.native import NativeEngine
+            from codehive.execution.file_ops import FileOps
+            from codehive.execution.git_ops import GitOps
+            from codehive.execution.shell import ShellRunner
 
-        try:
-            _settings = _Settings()
-            default_model = _settings.default_model or DEFAULT_MODEL
-        except Exception:
-            default_model = DEFAULT_MODEL
+            client_kwargs: dict[str, Any] = {"api_key": self._api_key}
+            if self._base_url:
+                client_kwargs["base_url"] = self._base_url
+            client = AsyncAnthropic(**client_kwargs)
 
-        model = self._model or default_model
+            from codehive.config import Settings as _Settings
+            from codehive.engine.native import DEFAULT_MODEL
 
-        self._engine = NativeEngine(
-            client=client,
-            event_bus=_NoOpEventBus(),  # type: ignore[arg-type]
-            file_ops=FileOps(project_root=self._project_dir),
-            shell_runner=ShellRunner(),
-            git_ops=GitOps(repo_path=self._project_dir),
-            diff_service=DiffService(),
-            model=model,
-            approval_callback=self._approval_callback,
-        )
-        await self._engine.create_session(self._session_id)
+            try:
+                _settings = _Settings()
+                default_model = _settings.default_model or DEFAULT_MODEL
+            except Exception:
+                default_model = DEFAULT_MODEL
+
+            model = self._model or default_model
+
+            self._engine = NativeEngine(
+                client=client,
+                event_bus=_NoOpEventBus(),  # type: ignore[arg-type]
+                file_ops=FileOps(project_root=self._project_dir),
+                shell_runner=ShellRunner(),
+                git_ops=GitOps(repo_path=self._project_dir),
+                diff_service=DiffService(),
+                model=model,
+                approval_callback=self._approval_callback,
+            )
+            await self._engine.create_session(self._session_id)
+        else:
+            # Default: use ClaudeCodeEngine (claude CLI subprocess)
+            from codehive.engine.claude_code_engine import ClaudeCodeEngine
+
+            self._engine = ClaudeCodeEngine(
+                diff_service=DiffService(),
+                working_dir=str(self._project_dir),
+            )
 
     # ---- Backend session loading ------------------------------------------
 

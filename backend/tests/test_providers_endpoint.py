@@ -22,37 +22,142 @@ class TestProvidersEndpoint:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_list_providers_returns_all(self, monkeypatch):
-        """Endpoint returns anthropic, zai, and openai providers."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test")
+    async def test_list_providers_returns_all_four(self):
+        """Endpoint returns claude, codex, openai, and zai providers."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        assert len(result) == 4
+        names = [p.name for p in result]
+        assert "claude" in names
+        assert "codex" in names
+        assert "openai" in names
+        assert "zai" in names
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_claude_available_when_cli_found(self):
+        """Claude is available when claude CLI is on PATH."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.side_effect = lambda name: (
+                "/usr/bin/claude" if name == "claude" else None
+            )
+            result = await list_providers()
+
+        claude = next(p for p in result if p.name == "claude")
+        assert claude.available is True
+        assert claude.type == "cli"
+        assert "CLI found" in claude.reason
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_claude_unavailable_when_cli_missing(self):
+        """Claude is unavailable when claude CLI is not on PATH."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        claude = next(p for p in result if p.name == "claude")
+        assert claude.available is False
+        assert claude.reason == "CLI not found"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_codex_available_when_cli_found(self):
+        """Codex is available when codex CLI is on PATH."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.side_effect = lambda name: (
+                "/usr/bin/codex" if name == "codex" else None
+            )
+            result = await list_providers()
+
+        codex = next(p for p in result if p.name == "codex")
+        assert codex.available is True
+        assert codex.type == "cli"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_codex_unavailable_when_cli_missing(self):
+        """Codex is unavailable when codex CLI is not on PATH."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        codex = next(p for p in result if p.name == "codex")
+        assert codex.available is False
+        assert codex.reason == "CLI not found"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_zai_available_when_key_set(self, monkeypatch):
+        """Z.ai is available when API key is set."""
         monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-test")
 
         from codehive.api.routes.providers import list_providers
 
-        result = await list_providers()
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
 
-        assert len(result) == 3
-        names = [p.name for p in result]
-        assert "anthropic" in names
-        assert "zai" in names
-        assert "openai" in names
+        zai = next(p for p in result if p.name == "zai")
+        assert zai.available is True
+        assert zai.type == "api"
+        assert zai.reason == "API key set"
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_api_key_set_reflects_env(self, monkeypatch):
-        """api_key_set is True when key is set, False when not."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test")
-        # No ZAI key set
+    async def test_zai_unavailable_when_key_missing(self):
+        """Z.ai is unavailable when API key is not set."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        zai = next(p for p in result if p.name == "zai")
+        assert zai.available is False
+        assert zai.reason == "API key not set"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_available_when_key_set(self, monkeypatch):
+        """OpenAI API is available when API key is set."""
+        monkeypatch.setenv("CODEHIVE_OPENAI_API_KEY", "sk-openai-test")
 
         from codehive.api.routes.providers import list_providers
 
-        result = await list_providers()
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
 
-        anthropic = next(p for p in result if p.name == "anthropic")
-        zai = next(p for p in result if p.name == "zai")
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.available is True
+        assert openai_prov.type == "api"
 
-        assert anthropic.api_key_set is True
-        assert zai.api_key_set is False
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_unavailable_when_key_missing(self):
+        """OpenAI API is unavailable when API key is not set."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.available is False
+        assert openai_prov.reason == "API key not set"
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
@@ -60,51 +165,92 @@ class TestProvidersEndpoint:
         """Z.ai provider default model is glm-4.7."""
         from codehive.api.routes.providers import list_providers
 
-        result = await list_providers()
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
         zai = next(p for p in result if p.name == "zai")
         assert zai.default_model == "glm-4.7"
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_anthropic_default_model(self):
-        """Anthropic provider default model is claude-sonnet-4-20250514."""
+    async def test_claude_default_model(self):
+        """Claude provider default model is claude-sonnet-4-20250514."""
         from codehive.api.routes.providers import list_providers
 
-        result = await list_providers()
-        anthropic = next(p for p in result if p.name == "anthropic")
-        assert anthropic.default_model == "claude-sonnet-4-20250514"
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        claude = next(p for p in result if p.name == "claude")
+        assert claude.default_model == "claude-sonnet-4-20250514"
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_zai_base_url(self):
-        """Z.ai provider base URL is correct."""
+    async def test_openai_default_model(self):
+        """OpenAI provider default model is codex-mini-latest."""
         from codehive.api.routes.providers import list_providers
 
-        result = await list_providers()
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.default_model == "codex-mini-latest"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_provider_info_has_type_field(self):
+        """Each provider has a type field (cli or api)."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        for p in result:
+            assert p.type in ("cli", "api")
+
+
+class TestFullProviderList:
+    """Integration: mock CLIs and keys, verify full provider response."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_all_providers_mixed_availability(self, monkeypatch):
+        """Mock claude/codex on PATH, Z.ai key set, OpenAI key missing."""
+        monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-test")
+
+        from codehive.api.routes.providers import list_providers
+
+        def mock_which(name):
+            if name == "claude":
+                return "/usr/bin/claude"
+            if name == "codex":
+                return "/usr/bin/codex"
+            return None
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.side_effect = mock_which
+            result = await list_providers()
+
+        assert len(result) == 4
+
+        claude = next(p for p in result if p.name == "claude")
+        assert claude.available is True
+        assert claude.type == "cli"
+
+        codex = next(p for p in result if p.name == "codex")
+        assert codex.available is True
+        assert codex.type == "cli"
+
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert openai_prov.available is False
+        assert openai_prov.type == "api"
+
         zai = next(p for p in result if p.name == "zai")
-        assert zai.base_url == "https://api.z.ai/api/anthropic"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_anthropic_base_url_default(self):
-        """Anthropic provider base URL falls back to api.anthropic.com."""
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        anthropic = next(p for p in result if p.name == "anthropic")
-        assert anthropic.base_url == "https://api.anthropic.com"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_anthropic_custom_base_url(self, monkeypatch):
-        """Custom anthropic base_url is reflected."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_BASE_URL", "https://my-proxy.com")
-
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        anthropic = next(p for p in result if p.name == "anthropic")
-        assert anthropic.base_url == "https://my-proxy.com"
+        assert zai.available is True
+        assert zai.type == "api"
 
 
 class TestBuildEngineProviderRouting:
@@ -203,9 +349,9 @@ class TestBuildEngineProviderRouting:
         assert "Z.ai" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_anthropic_provider_default(self, monkeypatch):
-        """No provider in config defaults to anthropic."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-ant-test")
+    async def test_native_engine_defaults_to_zai(self, monkeypatch):
+        """NativeEngine defaults to zai provider (not anthropic)."""
+        monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-default")
 
         captured_kwargs = {}
 
@@ -221,28 +367,19 @@ class TestBuildEngineProviderRouting:
             except Exception:
                 pass
 
-        assert captured_kwargs.get("api_key") == "sk-ant-test"
+        assert captured_kwargs.get("api_key") == "sk-zai-default"
 
     @pytest.mark.asyncio
-    async def test_explicit_anthropic_provider(self, monkeypatch):
-        """provider=anthropic uses anthropic credentials."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-ant-explicit")
+    async def test_native_engine_unsupported_provider_raises_400(self, monkeypatch):
+        """NativeEngine with unsupported provider raises 400."""
+        from fastapi import HTTPException
 
-        captured_kwargs = {}
+        from codehive.api.routes.sessions import _build_engine
 
-        class FakeAsyncAnthropic:
-            def __init__(self, **kwargs):
-                captured_kwargs.update(kwargs)
-
-        with patch("anthropic.AsyncAnthropic", FakeAsyncAnthropic):
-            from codehive.api.routes.sessions import _build_engine
-
-            try:
-                await _build_engine({"provider": "anthropic"}, engine_type="native")
-            except Exception:
-                pass
-
-        assert captured_kwargs.get("api_key") == "sk-ant-explicit"
+        with pytest.raises(HTTPException) as exc_info:
+            await _build_engine({"provider": "anthropic"}, engine_type="native")
+        assert exc_info.value.status_code == 400
+        assert "Unsupported provider" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_codex_engine_type_returns_codex_engine(self, monkeypatch):
@@ -332,71 +469,3 @@ class TestBuildEngineProviderRouting:
                 pass
 
         assert captured_engine_kwargs.get("model") == "codex-mini-latest"
-
-
-class TestOpenAIProviderEndpoint:
-    """Tests for OpenAI provider in the providers list."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_provider_present(self):
-        """OpenAI provider appears in provider list."""
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        names = [p.name for p in result]
-        assert "openai" in names
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_default_model(self):
-        """OpenAI provider default model is codex-mini-latest."""
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        openai_prov = next(p for p in result if p.name == "openai")
-        assert openai_prov.default_model == "codex-mini-latest"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_base_url_default(self):
-        """OpenAI provider base URL defaults to api.openai.com."""
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        openai_prov = next(p for p in result if p.name == "openai")
-        assert openai_prov.base_url == "https://api.openai.com"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_key_set_true(self, monkeypatch):
-        """OpenAI api_key_set is True when key is configured."""
-        monkeypatch.setenv("CODEHIVE_OPENAI_API_KEY", "sk-openai-test")
-
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        openai_prov = next(p for p in result if p.name == "openai")
-        assert openai_prov.api_key_set is True
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_key_set_false(self):
-        """OpenAI api_key_set is False when key is not configured."""
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        openai_prov = next(p for p in result if p.name == "openai")
-        assert openai_prov.api_key_set is False
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_custom_base_url(self, monkeypatch):
-        """Custom OpenAI base_url is reflected."""
-        monkeypatch.setenv("CODEHIVE_OPENAI_BASE_URL", "https://my-openai-proxy.com")
-
-        from codehive.api.routes.providers import list_providers
-
-        result = await list_providers()
-        openai_prov = next(p for p in result if p.name == "openai")
-        assert openai_prov.base_url == "https://my-openai-proxy.com"

@@ -1,4 +1,4 @@
-"""Tests for LLM provider configuration (issue #84)."""
+"""Tests for LLM provider configuration (issue #84, updated #110)."""
 
 import argparse
 import os
@@ -19,7 +19,7 @@ def _isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     for key in list(os.environ):
         if key.startswith("CODEHIVE_"):
             monkeypatch.delenv(key)
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY"):
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
 
@@ -81,20 +81,32 @@ class TestProviderSettings:
         settings = Settings()
         assert settings.default_model == "glm-4.7"
 
+    @pytest.mark.usefixtures("_isolated_settings")
+    def test_no_anthropic_api_key_field(self):
+        """Settings class no longer has anthropic_api_key field."""
+        settings = Settings(_env_file=None)
+        assert not hasattr(settings, "anthropic_api_key")
+
+    @pytest.mark.usefixtures("_isolated_settings")
+    def test_no_anthropic_base_url_field(self):
+        """Settings class no longer has anthropic_base_url field."""
+        settings = Settings(_env_file=None)
+        assert not hasattr(settings, "anthropic_base_url")
+
 
 # ---------------------------------------------------------------------------
-# _build_engine tests (base_url passthrough)
+# _build_engine tests (Z.ai provider)
 # ---------------------------------------------------------------------------
 
 
-class TestBuildEngineBaseUrl:
-    """_build_engine passes base_url to AsyncAnthropic when set."""
+class TestBuildEngineZai:
+    """_build_engine with provider=zai uses zai_api_key."""
 
     @pytest.mark.asyncio
-    async def test_build_engine_with_base_url(self, monkeypatch):
-        """When anthropic_base_url is set, AsyncAnthropic receives base_url."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test-key")
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_BASE_URL", "https://custom.api.com")
+    async def test_build_engine_zai_with_base_url(self, monkeypatch):
+        """When zai_base_url is set, AsyncAnthropic receives base_url."""
+        monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-key")
+        monkeypatch.setenv("CODEHIVE_ZAI_BASE_URL", "https://custom.z.ai")
 
         captured_kwargs = {}
 
@@ -106,39 +118,17 @@ class TestBuildEngineBaseUrl:
             from codehive.api.routes.sessions import _build_engine
 
             try:
-                await _build_engine({}, engine_type="native")
+                await _build_engine({"provider": "zai"}, engine_type="native")
             except Exception:
                 pass
 
-        assert captured_kwargs.get("base_url") == "https://custom.api.com"
-        assert captured_kwargs.get("api_key") == "sk-test-key"
-
-    @pytest.mark.asyncio
-    async def test_build_engine_without_base_url(self, monkeypatch):
-        """When anthropic_base_url is empty, AsyncAnthropic does NOT receive base_url."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test-key")
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_BASE_URL", "")
-
-        captured_kwargs = {}
-
-        class FakeAsyncAnthropic:
-            def __init__(self, **kwargs):
-                captured_kwargs.update(kwargs)
-
-        with patch("anthropic.AsyncAnthropic", FakeAsyncAnthropic):
-            from codehive.api.routes.sessions import _build_engine
-
-            try:
-                await _build_engine({}, engine_type="native")
-            except Exception:
-                pass
-
-        assert "base_url" not in captured_kwargs
+        assert captured_kwargs.get("base_url") == "https://custom.z.ai"
+        assert captured_kwargs.get("api_key") == "sk-zai-key"
 
     @pytest.mark.asyncio
     async def test_build_engine_passes_model_from_config(self, monkeypatch):
         """When session config contains model, NativeEngine receives it."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test-key")
+        monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-key")
 
         captured_engine_kwargs = {}
 
@@ -146,8 +136,6 @@ class TestBuildEngineBaseUrl:
 
         def capturing_init(self_engine, **kwargs):
             captured_engine_kwargs.update(kwargs)
-            # Don't actually initialize
-            pass
 
         with (
             patch("anthropic.AsyncAnthropic", MagicMock),
@@ -156,7 +144,7 @@ class TestBuildEngineBaseUrl:
             from codehive.api.routes.sessions import _build_engine
 
             try:
-                await _build_engine({"model": "glm-4.7"}, engine_type="native")
+                await _build_engine({"provider": "zai", "model": "glm-4.7"}, engine_type="native")
             except Exception:
                 pass
 
@@ -189,34 +177,18 @@ class TestCLIProviderResolution:
         assert base_url == "https://api.z.ai/api/anthropic"
         assert model == "glm-5"
 
-    def test_provider_anthropic_default(self, monkeypatch):
-        """--provider anthropic (or omitted) uses default Anthropic behavior."""
-        # Clear any CODEHIVE_ vars that would take precedence
-        monkeypatch.delenv("CODEHIVE_ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("CODEHIVE_ANTHROPIC_BASE_URL", raising=False)
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-789")
-        args = argparse.Namespace(provider="anthropic", model="")
-        api_key, base_url, model = _resolve_provider(args)
-        assert api_key == "sk-ant-789"
-        assert model == ""
-
-    def test_provider_omitted_uses_anthropic(self, monkeypatch):
-        """When --provider is omitted, uses Anthropic."""
-        monkeypatch.delenv("CODEHIVE_ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("CODEHIVE_ANTHROPIC_BASE_URL", raising=False)
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-abc")
+    def test_provider_default_returns_empty_key(self, monkeypatch):
+        """When no provider is specified, returns empty key (Claude CLI used)."""
         args = argparse.Namespace(provider="", model="")
         api_key, base_url, model = _resolve_provider(args)
-        assert api_key == "sk-ant-abc"
+        assert api_key == ""
+        assert base_url == ""
 
-    def test_model_without_provider_overrides_model_only(self, monkeypatch):
-        """--model without --provider overrides model, keeps default provider."""
-        monkeypatch.delenv("CODEHIVE_ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("CODEHIVE_ANTHROPIC_BASE_URL", raising=False)
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-def")
+    def test_model_without_provider_passes_through(self, monkeypatch):
+        """--model without --provider overrides model only."""
         args = argparse.Namespace(provider="", model="claude-opus-4-20250515")
         api_key, base_url, model = _resolve_provider(args)
-        assert api_key == "sk-ant-def"
+        assert api_key == ""
         assert model == "claude-opus-4-20250515"
 
     def test_zai_key_from_codehive_env(self, monkeypatch):
@@ -286,32 +258,22 @@ class TestProvidersListCommand:
     """codehive providers list outputs a table with provider info."""
 
     def test_providers_list_output(self, monkeypatch):
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test")
         output, code = _run_cli(["providers", "list"], monkeypatch)
         assert code == 0
-        assert "anthropic" in output
+        assert "claude" in output
         assert "zai" in output
         assert "Provider" in output
-        assert "Base URL" in output
+        assert "Type" in output
 
-    def test_providers_list_shows_api_key_status(self, monkeypatch):
-        """API key column shows yes/no based on whether keys are configured."""
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_API_KEY", "sk-test")
-        # Ensure no ZAI key is set
+    def test_providers_list_shows_availability(self, monkeypatch):
+        """Available column shows yes/no based on CLI presence and keys."""
         monkeypatch.delenv("CODEHIVE_ZAI_API_KEY", raising=False)
         monkeypatch.delenv("ZAI_API_KEY", raising=False)
 
         output, code = _run_cli(["providers", "list"], monkeypatch)
         assert code == 0
-
-        lines = output.strip().split("\n")
-        # Find the anthropic line and zai line
-        anthropic_line = [line for line in lines if "anthropic" in line and "zai" not in line]
-        zai_line = [line for line in lines if line.strip().startswith("zai")]
-
-        assert len(anthropic_line) >= 1
-        assert "yes" in anthropic_line[0]
-
+        # Z.ai should show "no" since no key is set
+        zai_line = [line for line in output.strip().split("\n") if line.strip().startswith("zai")]
         assert len(zai_line) >= 1
         assert "no" in zai_line[0]
 
@@ -330,8 +292,11 @@ class TestProvidersListCommand:
         assert "claude-sonnet-4-20250514" in output
         assert "glm-4.7" in output
 
-    def test_providers_list_custom_base_url(self, monkeypatch):
-        monkeypatch.setenv("CODEHIVE_ANTHROPIC_BASE_URL", "https://my-proxy.com")
+    def test_providers_list_shows_all_four(self, monkeypatch):
+        """Provider list includes all four providers."""
         output, code = _run_cli(["providers", "list"], monkeypatch)
         assert code == 0
-        assert "https://my-proxy.com" in output
+        assert "claude" in output
+        assert "codex" in output
+        assert "openai" in output
+        assert "zai" in output

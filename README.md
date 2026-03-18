@@ -37,15 +37,24 @@ mobile/     (planned)
 
 No Docker, no PostgreSQL, no Redis needed. Just Python and Node.
 
+Codehive supports multiple LLM providers:
+
+| Provider | Type | Setup |
+|----------|------|-------|
+| Claude | CLI | Install `claude` CLI -- no API key needed |
+| Codex | CLI | Install `codex` CLI -- no API key needed |
+| OpenAI API | API | Set `CODEHIVE_OPENAI_API_KEY` in `.env` |
+| Z.ai | API | Set `CODEHIVE_ZAI_API_KEY` in `.env` |
+
 ```bash
 # 1. Clone and enter the repo
 git clone <repo-url> && cd codehive
 
-# 2. Set your API key
-echo "CODEHIVE_ANTHROPIC_API_KEY=your-key-here" > .env
-# Or for Z.ai:
-# echo "CODEHIVE_ANTHROPIC_API_KEY=your-zai-key" > .env
-# echo "CODEHIVE_ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic" >> .env
+# 2. Copy and edit environment config
+cp .env.example .env
+# If using Claude CLI (default), no API keys needed.
+# For Z.ai: uncomment and set CODEHIVE_ZAI_API_KEY in .env
+# For OpenAI API: uncomment and set CODEHIVE_OPENAI_API_KEY in .env
 
 # 3. Start the backend (uses SQLite by default)
 cd backend
@@ -216,7 +225,7 @@ npm run lint        # Lint
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values. DB and Redis defaults match `docker-compose.yml` — no changes needed for local dev.
+Copy `.env.example` to `.env` and fill in your values. DB and Redis defaults match `docker-compose.yml` -- no changes needed for local dev.
 
 ```bash
 CODEHIVE_HOST=127.0.0.1          # API bind address
@@ -224,8 +233,14 @@ CODEHIVE_PORT=7433               # API bind port
 CODEHIVE_DEBUG=false             # Auto-reload
 CODEHIVE_DATABASE_URL=postgresql+asyncpg://codehive:codehive@localhost:5432/codehive
 CODEHIVE_REDIS_URL=redis://localhost:6379/0
-CODEHIVE_ANTHROPIC_API_KEY=      # Required for native agent engine
-CODEHIVE_ANTHROPIC_BASE_URL=     # Optional custom API URL
+
+# LLM Providers (set the ones you use)
+CODEHIVE_OPENAI_API_KEY=         # For OpenAI API provider
+CODEHIVE_OPENAI_BASE_URL=        # Optional custom OpenAI API URL
+CODEHIVE_ZAI_API_KEY=            # For Z.ai provider
+CODEHIVE_ZAI_BASE_URL=           # Optional custom Z.ai API URL
+
+# Other integrations
 CODEHIVE_TELEGRAM_BOT_TOKEN=     # For `codehive telegram`
 CODEHIVE_TELEGRAM_CHAT_ID=       # For Telegram notifications
 CODEHIVE_GITHUB_DEFAULT_TOKEN=   # For GitHub integration

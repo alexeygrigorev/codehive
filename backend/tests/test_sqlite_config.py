@@ -23,7 +23,7 @@ def _isolated_settings(monkeypatch, tmp_path):
     for key in list(os.environ):
         if key.startswith("CODEHIVE_"):
             monkeypatch.delenv(key)
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY"):
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ZAI_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
 
