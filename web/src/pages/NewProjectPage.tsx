@@ -162,7 +162,7 @@ export default function NewProjectPage() {
         disabled={loading}
         className="w-full border-2 border-dashed dark:border-gray-600 rounded-lg p-4 text-left hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 mb-4"
       >
-        <h3 className="font-semibold text-lg">Empty Project</h3>
+        <h3 className="font-semibold text-lg dark:text-gray-100">Empty Project</h3>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Create a blank project and start chatting right away.
         </p>
@@ -232,7 +232,7 @@ export default function NewProjectPage() {
             disabled={loading}
             className="border dark:border-gray-600 rounded-lg p-4 text-left hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50"
           >
-            <h3 className="font-semibold text-lg">{flow.title}</h3>
+            <h3 className="font-semibold text-lg dark:text-gray-100">{flow.title}</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{flow.description}</p>
           </button>
         ))}
@@ -240,7 +240,7 @@ export default function NewProjectPage() {
 
       {(selectedType === "spec_from_notes" || selectedType === "start_from_repo") && (
         <div className="mt-4 space-y-2">
-          <label htmlFor="initial-input" className="block font-medium">
+          <label htmlFor="initial-input" className="block font-medium dark:text-gray-200">
             {selectedType === "spec_from_notes"
               ? "Paste your notes"
               : "Repository URL"}
