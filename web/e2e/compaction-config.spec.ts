@@ -1,6 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
-
-const API_BASE = "http://localhost:7433";
+import { API_BASE, TEST_DB_PATH } from "./e2e-constants";
 
 /**
  * Helper: Create a project and session via API, returning the session ID.
@@ -65,8 +64,8 @@ async function seedCompactionEvent(
   const now = new Date().toISOString();
   const jsonData = JSON.stringify(data).replace(/'/g, "''");
 
-  // The DB is at backend/data/codehive.db (relative to project root)
-  const dbPath = "/home/alexey/git/codehive/backend/data/codehive.db";
+  // Use the test-specific database (matches CODEHIVE_DATABASE_URL in playwright.config.ts)
+  const dbPath = TEST_DB_PATH;
   const sql = `INSERT INTO events (id, session_id, type, data, created_at) VALUES ('${eventId}', '${sessionId}', 'context.compacted', '${jsonData}', '${now}');`;
 
   // Pipe SQL via stdin to avoid shell quoting issues with JSON double-quotes

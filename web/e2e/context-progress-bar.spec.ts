@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { API_BASE } from "./e2e-constants";
 
 test.describe("Context progress bar", () => {
   test("E2E 1: Context progress bar API returns valid data for a session", async ({ page, request }) => {
     // Create a project via API
-    const projResp = await request.post("http://localhost:7433/api/projects", {
+    const projResp = await request.post(`${API_BASE}/api/projects`, {
       data: { name: "e2e-ctx-bar-project", path: "/tmp/e2e-ctx-bar-project" },
     });
     expect(projResp.ok()).toBeTruthy();
@@ -11,7 +12,7 @@ test.describe("Context progress bar", () => {
 
     // Create a session via API
     const sessResp = await request.post(
-      `http://localhost:7433/api/projects/${project.id}/sessions`,
+      `${API_BASE}/api/projects/${project.id}/sessions`,
       { data: { name: "e2e-ctx-bar-session", engine: "native", mode: "execution" } },
     );
     expect(sessResp.ok()).toBeTruthy();
@@ -19,7 +20,7 @@ test.describe("Context progress bar", () => {
 
     // Verify the context endpoint returns valid JSON
     const ctxResp = await request.get(
-      `http://localhost:7433/api/sessions/${session.id}/context`,
+      `${API_BASE}/api/sessions/${session.id}/context`,
     );
     expect(ctxResp.ok()).toBeTruthy();
     const data = await ctxResp.json();
@@ -46,7 +47,7 @@ test.describe("Context progress bar", () => {
 
   test("E2E 2: Context endpoint returns correct data with usage records", async ({ request }) => {
     // Create a project via API
-    const projResp = await request.post("http://localhost:7433/api/projects", {
+    const projResp = await request.post(`${API_BASE}/api/projects`, {
       data: { name: "e2e-ctx-colors-project", path: "/tmp/e2e-ctx-colors-project" },
     });
     expect(projResp.ok()).toBeTruthy();
@@ -54,7 +55,7 @@ test.describe("Context progress bar", () => {
 
     // Create a session via API
     const sessResp = await request.post(
-      `http://localhost:7433/api/projects/${project.id}/sessions`,
+      `${API_BASE}/api/projects/${project.id}/sessions`,
       { data: { name: "e2e-ctx-colors-session", engine: "native", mode: "execution" } },
     );
     expect(sessResp.ok()).toBeTruthy();
@@ -62,7 +63,7 @@ test.describe("Context progress bar", () => {
 
     // Verify context endpoint returns valid structure
     const ctxResp = await request.get(
-      `http://localhost:7433/api/sessions/${session.id}/context`,
+      `${API_BASE}/api/sessions/${session.id}/context`,
     );
     expect(ctxResp.ok()).toBeTruthy();
     const data = await ctxResp.json();
