@@ -1,4 +1,4 @@
-"""Tests for ClaudeCodeEngine adapter.
+"""Tests for ClaudeCodeEngine adapter (fire-and-forget model).
 
 All tests use mocked subprocess -- no real ``claude`` CLI invocation.
 """
@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from codehive.engine.base import EngineAdapter
-from codehive.engine.claude_code_engine import ClaudeCodeEngine
+from codehive.engine.claude_code_engine import ClaudeCodeEngine, MAX_RETRIES
 from codehive.execution.diff import DiffService
 
 # ---------------------------------------------------------------------------
@@ -24,34 +24,24 @@ SESSION_ID = uuid.uuid4()
 
 
 def _make_mock_process(
-    returncode: int | None = None,
+    returncode: int = 0,
     stdout_lines: list[bytes] | None = None,
     stderr_data: bytes = b"",
 ) -> MagicMock:
-    """Create a mock asyncio.subprocess.Process."""
+    """Create a mock asyncio.subprocess.Process for fire-and-forget model."""
     proc = MagicMock()
     proc.returncode = returncode
 
-    # stdin
-    proc.stdin = MagicMock()
-    proc.stdin.write = MagicMock()
-    proc.stdin.drain = AsyncMock()
-
-    # stdout -- returns lines one at a time, then empty (EOF)
     if stdout_lines is None:
         stdout_lines = []
     line_iter = iter(stdout_lines + [b""])
     proc.stdout = MagicMock()
     proc.stdout.readline = AsyncMock(side_effect=lambda: next(line_iter))
 
-    # stderr
     proc.stderr = MagicMock()
     proc.stderr.read = AsyncMock(return_value=stderr_data)
 
-    # Control methods
-    proc.terminate = MagicMock()
-    proc.kill = MagicMock()
-    proc.wait = AsyncMock()
+    proc.wait = AsyncMock(return_value=returncode)
 
     return proc
 
@@ -62,6 +52,26 @@ async def _collect_events(aiter: Any) -> list[dict]:
     async for event in aiter:
         events.append(event)
     return events
+
+
+def _system_init_line(session_id: str = "claude-sess-abc", model: str = "opus") -> bytes:
+    """Build a system.init JSON line."""
+    return (
+        json.dumps(
+            {
+                "type": "system",
+                "subtype": "init",
+                "session_id": session_id,
+                "model": model,
+            }
+        ).encode()
+        + b"\n"
+    )
+
+
+def _assistant_line(content: str = "Hello!") -> bytes:
+    """Build an assistant JSON line."""
+    return json.dumps({"type": "assistant", "content": content}).encode() + b"\n"
 
 
 # ---------------------------------------------------------------------------
@@ -105,57 +115,26 @@ class TestCreateSession:
     """Tests for ClaudeCodeEngine.create_session."""
 
     @pytest.mark.asyncio
-    async def test_create_session_spawns_process(self) -> None:
-        """create_session spawns a ClaudeCodeProcess."""
-        proc = _make_mock_process(returncode=None)
+    async def test_create_session_initialises_state(self) -> None:
+        """create_session creates internal state without spawning a subprocess."""
         engine = ClaudeCodeEngine(diff_service=DiffService())
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            await engine.create_session(SESSION_ID)
+        await engine.create_session(SESSION_ID)
 
         assert SESSION_ID in engine._sessions
-        assert engine._sessions[SESSION_ID].process is not None
-
-    @pytest.mark.asyncio
-    async def test_create_session_passes_working_dir(self) -> None:
-        """create_session passes project_root as working_dir."""
-        proc = _make_mock_process(returncode=None)
-        engine = ClaudeCodeEngine(
-            diff_service=DiffService(),
-            working_dir="/home/user/project",
-        )
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ) as mock_exec:
-            await engine.create_session(SESSION_ID)
-
-            kwargs = mock_exec.call_args[1]
-            assert kwargs["cwd"] == "/home/user/project"
+        state = engine._sessions[SESSION_ID]
+        assert state.claude_session_id is None
+        assert state.retry_count == 0
+        assert state.paused is False
 
     @pytest.mark.asyncio
     async def test_create_session_duplicate_replaces(self) -> None:
-        """Calling create_session twice with the same ID replaces the old session."""
-        proc1 = _make_mock_process(returncode=None)
-        proc2 = _make_mock_process(returncode=None)
+        """Calling create_session twice with the same ID replaces old state."""
         engine = ClaudeCodeEngine(diff_service=DiffService())
+        await engine.create_session(SESSION_ID)
+        engine._sessions[SESSION_ID].claude_session_id = "old-sess"
 
-        procs = iter([proc1, proc2])
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(side_effect=lambda *a, **kw: next(procs)),
-        ):
-            await engine.create_session(SESSION_ID)
-            await engine.create_session(SESSION_ID)
-
-        # Old process should have been stopped
-        proc1.terminate.assert_called_once()
-        assert SESSION_ID in engine._sessions
+        await engine.create_session(SESSION_ID)
+        assert engine._sessions[SESSION_ID].claude_session_id is None
 
 
 # ---------------------------------------------------------------------------
@@ -164,13 +143,71 @@ class TestCreateSession:
 
 
 class TestSendMessage:
-    """Tests for ClaudeCodeEngine.send_message."""
+    """Tests for ClaudeCodeEngine.send_message (fire-and-forget)."""
+
+    @pytest.mark.asyncio
+    async def test_first_message_no_resume(self) -> None:
+        """First message does not use --resume, captures session_id from system.init."""
+        proc = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_system_init_line("cs-xyz"), _assistant_line("Hi!")],
+        )
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ) as mock_exec:
+            await engine.create_session(SESSION_ID)
+            events = await _collect_events(engine.send_message(SESSION_ID, "Hello"))
+
+        # Verify --resume was NOT used
+        args = mock_exec.call_args[0]
+        assert "--resume" not in args
+
+        # session_id captured
+        assert engine._sessions[SESSION_ID].claude_session_id == "cs-xyz"
+
+        # Events yielded
+        assert len(events) == 2
+        assert events[0]["type"] == "session.started"
+        assert events[0]["claude_session_id"] == "cs-xyz"
+        assert events[1]["type"] == "message.created"
+        assert events[1]["content"] == "Hi!"
+
+    @pytest.mark.asyncio
+    async def test_second_message_uses_resume(self) -> None:
+        """Second message uses --resume with the stored session_id."""
+        proc1 = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_system_init_line("cs-first"), _assistant_line("First")],
+        )
+        proc2 = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_assistant_line("Second")],
+        )
+        procs = iter([proc1, proc2])
+
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(side_effect=lambda *a, **kw: next(procs)),
+        ) as mock_exec:
+            await engine.create_session(SESSION_ID)
+            await _collect_events(engine.send_message(SESSION_ID, "First msg"))
+            await _collect_events(engine.send_message(SESSION_ID, "Second msg"))
+
+        # Second call should have --resume
+        second_call_args = mock_exec.call_args_list[1][0]
+        assert "--resume" in second_call_args
+        assert "cs-first" in second_call_args
 
     @pytest.mark.asyncio
     async def test_send_message_yields_events(self) -> None:
         """send_message yields parsed codehive events from stdout."""
         stream_lines = [
-            json.dumps({"type": "assistant", "content": "Hello!"}).encode() + b"\n",
+            _assistant_line("Hello!"),
             json.dumps(
                 {"type": "tool_use", "name": "read_file", "input": {"path": "foo.py"}}
             ).encode()
@@ -178,7 +215,7 @@ class TestSendMessage:
             json.dumps({"type": "tool_result", "name": "read_file", "content": "contents"}).encode()
             + b"\n",
         ]
-        proc = _make_mock_process(returncode=None, stdout_lines=stream_lines)
+        proc = _make_mock_process(returncode=0, stdout_lines=stream_lines)
         engine = ClaudeCodeEngine(diff_service=DiffService())
 
         with patch(
@@ -197,10 +234,10 @@ class TestSendMessage:
     @pytest.mark.asyncio
     async def test_send_message_events_have_required_keys(self) -> None:
         """Each yielded event has at least 'type' and 'session_id' keys."""
-        stream_lines = [
-            json.dumps({"type": "assistant", "content": "Test"}).encode() + b"\n",
-        ]
-        proc = _make_mock_process(returncode=None, stdout_lines=stream_lines)
+        proc = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_assistant_line("Test")],
+        )
         engine = ClaudeCodeEngine(diff_service=DiffService())
 
         with patch(
@@ -222,27 +259,125 @@ class TestSendMessage:
         with pytest.raises(KeyError, match="not found"):
             await _collect_events(engine.send_message(uuid.uuid4(), "hello"))
 
+
+# ---------------------------------------------------------------------------
+# Unit: auto-retry on crash
+# ---------------------------------------------------------------------------
+
+
+class TestAutoRetry:
+    """Tests for auto-retry on process crash."""
+
     @pytest.mark.asyncio
-    async def test_send_message_process_crash(self) -> None:
-        """If the process crashes mid-stream, a session.failed event is yielded."""
-        proc = _make_mock_process(
+    async def test_crash_retries_with_resume(self) -> None:
+        """On crash, engine retries with --resume and continuation prompt."""
+        # First call crashes, retry succeeds
+        crash_proc = _make_mock_process(
             returncode=1,
-            stdout_lines=[],
-            stderr_data=b"Segmentation fault",
+            stdout_lines=[_system_init_line("cs-crash")],
+            stderr_data=b"crash",
         )
+        retry_proc = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_assistant_line("Recovered!")],
+        )
+        procs = iter([crash_proc, retry_proc])
+
         engine = ClaudeCodeEngine(diff_service=DiffService())
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
+            new=AsyncMock(side_effect=lambda *a, **kw: next(procs)),
+        ) as mock_exec:
+            await engine.create_session(SESSION_ID)
+            events = await _collect_events(engine.send_message(SESSION_ID, "Do something"))
+
+        # First call yielded system.init, then crashed
+        # Retry call should use --resume
+        retry_args = mock_exec.call_args_list[1][0]
+        assert "--resume" in retry_args
+        assert "cs-crash" in retry_args
+
+        # Should include events from both first call and retry
+        event_types = [e["type"] for e in events]
+        assert "session.started" in event_types
+        assert "message.created" in event_types
+
+    @pytest.mark.asyncio
+    async def test_all_retries_exhausted_yields_session_failed(self) -> None:
+        """After MAX_RETRIES+1 crashes, yields session.failed event."""
+        # All processes crash
+        procs = []
+        for i in range(MAX_RETRIES + 1):
+            p = _make_mock_process(
+                returncode=1,
+                stdout_lines=[_system_init_line(f"cs-crash-{i}")],
+                stderr_data=b"crash",
+            )
+            procs.append(p)
+
+        proc_iter = iter(procs)
+
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(side_effect=lambda *a, **kw: next(proc_iter)),
         ):
             await engine.create_session(SESSION_ID)
-            events = await _collect_events(engine.send_message(SESSION_ID, "go"))
+            events = await _collect_events(engine.send_message(SESSION_ID, "Go"))
 
-        assert len(events) == 1
-        assert events[0]["type"] == "session.failed"
-        assert events[0]["session_id"] == str(SESSION_ID)
-        assert "Segmentation fault" in events[0]["error"]
+        # Last event should be session.failed
+        failed_events = [e for e in events if e["type"] == "session.failed"]
+        assert len(failed_events) == 1
+        assert "retries exhausted" in failed_events[0]["error"]
+
+    @pytest.mark.asyncio
+    async def test_crash_without_session_id_yields_failed(self) -> None:
+        """If crash happens before system.init, yields session.failed (no resume possible)."""
+        crash_proc = _make_mock_process(
+            returncode=1,
+            stdout_lines=[],  # No system.init
+            stderr_data=b"immediate crash",
+        )
+
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=crash_proc),
+        ):
+            await engine.create_session(SESSION_ID)
+            events = await _collect_events(engine.send_message(SESSION_ID, "Go"))
+
+        failed = [e for e in events if e["type"] == "session.failed"]
+        assert len(failed) == 1
+        assert "no claude session ID" in failed[0]["error"]
+
+    @pytest.mark.asyncio
+    async def test_retry_resets_count_on_success(self) -> None:
+        """After successful retry, retry_count is reset to 0."""
+        crash_proc = _make_mock_process(
+            returncode=1,
+            stdout_lines=[_system_init_line("cs-1")],
+            stderr_data=b"crash",
+        )
+        ok_proc = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_assistant_line("OK")],
+        )
+        procs = iter([crash_proc, ok_proc])
+
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(side_effect=lambda *a, **kw: next(procs)),
+        ):
+            await engine.create_session(SESSION_ID)
+            await _collect_events(engine.send_message(SESSION_ID, "Go"))
+
+        assert engine._sessions[SESSION_ID].retry_count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -255,48 +390,26 @@ class TestPauseResume:
 
     @pytest.mark.asyncio
     async def test_pause_marks_session_paused(self) -> None:
-        """pause() sets the paused flag on the session."""
-        proc = _make_mock_process(returncode=None)
         engine = ClaudeCodeEngine(diff_service=DiffService())
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            await engine.create_session(SESSION_ID)
-            await engine.pause(SESSION_ID)
-
+        await engine.create_session(SESSION_ID)
+        await engine.pause(SESSION_ID)
         assert engine._sessions[SESSION_ID].paused is True
 
     @pytest.mark.asyncio
     async def test_resume_clears_pause(self) -> None:
-        """resume() clears the paused flag."""
-        proc = _make_mock_process(returncode=None)
         engine = ClaudeCodeEngine(diff_service=DiffService())
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            await engine.create_session(SESSION_ID)
-            await engine.pause(SESSION_ID)
-            await engine.resume(SESSION_ID)
-
+        await engine.create_session(SESSION_ID)
+        await engine.pause(SESSION_ID)
+        await engine.resume(SESSION_ID)
         assert engine._sessions[SESSION_ID].paused is False
 
     @pytest.mark.asyncio
     async def test_send_message_while_paused_yields_paused_event(self) -> None:
         """send_message while paused yields session.paused and stops."""
-        proc = _make_mock_process(returncode=None)
         engine = ClaudeCodeEngine(diff_service=DiffService())
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            await engine.create_session(SESSION_ID)
-            await engine.pause(SESSION_ID)
-            events = await _collect_events(engine.send_message(SESSION_ID, "hello"))
+        await engine.create_session(SESSION_ID)
+        await engine.pause(SESSION_ID)
+        events = await _collect_events(engine.send_message(SESSION_ID, "hello"))
 
         assert len(events) == 1
         assert events[0]["type"] == "session.paused"
@@ -313,35 +426,18 @@ class TestApproveReject:
 
     @pytest.mark.asyncio
     async def test_approve_action(self) -> None:
-        """approve_action marks a pending action as approved."""
-        proc = _make_mock_process(returncode=None)
         engine = ClaudeCodeEngine(diff_service=DiffService())
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            await engine.create_session(SESSION_ID)
-            # Manually add a pending action
-            engine._sessions[SESSION_ID].pending_actions["act-1"] = {"status": "pending"}
-            await engine.approve_action(SESSION_ID, "act-1")
-
+        await engine.create_session(SESSION_ID)
+        engine._sessions[SESSION_ID].pending_actions["act-1"] = {"status": "pending"}
+        await engine.approve_action(SESSION_ID, "act-1")
         assert engine._sessions[SESSION_ID].pending_actions["act-1"]["approved"] is True
 
     @pytest.mark.asyncio
     async def test_reject_action(self) -> None:
-        """reject_action marks a pending action as rejected."""
-        proc = _make_mock_process(returncode=None)
         engine = ClaudeCodeEngine(diff_service=DiffService())
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            await engine.create_session(SESSION_ID)
-            engine._sessions[SESSION_ID].pending_actions["act-2"] = {"status": "pending"}
-            await engine.reject_action(SESSION_ID, "act-2")
-
+        await engine.create_session(SESSION_ID)
+        engine._sessions[SESSION_ID].pending_actions["act-2"] = {"status": "pending"}
+        await engine.reject_action(SESSION_ID, "act-2")
         assert engine._sessions[SESSION_ID].pending_actions["act-2"]["rejected"] is True
 
 
@@ -355,20 +451,16 @@ class TestGetDiff:
 
     @pytest.mark.asyncio
     async def test_get_diff_returns_tracked_changes(self) -> None:
-        """get_diff returns diffs tracked by DiffService."""
         diff_service = DiffService()
         diff_service.track_change(str(SESSION_ID), "src/main.py", "--- a\n+++ b\n+new line")
-
         engine = ClaudeCodeEngine(diff_service=diff_service)
         result = await engine.get_diff(SESSION_ID)
-
         assert isinstance(result, dict)
         assert "src/main.py" in result
         assert "+new line" in result["src/main.py"]
 
     @pytest.mark.asyncio
     async def test_get_diff_empty_when_no_changes(self) -> None:
-        """get_diff returns empty dict when there are no tracked changes."""
         engine = ClaudeCodeEngine(diff_service=DiffService())
         result = await engine.get_diff(SESSION_ID)
         assert result == {}
@@ -384,17 +476,16 @@ class TestStartTask:
 
     @pytest.mark.asyncio
     async def test_start_task_delegates_to_send_message(self) -> None:
-        """start_task sends task instructions via send_message."""
-        stream_lines = [
-            json.dumps({"type": "assistant", "content": "Task done."}).encode() + b"\n",
-        ]
-        proc = _make_mock_process(returncode=None, stdout_lines=stream_lines)
+        proc = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_assistant_line("Task done.")],
+        )
         engine = ClaudeCodeEngine(diff_service=DiffService())
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
             new=AsyncMock(return_value=proc),
-        ):
+        ) as mock_exec:
             await engine.create_session(SESSION_ID)
             task_id = uuid.uuid4()
             events = await _collect_events(
@@ -405,11 +496,9 @@ class TestStartTask:
         assert events[0]["type"] == "message.created"
         assert events[0]["content"] == "Task done."
 
-        # Verify the message was actually sent to the process
-        proc.stdin.write.assert_called_once()
-        written = proc.stdin.write.call_args[0][0]
-        payload = json.loads(written.decode().strip())
-        assert payload["content"] == "Do the thing"
+        # Verify the message was passed as -p argument
+        args = mock_exec.call_args[0]
+        assert "Do the thing" in args
 
 
 # ---------------------------------------------------------------------------
@@ -421,26 +510,51 @@ class TestCleanup:
     """Tests for session cleanup."""
 
     @pytest.mark.asyncio
-    async def test_cleanup_session_stops_process(self) -> None:
-        """cleanup_session stops the process and removes state."""
-        proc = _make_mock_process(returncode=None)
+    async def test_cleanup_session_removes_state(self) -> None:
+        """cleanup_session removes the session state (no process to stop)."""
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+        await engine.create_session(SESSION_ID)
+        await engine.cleanup_session(SESSION_ID)
+        assert SESSION_ID not in engine._sessions
 
-        async def fake_wait():
-            proc.returncode = 0
 
-        proc.wait = AsyncMock(side_effect=fake_wait)
+# ---------------------------------------------------------------------------
+# Unit: multiple independent sessions
+# ---------------------------------------------------------------------------
+
+
+class TestMultipleSessions:
+    """Tests for independent session tracking."""
+
+    @pytest.mark.asyncio
+    async def test_independent_sessions(self) -> None:
+        """Two sessions track separate claude_session_ids."""
+        sid_a = uuid.uuid4()
+        sid_b = uuid.uuid4()
+
+        proc_a = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_system_init_line("cs-A"), _assistant_line("A")],
+        )
+        proc_b = _make_mock_process(
+            returncode=0,
+            stdout_lines=[_system_init_line("cs-B"), _assistant_line("B")],
+        )
+        procs = iter([proc_a, proc_b])
 
         engine = ClaudeCodeEngine(diff_service=DiffService())
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
+            new=AsyncMock(side_effect=lambda *a, **kw: next(procs)),
         ):
-            await engine.create_session(SESSION_ID)
-            await engine.cleanup_session(SESSION_ID)
+            await engine.create_session(sid_a)
+            await engine.create_session(sid_b)
+            await _collect_events(engine.send_message(sid_a, "A"))
+            await _collect_events(engine.send_message(sid_b, "B"))
 
-        assert SESSION_ID not in engine._sessions
-        proc.terminate.assert_called_once()
+        assert engine._sessions[sid_a].claude_session_id == "cs-A"
+        assert engine._sessions[sid_b].claude_session_id == "cs-B"
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +567,6 @@ class TestEngineSelection:
 
     @pytest.mark.asyncio
     async def test_build_engine_returns_claude_code_engine(self) -> None:
-        """_build_engine returns ClaudeCodeEngine for 'claude_code'."""
         from codehive.api.routes.sessions import _build_engine
 
         engine = await _build_engine({"project_root": "/tmp"}, engine_type="claude_code")
@@ -461,7 +574,6 @@ class TestEngineSelection:
 
     @pytest.mark.asyncio
     async def test_build_engine_returns_native_engine(self) -> None:
-        """_build_engine returns ZaiEngine for 'native' with zai provider."""
         from codehive.api.routes.sessions import _build_engine
         from codehive.engine.zai_engine import ZaiEngine
 
@@ -476,7 +588,6 @@ class TestEngineSelection:
 
     @pytest.mark.asyncio
     async def test_build_engine_unknown_raises_400(self) -> None:
-        """_build_engine raises HTTPException 400 for unknown engine type."""
         from fastapi import HTTPException
 
         from codehive.api.routes.sessions import _build_engine
@@ -487,7 +598,7 @@ class TestEngineSelection:
 
 
 # ---------------------------------------------------------------------------
-# Integration: Process + Parser + Engine pipeline
+# Integration: Full pipeline (mocked subprocess -> engine -> events)
 # ---------------------------------------------------------------------------
 
 
@@ -498,6 +609,7 @@ class TestFullPipeline:
     async def test_full_pipeline_events(self) -> None:
         """Feed mocked stream-json and verify correct codehive events end-to-end."""
         stream_lines = [
+            _system_init_line("cs-pipe"),
             json.dumps({"type": "assistant", "content": "Let me help you."}).encode() + b"\n",
             json.dumps(
                 {"type": "tool_use", "name": "read_file", "input": {"path": "foo.py"}}
@@ -512,7 +624,7 @@ class TestFullPipeline:
             ).encode()
             + b"\n",
         ]
-        proc = _make_mock_process(returncode=None, stdout_lines=stream_lines)
+        proc = _make_mock_process(returncode=0, stdout_lines=stream_lines)
         engine = ClaudeCodeEngine(diff_service=DiffService())
 
         with patch(
@@ -522,16 +634,38 @@ class TestFullPipeline:
             await engine.create_session(SESSION_ID)
             events = await _collect_events(engine.send_message(SESSION_ID, "Help me"))
 
-        assert len(events) == 4
-        assert events[0]["type"] == "message.created"
-        assert events[0]["content"] == "Let me help you."
-        assert events[1]["type"] == "tool.call.started"
-        assert events[1]["tool_name"] == "read_file"
-        assert events[2]["type"] == "tool.call.finished"
+        assert len(events) == 5
+        assert events[0]["type"] == "session.started"
+        assert events[0]["claude_session_id"] == "cs-pipe"
+        assert events[1]["type"] == "message.created"
+        assert events[1]["content"] == "Let me help you."
+        assert events[2]["type"] == "tool.call.started"
         assert events[2]["tool_name"] == "read_file"
-        assert events[3]["type"] == "message.created"
-        assert events[3]["content"] == "Done!"
+        assert events[3]["type"] == "tool.call.finished"
+        assert events[3]["tool_name"] == "read_file"
+        assert events[4]["type"] == "message.created"
+        assert events[4]["content"] == "Done!"
 
-        # All events have session_id
         for evt in events:
             assert evt["session_id"] == str(SESSION_ID)
+
+    @pytest.mark.asyncio
+    async def test_sse_pipeline_with_error(self) -> None:
+        """Error events from crashed subprocess appear in the event stream."""
+        crash_proc = _make_mock_process(
+            returncode=1,
+            stdout_lines=[],
+            stderr_data=b"Segmentation fault",
+        )
+
+        engine = ClaudeCodeEngine(diff_service=DiffService())
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=crash_proc),
+        ):
+            await engine.create_session(SESSION_ID)
+            events = await _collect_events(engine.send_message(SESSION_ID, "go"))
+
+        # No session_id means can't resume, so session.failed
+        assert any(e["type"] == "session.failed" for e in events)

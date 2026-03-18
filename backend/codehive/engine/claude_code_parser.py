@@ -117,6 +117,17 @@ class ClaudeCodeParser:
                     ]
             return []
 
+        # --- System init (captures claude session_id for --resume) ---
+        if msg_type == "system" and data.get("subtype") == "init":
+            return [
+                {
+                    "type": "session.started",
+                    "session_id": sid,
+                    "claude_session_id": data.get("session_id", ""),
+                    "model": data.get("model", ""),
+                }
+            ]
+
         # --- System message / error ---
         if msg_type in ("error", "system"):
             error_msg = data.get("error", data.get("message", str(data)))

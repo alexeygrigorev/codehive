@@ -1,27 +1,23 @@
-"""Claude Code CLI process manager: spawn, communicate, terminate."""
+"""Claude Code CLI process manager: fire-and-forget subprocess per message."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import uuid
+from collections.abc import AsyncIterator
 from typing import Any
-
-from codehive.engine.claude_code_parser import ClaudeCodeParser
 
 logger = logging.getLogger(__name__)
 
 
 class ClaudeCodeProcess:
-    """Manages a single Claude Code CLI subprocess for one session.
+    """Runs a single ``claude -p`` invocation and streams stdout lines.
 
-    Spawns ``claude --print --output-format stream-json --input-format stream-json``
-    as an async subprocess, sends user messages via stdin as newline-delimited
-    JSON, and reads stdout line-by-line for parsing.
+    Each call to :meth:`run` spawns a new subprocess that exits when the
+    turn is complete.  This replaces the old long-running interactive process
+    model that used ``--input-format stream-json`` with stdin pipes.
 
     Args:
-        session_id: Unique identifier for the session this process serves.
         cli_path: Path to the ``claude`` CLI binary.  Defaults to ``"claude"``.
         working_dir: Working directory for the subprocess (project root).
         extra_flags: Additional CLI flags to pass (e.g. ``["--model", "opus"]``).
@@ -29,149 +25,93 @@ class ClaudeCodeProcess:
 
     def __init__(
         self,
-        session_id: uuid.UUID,
         *,
         cli_path: str = "claude",
         working_dir: str | None = None,
         extra_flags: list[str] | None = None,
     ) -> None:
-        self.session_id = session_id
         self.cli_path = cli_path
         self.working_dir = working_dir
         self.extra_flags = extra_flags or []
-        self.parser = ClaudeCodeParser()
 
-        self._process: asyncio.subprocess.Process | None = None
-        self._stderr_output: str = ""
-
-    def _build_command(self) -> list[str]:
-        """Build the CLI command list."""
+    def _build_command(
+        self,
+        message: str,
+        *,
+        resume_session_id: str | None = None,
+    ) -> list[str]:
+        """Build the CLI command list for a single invocation."""
         cmd = [
             self.cli_path,
-            "--print",
+            "-p",
+            message,
             "--output-format",
             "stream-json",
-            "--input-format",
-            "stream-json",
+            "--verbose",
         ]
+        if resume_session_id:
+            cmd.extend(["--resume", resume_session_id])
         cmd.extend(self.extra_flags)
         return cmd
 
-    async def start(self) -> None:
-        """Spawn the Claude Code CLI subprocess.
+    async def run(
+        self,
+        message: str,
+        *,
+        resume_session_id: str | None = None,
+    ) -> AsyncIterator[str]:
+        """Spawn ``claude -p``, yield stdout lines, return when process exits.
+
+        Args:
+            message: The prompt text to send.
+            resume_session_id: If provided, adds ``--resume {id}`` to continue
+                a previous Claude session.
+
+        Yields:
+            Each non-empty stdout line as a string.
+
+        Returns:
+            When the process exits with code 0.
 
         Raises:
-            RuntimeError: If the process is already running.
+            ClaudeProcessError: When the process exits with a non-zero code.
         """
-        if self._process is not None and self._process.returncode is None:
-            raise RuntimeError("Process is already running")
-
-        cmd = self._build_command()
+        cmd = self._build_command(message, resume_session_id=resume_session_id)
 
         kwargs: dict[str, Any] = {
-            "stdin": asyncio.subprocess.PIPE,
             "stdout": asyncio.subprocess.PIPE,
             "stderr": asyncio.subprocess.PIPE,
         }
         if self.working_dir is not None:
             kwargs["cwd"] = self.working_dir
 
-        self._process = await asyncio.create_subprocess_exec(*cmd, **kwargs)
-        self._stderr_output = ""
+        process = await asyncio.create_subprocess_exec(*cmd, **kwargs)
 
-    async def send(self, message: str) -> None:
-        """Send a user message to the process via stdin as newline-delimited JSON.
+        assert process.stdout is not None
+        assert process.stderr is not None
 
-        Args:
-            message: The user's text message.
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            decoded = line.decode().rstrip("\n")
+            if decoded:
+                yield decoded
 
-        Raises:
-            RuntimeError: If the process is not running or stdin is unavailable.
-        """
-        if self._process is None or self._process.stdin is None:
-            raise RuntimeError("Process is not running or stdin is unavailable")
+        await process.wait()
 
-        payload = json.dumps({"type": "user", "content": message})
-        self._process.stdin.write((payload + "\n").encode())
-        await self._process.stdin.drain()
+        if process.returncode != 0:
+            stderr_data = await process.stderr.read()
+            raise ClaudeProcessError(
+                exit_code=process.returncode or 1,
+                stderr=stderr_data.decode(),
+            )
 
-    async def stop(self) -> None:
-        """Terminate the subprocess gracefully.
 
-        Sends SIGTERM and waits for the process to exit.  If the process
-        does not exit within 5 seconds, it is killed.
-        """
-        if self._process is None:
-            return
+class ClaudeProcessError(Exception):
+    """Raised when a ``claude -p`` invocation exits with a non-zero code."""
 
-        if self._process.returncode is None:
-            self._process.terminate()
-            try:
-                await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                self._process.kill()
-                await self._process.wait()
-
-    def is_alive(self) -> bool:
-        """Return True if the subprocess is currently running."""
-        if self._process is None:
-            return False
-        return self._process.returncode is None
-
-    async def read_stdout_line(self) -> str | None:
-        """Read a single line from the process stdout.
-
-        Returns:
-            The line as a string (without trailing newline), or None if
-            stdout is closed / EOF.
-        """
-        if self._process is None or self._process.stdout is None:
-            return None
-
-        line = await self._process.stdout.readline()
-        if not line:
-            return None
-        return line.decode().rstrip("\n")
-
-    async def read_stderr(self) -> str:
-        """Read all available stderr output.
-
-        Returns:
-            The accumulated stderr content as a string.
-        """
-        if self._process is None or self._process.stderr is None:
-            return self._stderr_output
-
-        try:
-            data = await asyncio.wait_for(self._process.stderr.read(), timeout=0.1)
-            self._stderr_output += data.decode()
-        except asyncio.TimeoutError:
-            pass
-
-        return self._stderr_output
-
-    async def check_for_crash(self) -> dict | None:
-        """Check if the process exited unexpectedly and return a failure event.
-
-        Returns:
-            A ``session.failed`` event dict if the process crashed (non-zero
-            exit code), or None if the process is still running or exited
-            cleanly.
-        """
-        if self._process is None:
-            return None
-
-        if self._process.returncode is None:
-            return None
-
-        if self._process.returncode == 0:
-            return None
-
-        # Process crashed -- gather stderr
-        stderr = await self.read_stderr()
-        return {
-            "type": "session.failed",
-            "session_id": str(self.session_id),
-            "exit_code": self._process.returncode,
-            "error": stderr or f"Process exited with code {self._process.returncode}",
-        }
+    def __init__(self, exit_code: int, stderr: str) -> None:
+        self.exit_code = exit_code
+        self.stderr = stderr
+        super().__init__(f"claude exited with code {exit_code}: {stderr[:200]}")

@@ -1,4 +1,4 @@
-"""Tests for Claude Code CLI wrapper and event parser.
+"""Tests for Claude Code CLI wrapper (fire-and-forget) and event parser.
 
 All tests use mocked subprocess -- no real ``claude`` CLI invocation.
 """
@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from codehive.engine.claude_code import ClaudeCodeProcess
+from codehive.engine.claude_code import ClaudeCodeProcess, ClaudeProcessError
 from codehive.engine.claude_code_parser import ClaudeCodeParser
 
 # ---------------------------------------------------------------------------
@@ -24,11 +24,6 @@ SESSION_ID = uuid.uuid4()
 @pytest.fixture
 def parser() -> ClaudeCodeParser:
     return ClaudeCodeParser()
-
-
-@pytest.fixture
-def process() -> ClaudeCodeProcess:
-    return ClaudeCodeProcess(session_id=SESSION_ID)
 
 
 # ---------------------------------------------------------------------------
@@ -138,13 +133,39 @@ class TestClaudeCodeParser:
         assert events[0]["error"] == "Rate limit exceeded"
         assert events[0]["session_id"] == str(SESSION_ID)
 
-    def test_parse_system_message(self, parser: ClaudeCodeParser) -> None:
-        """System messages produce session.error events."""
+    def test_parse_system_message_without_init(self, parser: ClaudeCodeParser) -> None:
+        """System messages without subtype=init produce session.error events."""
         line = json.dumps({"type": "system", "message": "System overload"})
         events = parser.parse_line(line, SESSION_ID)
         assert len(events) == 1
         assert events[0]["type"] == "session.error"
         assert events[0]["error"] == "System overload"
+
+    def test_parse_system_init(self, parser: ClaudeCodeParser) -> None:
+        """system.init event is parsed into session.started with claude_session_id and model."""
+        line = json.dumps(
+            {
+                "type": "system",
+                "subtype": "init",
+                "session_id": "claude-sess-abc123",
+                "model": "claude-sonnet-4-20250514",
+            }
+        )
+        events = parser.parse_line(line, SESSION_ID)
+        assert len(events) == 1
+        evt = events[0]
+        assert evt["type"] == "session.started"
+        assert evt["session_id"] == str(SESSION_ID)
+        assert evt["claude_session_id"] == "claude-sess-abc123"
+        assert evt["model"] == "claude-sonnet-4-20250514"
+
+    def test_parse_system_init_missing_fields(self, parser: ClaudeCodeParser) -> None:
+        """system.init with missing optional fields uses defaults."""
+        line = json.dumps({"type": "system", "subtype": "init"})
+        events = parser.parse_line(line, SESSION_ID)
+        assert len(events) == 1
+        assert events[0]["claude_session_id"] == ""
+        assert events[0]["model"] == ""
 
     def test_all_events_have_required_keys(self, parser: ClaudeCodeParser) -> None:
         """Every event returned must include session_id and type."""
@@ -153,6 +174,7 @@ class TestClaudeCodeParser:
             json.dumps({"type": "tool_use", "name": "x", "input": {}}),
             json.dumps({"type": "tool_result", "name": "x", "content": "ok"}),
             json.dumps({"type": "error", "error": "bad"}),
+            json.dumps({"type": "system", "subtype": "init", "session_id": "s1", "model": "m"}),
         ]
         for line in lines:
             for evt in parser.parse_line(line, SESSION_ID):
@@ -187,23 +209,18 @@ class TestClaudeCodeParser:
 
 
 # ---------------------------------------------------------------------------
-# Process manager tests
+# Process manager tests (fire-and-forget model)
 # ---------------------------------------------------------------------------
 
 
 def _make_mock_process(
-    returncode: int | None = None,
+    returncode: int = 0,
     stdout_lines: list[bytes] | None = None,
     stderr_data: bytes = b"",
 ) -> MagicMock:
-    """Create a mock asyncio.subprocess.Process."""
+    """Create a mock asyncio.subprocess.Process for fire-and-forget model."""
     proc = MagicMock()
     proc.returncode = returncode
-
-    # stdin
-    proc.stdin = MagicMock()
-    proc.stdin.write = MagicMock()
-    proc.stdin.drain = AsyncMock()
 
     # stdout -- returns lines one at a time, then empty (EOF)
     if stdout_lines is None:
@@ -216,240 +233,171 @@ def _make_mock_process(
     proc.stderr = MagicMock()
     proc.stderr.read = AsyncMock(return_value=stderr_data)
 
-    # Control methods
-    proc.terminate = MagicMock()
-    proc.kill = MagicMock()
-    proc.wait = AsyncMock()
+    # wait
+    proc.wait = AsyncMock(return_value=returncode)
 
     return proc
 
 
 class TestClaudeCodeProcess:
-    """Unit tests for ClaudeCodeProcess with mocked subprocess."""
+    """Unit tests for ClaudeCodeProcess fire-and-forget model."""
 
     @pytest.mark.asyncio
-    async def test_start_spawns_with_correct_flags(self) -> None:
-        """start() calls create_subprocess_exec with the right CLI flags."""
-        proc = _make_mock_process(returncode=None)
+    async def test_run_spawns_with_correct_flags(self) -> None:
+        """run() calls create_subprocess_exec with -p and correct flags (no --input-format)."""
+        proc = _make_mock_process(returncode=0)
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
             new=AsyncMock(return_value=proc),
         ) as mock_exec:
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
+            p = ClaudeCodeProcess()
+            async for _ in p.run("Hello"):
+                pass
 
             mock_exec.assert_called_once()
             args = mock_exec.call_args[0]
             assert args[0] == "claude"
-            assert "--print" in args
+            assert "-p" in args
+            assert "Hello" in args
             assert "--output-format" in args
             assert "stream-json" in args
-            assert "--input-format" in args
+            assert "--verbose" in args
+            # Must NOT have old interactive flags
+            assert "--input-format" not in args
+            assert "--print" not in args
 
     @pytest.mark.asyncio
-    async def test_start_with_custom_cli_path(self) -> None:
-        """Configurable CLI path is used in the spawn command."""
-        proc = _make_mock_process(returncode=None)
+    async def test_run_with_resume_session_id(self) -> None:
+        """run() with resume_session_id adds --resume flag."""
+        proc = _make_mock_process(returncode=0)
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
             new=AsyncMock(return_value=proc),
         ) as mock_exec:
-            p = ClaudeCodeProcess(session_id=SESSION_ID, cli_path="/usr/local/bin/claude")
-            await p.start()
+            p = ClaudeCodeProcess()
+            async for _ in p.run("Continue", resume_session_id="sess-abc"):
+                pass
+
+            args = mock_exec.call_args[0]
+            assert "--resume" in args
+            assert "sess-abc" in args
+
+    @pytest.mark.asyncio
+    async def test_run_without_resume_has_no_resume_flag(self) -> None:
+        """run() without resume_session_id does not add --resume."""
+        proc = _make_mock_process(returncode=0)
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ) as mock_exec:
+            p = ClaudeCodeProcess()
+            async for _ in p.run("Hello"):
+                pass
+
+            args = mock_exec.call_args[0]
+            assert "--resume" not in args
+
+    @pytest.mark.asyncio
+    async def test_run_yields_stdout_lines(self) -> None:
+        """run() yields each non-empty stdout line."""
+        lines = [b'{"type":"assistant","content":"hi"}\n', b'{"type":"result","content":"done"}\n']
+        proc = _make_mock_process(returncode=0, stdout_lines=lines)
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ):
+            p = ClaudeCodeProcess()
+            collected = []
+            async for line in p.run("Hello"):
+                collected.append(line)
+
+            assert len(collected) == 2
+            assert '"assistant"' in collected[0]
+            assert '"result"' in collected[1]
+
+    @pytest.mark.asyncio
+    async def test_run_returns_cleanly_on_exit_code_0(self) -> None:
+        """run() completes without error on exit code 0."""
+        proc = _make_mock_process(returncode=0, stdout_lines=[b"line\n"])
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ):
+            p = ClaudeCodeProcess()
+            lines = []
+            async for line in p.run("Hello"):
+                lines.append(line)
+            assert lines == ["line"]
+
+    @pytest.mark.asyncio
+    async def test_run_raises_on_non_zero_exit(self) -> None:
+        """run() raises ClaudeProcessError on non-zero exit code."""
+        proc = _make_mock_process(returncode=1, stderr_data=b"Segfault")
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ):
+            p = ClaudeCodeProcess()
+            with pytest.raises(ClaudeProcessError) as exc_info:
+                async for _ in p.run("Hello"):
+                    pass
+            assert exc_info.value.exit_code == 1
+            assert "Segfault" in exc_info.value.stderr
+
+    @pytest.mark.asyncio
+    async def test_run_with_working_dir(self) -> None:
+        """working_dir is passed as cwd to the subprocess."""
+        proc = _make_mock_process(returncode=0)
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ) as mock_exec:
+            p = ClaudeCodeProcess(working_dir="/home/user/project")
+            async for _ in p.run("Hello"):
+                pass
+
+            kwargs = mock_exec.call_args[1]
+            assert kwargs["cwd"] == "/home/user/project"
+
+    @pytest.mark.asyncio
+    async def test_run_with_custom_cli_path(self) -> None:
+        """Configurable CLI path is used."""
+        proc = _make_mock_process(returncode=0)
+
+        with patch(
+            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=proc),
+        ) as mock_exec:
+            p = ClaudeCodeProcess(cli_path="/usr/local/bin/claude")
+            async for _ in p.run("Hello"):
+                pass
 
             args = mock_exec.call_args[0]
             assert args[0] == "/usr/local/bin/claude"
 
     @pytest.mark.asyncio
-    async def test_start_with_extra_flags(self) -> None:
-        """Extra CLI flags are passed through to the subprocess."""
-        proc = _make_mock_process(returncode=None)
+    async def test_run_with_extra_flags(self) -> None:
+        """Extra CLI flags are passed through."""
+        proc = _make_mock_process(returncode=0)
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
             new=AsyncMock(return_value=proc),
         ) as mock_exec:
-            p = ClaudeCodeProcess(
-                session_id=SESSION_ID,
-                extra_flags=["--model", "opus", "--permission-mode", "auto"],
-            )
-            await p.start()
+            p = ClaudeCodeProcess(extra_flags=["--model", "opus"])
+            async for _ in p.run("Hello"):
+                pass
 
             args = mock_exec.call_args[0]
             assert "--model" in args
             assert "opus" in args
-            assert "--permission-mode" in args
-            assert "auto" in args
-
-    @pytest.mark.asyncio
-    async def test_send_writes_to_stdin(self) -> None:
-        """send() writes newline-delimited JSON to the process stdin."""
-        proc = _make_mock_process(returncode=None)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-            await p.send("Hello Claude")
-
-            proc.stdin.write.assert_called_once()
-            written = proc.stdin.write.call_args[0][0]
-            payload = json.loads(written.decode().strip())
-            assert payload["type"] == "user"
-            assert payload["content"] == "Hello Claude"
-            proc.stdin.drain.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_send_raises_when_not_running(self) -> None:
-        """send() raises RuntimeError when process is not started."""
-        p = ClaudeCodeProcess(session_id=SESSION_ID)
-        with pytest.raises(RuntimeError, match="not running"):
-            await p.send("hello")
-
-    @pytest.mark.asyncio
-    async def test_stop_terminates_process(self) -> None:
-        """stop() calls terminate on the subprocess."""
-        proc = _make_mock_process(returncode=None)
-
-        # After terminate, returncode stays None until wait
-        # Simulate: wait sets returncode
-        async def fake_wait():
-            proc.returncode = 0
-
-        proc.wait = AsyncMock(side_effect=fake_wait)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-
-            assert p.is_alive()
-            await p.stop()
-
-            proc.terminate.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_is_alive_running(self) -> None:
-        """is_alive() returns True for a running process."""
-        proc = _make_mock_process(returncode=None)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-            assert p.is_alive() is True
-
-    @pytest.mark.asyncio
-    async def test_is_alive_not_started(self) -> None:
-        """is_alive() returns False before start()."""
-        p = ClaudeCodeProcess(session_id=SESSION_ID)
-        assert p.is_alive() is False
-
-    @pytest.mark.asyncio
-    async def test_is_alive_after_exit(self) -> None:
-        """is_alive() returns False after process exits."""
-        proc = _make_mock_process(returncode=0)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-            assert p.is_alive() is False
-
-    @pytest.mark.asyncio
-    async def test_read_stdout_line(self) -> None:
-        """Stdout lines can be read from the process."""
-        line_data = json.dumps({"type": "assistant", "content": "hi"})
-        proc = _make_mock_process(
-            returncode=None,
-            stdout_lines=[f"{line_data}\n".encode()],
-        )
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-
-            line = await p.read_stdout_line()
-            assert line == line_data
-
-            # EOF returns None
-            eof = await p.read_stdout_line()
-            assert eof is None
-
-    @pytest.mark.asyncio
-    async def test_check_for_crash_returns_session_failed(self) -> None:
-        """When process exits with non-zero code, check_for_crash returns session.failed."""
-        proc = _make_mock_process(returncode=1, stderr_data=b"Segfault or something")
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-
-            event = await p.check_for_crash()
-            assert event is not None
-            assert event["type"] == "session.failed"
-            assert event["session_id"] == str(SESSION_ID)
-            assert event["exit_code"] == 1
-            assert "Segfault" in event["error"]
-
-    @pytest.mark.asyncio
-    async def test_check_for_crash_returns_none_when_running(self) -> None:
-        """check_for_crash returns None when the process is still running."""
-        proc = _make_mock_process(returncode=None)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-
-            assert await p.check_for_crash() is None
-
-    @pytest.mark.asyncio
-    async def test_check_for_crash_returns_none_on_clean_exit(self) -> None:
-        """check_for_crash returns None when process exits with code 0."""
-        proc = _make_mock_process(returncode=0)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-
-            assert await p.check_for_crash() is None
-
-    @pytest.mark.asyncio
-    async def test_working_dir_passed_to_subprocess(self) -> None:
-        """working_dir is passed as cwd to the subprocess."""
-        proc = _make_mock_process(returncode=None)
-
-        with patch(
-            "codehive.engine.claude_code.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=proc),
-        ) as mock_exec:
-            p = ClaudeCodeProcess(session_id=SESSION_ID, working_dir="/home/user/project")
-            await p.start()
-
-            kwargs = mock_exec.call_args[1]
-            assert kwargs["cwd"] == "/home/user/project"
 
 
 # ---------------------------------------------------------------------------
@@ -458,12 +406,16 @@ class TestClaudeCodeProcess:
 
 
 class TestProcessParserIntegration:
-    """Feed mocked stream-json through process stdout and parse into events."""
+    """Feed mocked stream-json through process run() and parse into events."""
 
     @pytest.mark.asyncio
     async def test_full_pipeline(self) -> None:
-        """Read stdout lines from the process and parse them into codehive events."""
+        """Read stdout lines from process.run() and parse them into codehive events."""
         stream_lines = [
+            json.dumps(
+                {"type": "system", "subtype": "init", "session_id": "cs-123", "model": "opus"}
+            ).encode()
+            + b"\n",
             json.dumps({"type": "assistant", "content": "Let me help you."}).encode() + b"\n",
             json.dumps(
                 {"type": "tool_use", "name": "read_file", "input": {"path": "foo.py"}}
@@ -478,32 +430,30 @@ class TestProcessParserIntegration:
             ).encode()
             + b"\n",
         ]
-        proc = _make_mock_process(returncode=None, stdout_lines=stream_lines)
+        proc = _make_mock_process(returncode=0, stdout_lines=stream_lines)
+        parser = ClaudeCodeParser()
 
         with patch(
             "codehive.engine.claude_code.asyncio.create_subprocess_exec",
             new=AsyncMock(return_value=proc),
         ):
-            p = ClaudeCodeProcess(session_id=SESSION_ID)
-            await p.start()
-
+            p = ClaudeCodeProcess()
             all_events: list[dict] = []
-            while True:
-                line = await p.read_stdout_line()
-                if line is None:
-                    break
-                events = p.parser.parse_line(line, p.session_id)
+            async for line in p.run("Help me"):
+                events = parser.parse_line(line, SESSION_ID)
                 all_events.extend(events)
 
-        assert len(all_events) == 4
-        assert all_events[0]["type"] == "message.created"
-        assert all_events[0]["content"] == "Let me help you."
-        assert all_events[1]["type"] == "tool.call.started"
-        assert all_events[1]["tool_name"] == "read_file"
-        assert all_events[2]["type"] == "tool.call.finished"
+        assert len(all_events) == 5
+        assert all_events[0]["type"] == "session.started"
+        assert all_events[0]["claude_session_id"] == "cs-123"
+        assert all_events[1]["type"] == "message.created"
+        assert all_events[1]["content"] == "Let me help you."
+        assert all_events[2]["type"] == "tool.call.started"
         assert all_events[2]["tool_name"] == "read_file"
-        assert all_events[3]["type"] == "message.created"
-        assert all_events[3]["content"] == "Done!"
+        assert all_events[3]["type"] == "tool.call.finished"
+        assert all_events[3]["tool_name"] == "read_file"
+        assert all_events[4]["type"] == "message.created"
+        assert all_events[4]["content"] == "Done!"
 
         # All events have session_id
         for evt in all_events:
