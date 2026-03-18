@@ -89,3 +89,21 @@ After #94b, `codehive code` can send messages through the backend API. But the c
 - The existing WebSocket infrastructure (`ws.py`) already handles session event subscriptions -- the key is ensuring the message endpoint publishes to it
 - This issue is primarily integration/wiring work -- most pieces already exist
 - For web-to-terminal real-time: the web sends a message via the same API, the backend runs the engine, and the terminal would need to poll or subscribe to see it. Full bidirectional real-time from terminal is a future enhancement (requires the terminal to also subscribe to WebSocket events).
+
+## Log
+
+### [SWE] 2026-03-18 14:00
+- Added `POST /api/sessions/{id}/messages/stream` SSE endpoint to `sessions.py`
+  - Returns `text/event-stream` with `StreamingResponse`
+  - Each engine event is emitted as `data: {json}\n\n`
+  - Handles errors by marking session as failed and emitting error event
+  - Sets proper headers (Cache-Control, Connection, X-Accel-Buffering)
+- Verified engine already publishes all event types (message.delta, message.created, tool.call.started, tool.call.finished) to EventBus during send_message
+- Verified WebSocket subscribers already receive events via LocalEventBus pub/sub
+- No changes needed to engine or event bus -- wiring was already correct
+- Did NOT modify code_app.py or cli.py (parallel #99 SWE constraint)
+- Files modified: `backend/codehive/api/routes/sessions.py`
+- Files created: `backend/tests/test_cross_client_visibility.py`
+- Tests added: 9 tests covering SSE endpoint registration, engine-to-bus publishing, cross-client event flow, event persistence, SSE format validation
+- Build results: 1722 tests pass, 0 fail, 3 skipped, ruff clean
+- Known limitations: CodeApp SSE client integration (scope item #3) not implemented here due to constraint not to modify code_app.py (parallel #99 SWE). That can be a follow-up.

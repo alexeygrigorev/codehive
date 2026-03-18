@@ -1,9 +1,11 @@
 """CRUD + state transition endpoints for sessions."""
 
+import json
 import uuid
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -406,3 +408,59 @@ async def send_message_endpoint(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@sessions_router.post("/{session_id}/messages/stream")
+async def send_message_stream_endpoint(
+    session_id: uuid.UUID,
+    body: MessageSend,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Send a message to a session and stream engine events as SSE.
+
+    Returns a ``text/event-stream`` response where each event is a
+    JSON-encoded ``data:`` line.  The stream ends when the engine turn
+    completes.
+    """
+    # Verify session exists
+    session = await get_session(db, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Mark session as executing
+    try:
+        await update_session(db, session_id, status="executing")
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    async def _event_generator() -> AsyncIterator[str]:
+        try:
+            engine = await _build_engine(session.config, engine_type=session.engine)
+
+            async for event in engine.send_message(session_id, body.content, db=db):
+                yield f"data: {json.dumps(event)}\n\n"
+
+            # Engine finished a turn -- mark as waiting_input
+            await update_session(db, session_id, status="waiting_input")
+        except Exception as exc:
+            # On errors, mark as failed and send error event
+            try:
+                await update_session(db, session_id, status="failed")
+            except Exception:
+                pass
+            error_event = {
+                "type": "error",
+                "content": str(exc),
+                "session_id": str(session_id),
+            }
+            yield f"data: {json.dumps(error_event)}\n\n"
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
