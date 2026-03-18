@@ -29,6 +29,7 @@ vi.mock("@/context/WebSocketContext", () => ({
     events: [],
     onEvent: vi.fn(),
     removeListener: vi.fn(),
+    injectEvents: vi.fn(),
   }),
 }));
 

@@ -12,6 +12,12 @@ vi.mock("@/api/messages", () => ({
   sendMessage: vi.fn(),
 }));
 
+vi.mock("@/context/WebSocketContext", () => ({
+  useWebSocket: vi.fn(() => ({
+    injectEvents: vi.fn(),
+  })),
+}));
+
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 
 const mockUseSessionEvents = vi.mocked(useSessionEvents);

@@ -21,6 +21,7 @@ interface WebSocketContextValue {
   events: SessionEvent[];
   onEvent: (callback: EventCallback) => void;
   removeListener: (callback: EventCallback) => void;
+  injectEvents: (events: SessionEvent[]) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextValue | null>(null);
@@ -130,11 +131,16 @@ export function WebSocketProvider({
     clientRef.current?.removeListener(callback);
   }, []);
 
+  const injectEvents = useCallback((newEvents: SessionEvent[]) => {
+    setLiveEvents((prev) => [...prev, ...newEvents]);
+  }, []);
+
   const value: WebSocketContextValue = {
     connectionState,
     events,
     onEvent,
     removeListener,
+    injectEvents,
   };
 
   return (

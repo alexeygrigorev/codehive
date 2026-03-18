@@ -16,6 +16,12 @@ vi.mock("@/api/approvals", () => ({
   rejectAction: vi.fn(),
 }));
 
+vi.mock("@/context/WebSocketContext", () => ({
+  useWebSocket: vi.fn(() => ({
+    injectEvents: vi.fn(),
+  })),
+}));
+
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { approveAction, rejectAction } from "@/api/approvals";
 
