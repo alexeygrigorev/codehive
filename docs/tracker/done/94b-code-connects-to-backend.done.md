@@ -115,3 +115,22 @@ Parent: #94
 - In backend mode, the approval callback does not apply -- the backend engine uses its own approval policy. The `--auto-approve` flag should be stored in the session config dict so the backend engine can read it.
 - The `_code()` function should use a short timeout (2-3 seconds) for the health probe to avoid blocking the user when the backend is down.
 - `--session` and `--new` should be added as a mutually exclusive argparse group.
+
+## Log
+
+### [SWE] 2026-03-18 10:00
+- Implemented backend detection, project/session resolution in cli.py
+- Added --session and --new mutually exclusive flags to `codehive code`
+- Added _probe_backend() with 3s timeout for health check
+- Added _resolve_project_and_session() for project-by-path + session resolution
+- Updated _code() to probe backend, resolve project/session, and pass to CodeApp
+- Updated CodeApp constructor with backend_url, session_id, project_id params
+- Updated _init_engine() to skip NativeEngine in backend mode
+- Added _send_backend_message() async generator for backend mode
+- Updated _run_agent() to use backend or local engine
+- Updated action_new_session() for backend mode (creates session via API)
+- Files modified: backend/codehive/cli.py, backend/codehive/clients/terminal/code_app.py
+- Files created: backend/tests/test_code_backend_detection.py, backend/tests/test_code_project_resolution.py, backend/tests/test_code_session_resolution.py, backend/tests/test_code_app_backend_mode.py
+- Tests added: 25 new tests across 4 test files
+- Build results: 1697 tests pass, 0 fail, ruff clean on changed files
+- Known limitations: pre-existing ruff errors in codehive/api/app.py (not touched by this issue)
