@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 import pytest
@@ -205,35 +204,6 @@ async def async_client(db_session):
         yield ac
 
 
-@pytest_asyncio.fixture
-async def workspace_id(db_session):
-    """Create a workspace and return its ID for project creation tests."""
-    from datetime import datetime, timezone
-
-    from codehive.db.models import Workspace
-
-    ws = Workspace(
-        id=uuid.uuid4(),
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws.id
-
-
-@pytest_asyncio.fixture
-async def workspace_id_member(workspace_id, async_client, db_session):
-    """Ensure the test user is an owner of the workspace."""
-    from tests.conftest import ensure_workspace_membership
-
-    await ensure_workspace_membership(db_session, workspace_id)
-    return workspace_id
-
-
 class TestArchetypesAPI:
     @pytest.mark.asyncio
     async def test_list_archetypes(self, async_client):
@@ -272,10 +242,10 @@ class TestArchetypesAPI:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_create_project_with_valid_archetype(self, async_client, workspace_id_member):
+    async def test_create_project_with_valid_archetype(self, async_client):
         """POST /api/projects with valid archetype populates knowledge correctly."""
         body = {
-            "workspace_id": str(workspace_id_member),
+            "workspace_id": str(),
             "name": "test-project",
             "archetype": "software_development",
         }
@@ -291,10 +261,10 @@ class TestArchetypesAPI:
         assert data["knowledge"]["archetype_settings"]["auto_start_tasks"] is True
 
     @pytest.mark.asyncio
-    async def test_create_project_without_archetype(self, async_client, workspace_id_member):
+    async def test_create_project_without_archetype(self, async_client):
         """POST /api/projects without archetype works as before."""
         body = {
-            "workspace_id": str(workspace_id_member),
+            "workspace_id": str(),
             "name": "no-archetype-project",
         }
         resp = await async_client.post("/api/projects", json=body)
@@ -304,10 +274,10 @@ class TestArchetypesAPI:
         assert "archetype_roles" not in data["knowledge"]
 
     @pytest.mark.asyncio
-    async def test_create_project_with_invalid_archetype(self, async_client, workspace_id_member):
+    async def test_create_project_with_invalid_archetype(self, async_client):
         """POST /api/projects with invalid archetype returns 400."""
         body = {
-            "workspace_id": str(workspace_id_member),
+            "workspace_id": str(),
             "name": "bad-archetype-project",
             "archetype": "nonexistent",
         }

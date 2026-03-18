@@ -24,7 +24,7 @@ from codehive.core.knowledge import (
     update_knowledge,
 )
 from codehive.core.project import ProjectNotFoundError, create_project
-from codehive.db.models import Base, Project, Session as SessionModel, Workspace
+from codehive.db.models import Base, Project, Session as SessionModel
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
@@ -57,24 +57,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     return await create_project(
         db_session,
-        workspace_id=workspace.id,
         name="test-project",
     )
 
@@ -98,17 +83,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         token = resp.json()["access_token"]
         ac.headers["Authorization"] = f"Bearer {token}"
         yield ac
-
-
-@pytest_asyncio.fixture
-async def workspace_member(
-    workspace: Workspace, client: AsyncClient, db_session: AsyncSession
-) -> Workspace:
-    """Ensure the test user is an owner of the workspace for API tests."""
-    from tests.conftest import ensure_workspace_membership
-
-    await ensure_workspace_membership(db_session, workspace.id)
-    return workspace
 
 
 # ---------------------------------------------------------------------------
@@ -232,12 +206,10 @@ class TestCoreCharter:
 
 @pytest.mark.asyncio
 class TestKnowledgeAPI:
-    async def test_get_knowledge_fresh_project(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_get_knowledge_fresh_project(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "kb-project"},
+            json={"name": "kb-project"},
         )
         project_id = create_resp.json()["id"]
 
@@ -245,12 +217,10 @@ class TestKnowledgeAPI:
         assert resp.status_code == 200
         assert resp.json() == {}
 
-    async def test_patch_knowledge_tech_stack(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_patch_knowledge_tech_stack(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "kb-patch"},
+            json={"name": "kb-patch"},
         )
         project_id = create_resp.json()["id"]
 
@@ -261,10 +231,10 @@ class TestKnowledgeAPI:
         assert resp.status_code == 200
         assert resp.json()["tech_stack"] == {"language": "python"}
 
-    async def test_patch_knowledge_merge(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_patch_knowledge_merge(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "kb-merge"},
+            json={"name": "kb-merge"},
         )
         project_id = create_resp.json()["id"]
 
@@ -281,12 +251,10 @@ class TestKnowledgeAPI:
         assert data["tech_stack"] == {"language": "python"}
         assert data["conventions"] == {"style": "black"}
 
-    async def test_patch_knowledge_invalid_structure(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_patch_knowledge_invalid_structure(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "kb-invalid"},
+            json={"name": "kb-invalid"},
         )
         project_id = create_resp.json()["id"]
 
@@ -311,12 +279,10 @@ class TestKnowledgeAPI:
 
 @pytest.mark.asyncio
 class TestCharterAPI:
-    async def test_get_charter_fresh_project(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_get_charter_fresh_project(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "charter-fresh"},
+            json={"name": "charter-fresh"},
         )
         project_id = create_resp.json()["id"]
 
@@ -324,10 +290,10 @@ class TestCharterAPI:
         assert resp.status_code == 200
         assert resp.json() == {}
 
-    async def test_put_charter(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_put_charter(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "charter-put"},
+            json={"name": "charter-put"},
         )
         project_id = create_resp.json()["id"]
 
@@ -346,10 +312,10 @@ class TestCharterAPI:
         data = resp.json()
         assert data["goals"] == ["Ship MVP by Q2"]
 
-    async def test_get_charter_after_put(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_get_charter_after_put(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "charter-persist"},
+            json={"name": "charter-persist"},
         )
         project_id = create_resp.json()["id"]
 
@@ -383,10 +349,10 @@ class TestCharterAPI:
         )
         assert resp.status_code == 404
 
-    async def test_put_charter_invalid_body(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_put_charter_invalid_body(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "charter-invalid"},
+            json={"name": "charter-invalid"},
         )
         project_id = create_resp.json()["id"]
 
@@ -471,9 +437,7 @@ class TestBuildKnowledgeContext:
 class TestEngineKnowledgeInjection:
     """Test that NativeEngine injects knowledge into the system prompt."""
 
-    async def test_engine_includes_knowledge_in_system_prompt(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_engine_includes_knowledge_in_system_prompt(self, db_session: AsyncSession):
         """When a session's project has knowledge, it appears in the system prompt."""
         from dataclasses import dataclass
         from codehive.engine import NativeEngine
@@ -483,7 +447,7 @@ class TestEngineKnowledgeInjection:
         from codehive.execution.shell import ShellRunner
 
         # Create project with knowledge
-        proj = await create_project(db_session, workspace_id=workspace.id, name="eng-proj")
+        proj = await create_project(db_session, name="eng-proj")
         proj.knowledge = {"tech_stack": {"language": "python"}}
         await db_session.commit()
         await db_session.refresh(proj)
@@ -563,9 +527,7 @@ class TestEngineKnowledgeInjection:
         assert "Project Knowledge" in system_prompt
         assert "python" in system_prompt
 
-    async def test_engine_no_knowledge_block_when_empty(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_engine_no_knowledge_block_when_empty(self, db_session: AsyncSession):
         """When project knowledge is empty, no knowledge block in system prompt."""
         from dataclasses import dataclass
         from codehive.engine import NativeEngine
@@ -574,7 +536,7 @@ class TestEngineKnowledgeInjection:
         from codehive.execution.git_ops import GitOps
         from codehive.execution.shell import ShellRunner
 
-        proj = await create_project(db_session, workspace_id=workspace.id, name="eng-empty")
+        proj = await create_project(db_session, name="eng-empty")
 
         session_row = SessionModel(
             project_id=proj.id,
@@ -644,9 +606,7 @@ class TestEngineKnowledgeInjection:
         system_prompt = call_kwargs.kwargs.get("system", "")
         assert "Project Knowledge" not in system_prompt
 
-    async def test_engine_includes_charter_in_system_prompt(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_engine_includes_charter_in_system_prompt(self, db_session: AsyncSession):
         """When project has a charter, it appears in the system prompt."""
         from dataclasses import dataclass
         from codehive.engine import NativeEngine
@@ -655,7 +615,7 @@ class TestEngineKnowledgeInjection:
         from codehive.execution.git_ops import GitOps
         from codehive.execution.shell import ShellRunner
 
-        proj = await create_project(db_session, workspace_id=workspace.id, name="eng-charter")
+        proj = await create_project(db_session, name="eng-charter")
         proj.knowledge = {
             "charter": {
                 "goals": ["Ship MVP by Q2"],

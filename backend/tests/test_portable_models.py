@@ -12,12 +12,12 @@ from codehive.db.models import (
     Base,
     Checkpoint,
     Event,
+    Issue,
     Message,
     PendingQuestion,
     Project,
     Session,
     Task,
-    Workspace,
 )
 
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
@@ -59,56 +59,13 @@ class TestCreateAllOnSQLite:
 class TestUUIDRoundTrip:
     """UUID primary keys must round-trip as uuid.UUID on SQLite."""
 
-    @pytest.mark.asyncio
-    async def test_uuid_pk_round_trips(self, db_session: AsyncSession):
-        ws_id = uuid.uuid4()
-        ws = Workspace(id=ws_id, name="test-ws", root_path="/tmp/test", settings={})
-        db_session.add(ws)
-        await db_session.commit()
-
-        result = await db_session.execute(select(Workspace).where(Workspace.id == ws_id))
-        row = result.scalar_one()
-
-        assert isinstance(row.id, uuid.UUID)
-        assert row.id == ws_id
-
-    @pytest.mark.asyncio
-    async def test_uuid_fk_round_trips(self, db_session: AsyncSession):
-        ws = Workspace(name="ws", root_path="/tmp", settings={})
-        db_session.add(ws)
-        await db_session.flush()
-
-        proj = Project(workspace_id=ws.id, name="proj", knowledge={})
-        db_session.add(proj)
-        await db_session.commit()
-
-        result = await db_session.execute(select(Project).where(Project.id == proj.id))
-        row = result.scalar_one()
-        assert isinstance(row.workspace_id, uuid.UUID)
-        assert row.workspace_id == ws.id
-
 
 class TestJSONRoundTrip:
     """JSON/JSONB fields must round-trip correctly on SQLite."""
 
     @pytest.mark.asyncio
     async def test_json_dict_round_trips(self, db_session: AsyncSession):
-        data = {"key": "value", "nested": {"a": 1}}
-        ws = Workspace(name="ws-json", root_path="/tmp", settings=data)
-        db_session.add(ws)
-        await db_session.commit()
-
-        result = await db_session.execute(select(Workspace).where(Workspace.id == ws.id))
-        row = result.scalar_one()
-        assert row.settings == data
-
-    @pytest.mark.asyncio
-    async def test_json_nullable_field(self, db_session: AsyncSession):
-        ws = Workspace(name="ws2", root_path="/tmp", settings={})
-        db_session.add(ws)
-        await db_session.flush()
-
-        proj = Project(workspace_id=ws.id, name="proj", knowledge={}, github_config=None)
+        proj = Project(name="proj", knowledge={}, github_config=None)
         db_session.add(proj)
         await db_session.commit()
 
@@ -118,12 +75,8 @@ class TestJSONRoundTrip:
 
     @pytest.mark.asyncio
     async def test_json_with_data(self, db_session: AsyncSession):
-        ws = Workspace(name="ws3", root_path="/tmp", settings={})
-        db_session.add(ws)
-        await db_session.flush()
-
         config = {"repo": "org/repo", "token": "abc"}
-        proj = Project(workspace_id=ws.id, name="proj", knowledge={}, github_config=config)
+        proj = Project(name="proj", knowledge={}, github_config=config)
         db_session.add(proj)
         await db_session.commit()
 
@@ -137,50 +90,7 @@ class TestServerDefaults:
 
     @pytest.mark.asyncio
     async def test_created_at_default(self, db_session: AsyncSession):
-        ws = Workspace(name="ws-ts", root_path="/tmp", settings={})
-        db_session.add(ws)
-        await db_session.commit()
-        await db_session.refresh(ws)
-        assert ws.created_at is not None
-
-    @pytest.mark.asyncio
-    async def test_boolean_defaults(self, db_session: AsyncSession):
-        from codehive.db.models import User
-
-        user = User(
-            email="test@test.com",
-            username="test",
-            password_hash="hash",
-        )
-        db_session.add(user)
-        await db_session.commit()
-        await db_session.refresh(user)
-        assert user.is_active is True
-        assert user.is_admin is False
-
-    @pytest.mark.asyncio
-    async def test_json_server_default(self, db_session: AsyncSession):
-        """Inserting without explicit settings should use server default '{}'."""
-        ws = Workspace(name="ws-default", root_path="/tmp")
-        db_session.add(ws)
-        await db_session.commit()
-        await db_session.refresh(ws)
-        # Server default is '{}', which should deserialize to an empty dict
-        assert ws.settings == {} or ws.settings == "{}"
-
-
-class TestFullEntityGraphOnSQLite:
-    """Insert a complete entity graph on SQLite to verify all FKs and types work."""
-
-    @pytest.mark.asyncio
-    async def test_full_chain(self, db_session: AsyncSession):
-        from codehive.db.models import Issue
-
-        ws = Workspace(name="graph-ws", root_path="/tmp", settings={})
-        db_session.add(ws)
-        await db_session.flush()
-
-        proj = Project(workspace_id=ws.id, name="proj", knowledge={})
+        proj = Project(name="proj", knowledge={})
         db_session.add(proj)
         await db_session.flush()
 
@@ -209,13 +119,11 @@ class TestFullEntityGraphOnSQLite:
         await db_session.commit()
 
         # All should have UUIDs
-        for obj in [ws, proj, issue, sess, task, msg, evt, cp, pq]:
+        for obj in [proj, issue, sess, task, msg, evt, cp, pq]:
             assert obj.id is not None
             assert isinstance(obj.id, uuid.UUID)
 
-        # FK references
-        assert proj.workspace_id == ws.id
-        assert issue.project_id == proj.id
+        # FK references        assert issue.project_id == proj.id
         assert sess.project_id == proj.id
         assert sess.issue_id == issue.id
         assert task.session_id == sess.id

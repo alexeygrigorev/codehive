@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -28,7 +27,7 @@ from codehive.core.remote import (
     list_remote_targets,
     update_remote_target,
 )
-from codehive.db.models import Base, Workspace
+from codehive.db.models import Base
 from codehive.execution.shell import ShellResult
 from codehive.execution.ssh import (
     SSHConnectionError,
@@ -69,21 +68,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    """Create a workspace for use in tests."""
-    ws = Workspace(
-        name="test-ws",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client with the DB session overridden."""
     app = create_app()
@@ -112,10 +96,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest.mark.asyncio
 class TestCoreCreateRemoteTarget:
-    async def test_create_success(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_create_success(self, db_session: AsyncSession):
         target = await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="prod-server",
             host="192.168.1.100",
             username="deploy",
@@ -129,21 +112,19 @@ class TestCoreCreateRemoteTarget:
         assert target.status == "disconnected"
         assert target.known_hosts_policy == "auto"
 
-    async def test_create_missing_host(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_create_missing_host(self, db_session: AsyncSession):
         with pytest.raises(RemoteTargetValidationError, match="host is required"):
             await create_remote_target(
                 db_session,
-                workspace_id=workspace.id,
                 label="bad",
                 host="",
                 username="user",
             )
 
-    async def test_create_missing_username(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_create_missing_username(self, db_session: AsyncSession):
         with pytest.raises(RemoteTargetValidationError, match="username is required"):
             await create_remote_target(
                 db_session,
-                workspace_id=workspace.id,
                 label="bad",
                 host="host.example.com",
                 username="",
@@ -152,31 +133,28 @@ class TestCoreCreateRemoteTarget:
 
 @pytest.mark.asyncio
 class TestCoreListRemoteTargets:
-    async def test_list_filtered_by_workspace(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_list_filtered_by_workspace(self, db_session: AsyncSession):
         await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="server-1",
             host="10.0.0.1",
             username="admin",
         )
         await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="server-2",
             host="10.0.0.2",
             username="admin",
         )
-        targets = await list_remote_targets(db_session, workspace_id=workspace.id)
+        targets = await list_remote_targets(db_session)
         assert len(targets) == 2
 
 
 @pytest.mark.asyncio
 class TestCoreGetRemoteTarget:
-    async def test_get_existing(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_get_existing(self, db_session: AsyncSession):
         created = await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="get-me",
             host="10.0.0.1",
             username="admin",
@@ -193,10 +171,9 @@ class TestCoreGetRemoteTarget:
 
 @pytest.mark.asyncio
 class TestCoreUpdateRemoteTarget:
-    async def test_update_host_and_port(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_update_host_and_port(self, db_session: AsyncSession):
         created = await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="update-me",
             host="10.0.0.1",
             username="admin",
@@ -212,10 +189,9 @@ class TestCoreUpdateRemoteTarget:
 
 @pytest.mark.asyncio
 class TestCoreDeleteRemoteTarget:
-    async def test_delete_success(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_delete_success(self, db_session: AsyncSession):
         created = await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="del-me",
             host="10.0.0.1",
             username="admin",
@@ -227,12 +203,9 @@ class TestCoreDeleteRemoteTarget:
         with pytest.raises(RemoteTargetNotFoundError):
             await delete_remote_target(db_session, uuid.uuid4())
 
-    async def test_delete_with_active_connection(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_delete_with_active_connection(self, db_session: AsyncSession):
         created = await create_remote_target(
             db_session,
-            workspace_id=workspace.id,
             label="active",
             host="10.0.0.1",
             username="admin",
@@ -471,11 +444,10 @@ class TestSSHConnectionManager:
 
 @pytest.mark.asyncio
 class TestRemoteTargetAPI:
-    async def test_create_201(self, client: AsyncClient, workspace: Workspace):
+    async def test_create_201(self, client: AsyncClient):
         resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "my-server",
                 "host": "10.0.0.1",
                 "port": 22,
@@ -490,11 +462,10 @@ class TestRemoteTargetAPI:
         assert data["status"] == "disconnected"
         assert "id" in data
 
-    async def test_list_includes_created(self, client: AsyncClient, workspace: Workspace):
+    async def test_list_includes_created(self, client: AsyncClient):
         await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "srv-1",
                 "host": "10.0.0.1",
                 "username": "user",
@@ -504,11 +475,10 @@ class TestRemoteTargetAPI:
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
 
-    async def test_get_detail(self, client: AsyncClient, workspace: Workspace):
+    async def test_get_detail(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "detail-srv",
                 "host": "10.0.0.2",
                 "username": "admin",
@@ -519,11 +489,10 @@ class TestRemoteTargetAPI:
         assert resp.status_code == 200
         assert resp.json()["host"] == "10.0.0.2"
 
-    async def test_update_fields(self, client: AsyncClient, workspace: Workspace):
+    async def test_update_fields(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "upd-srv",
                 "host": "10.0.0.1",
                 "username": "admin",
@@ -538,11 +507,10 @@ class TestRemoteTargetAPI:
         assert resp.json()["host"] == "10.0.0.99"
         assert resp.json()["port"] == 2222
 
-    async def test_delete_removes(self, client: AsyncClient, workspace: Workspace):
+    async def test_delete_removes(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "del-srv",
                 "host": "10.0.0.1",
                 "username": "admin",
@@ -556,16 +524,13 @@ class TestRemoteTargetAPI:
         assert resp.status_code == 404
 
     @patch("codehive.execution.ssh.asyncssh.connect", new_callable=AsyncMock)
-    async def test_test_connection_success(
-        self, mock_connect: AsyncMock, client: AsyncClient, workspace: Workspace
-    ):
+    async def test_test_connection_success(self, mock_connect: AsyncMock, client: AsyncClient):
         mock_conn = _mock_ssh_connection()
         mock_connect.return_value = mock_conn
 
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "test-srv",
                 "host": "10.0.0.1",
                 "username": "admin",
@@ -580,15 +545,12 @@ class TestRemoteTargetAPI:
         assert data["duration_ms"] is not None
 
     @patch("codehive.execution.ssh.asyncssh.connect", new_callable=AsyncMock)
-    async def test_test_connection_failure(
-        self, mock_connect: AsyncMock, client: AsyncClient, workspace: Workspace
-    ):
+    async def test_test_connection_failure(self, mock_connect: AsyncMock, client: AsyncClient):
         mock_connect.side_effect = OSError("Connection refused")
 
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "fail-srv",
                 "host": "unreachable.example.com",
                 "username": "admin",
@@ -603,16 +565,13 @@ class TestRemoteTargetAPI:
         assert "Connection refused" in data["message"]
 
     @patch("codehive.execution.ssh.asyncssh.connect", new_callable=AsyncMock)
-    async def test_execute_command(
-        self, mock_connect: AsyncMock, client: AsyncClient, workspace: Workspace
-    ):
+    async def test_execute_command(self, mock_connect: AsyncMock, client: AsyncClient):
         mock_conn = _mock_ssh_connection()
         mock_connect.return_value = mock_conn
 
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "exec-srv",
                 "host": "10.0.0.1",
                 "username": "admin",
@@ -630,14 +589,11 @@ class TestRemoteTargetAPI:
         assert data["stdout"] == "output\n"
         assert data["timed_out"] is False
 
-    async def test_delete_with_active_connection_400(
-        self, client: AsyncClient, workspace: Workspace
-    ):
+    async def test_delete_with_active_connection_400(self, client: AsyncClient):
         """Simulate that the target has an active connection by injecting it into the manager."""
         create_resp = await client.post(
             "/api/remote-targets",
             json={
-                "workspace_id": str(workspace.id),
                 "label": "active-srv",
                 "host": "10.0.0.1",
                 "username": "admin",

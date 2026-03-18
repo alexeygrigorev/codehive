@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from codehive.api.deps import get_current_user, get_db
+from codehive.api.deps import get_db
 from codehive.api.schemas.diff import DiffFileEntry, SessionDiffsResponse
 from codehive.api.schemas.session import (
     MessageSend,
@@ -16,8 +16,6 @@ from codehive.api.schemas.session import (
     SessionRead,
     SessionUpdate,
 )
-from codehive.core.permissions import check_project_access
-from codehive.db.models import User
 from codehive.execution.diff import DiffService
 from codehive.core.session import (
     InvalidStatusTransitionError,
@@ -57,10 +55,8 @@ async def _get_session_or_404(
 async def create_session_endpoint(
     project_id: uuid.UUID,
     body: SessionCreate,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
-    await check_project_access(db, current_user.id, project_id, "member")
     try:
         session = await create_session(
             db,
@@ -84,10 +80,8 @@ async def create_session_endpoint(
 @project_sessions_router.get("", response_model=list[SessionRead])
 async def list_sessions_endpoint(
     project_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[SessionRead]:
-    await check_project_access(db, current_user.id, project_id, "viewer")
     try:
         sessions = await list_sessions(db, project_id)
     except ProjectNotFoundError:
@@ -98,11 +92,9 @@ async def list_sessions_endpoint(
 @sessions_router.get("/{session_id}", response_model=SessionRead)
 async def get_session_endpoint(
     session_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
     session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "viewer")
     return SessionRead.model_validate(session)
 
 
@@ -110,11 +102,9 @@ async def get_session_endpoint(
 async def update_session_endpoint(
     session_id: uuid.UUID,
     body: SessionUpdate,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
     session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "member")
     fields = body.model_dump(exclude_unset=True)
     try:
         session = await update_session(db, session_id, **fields)
@@ -126,11 +116,9 @@ async def update_session_endpoint(
 @sessions_router.delete("/{session_id}", status_code=204)
 async def delete_session_endpoint(
     session_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "member")
+    await _get_session_or_404(db, session_id)
     try:
         await delete_session(db, session_id)
     except SessionNotFoundError:
@@ -145,11 +133,9 @@ async def delete_session_endpoint(
 @sessions_router.post("/{session_id}/pause", response_model=SessionRead)
 async def pause_session_endpoint(
     session_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
     session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "member")
     try:
         session = await pause_session(db, session_id)
     except SessionNotFoundError:
@@ -162,11 +148,9 @@ async def pause_session_endpoint(
 @sessions_router.post("/{session_id}/resume", response_model=SessionRead)
 async def resume_session_endpoint(
     session_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
     session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "member")
     try:
         session = await resume_session(db, session_id)
     except SessionNotFoundError:
@@ -180,12 +164,10 @@ async def resume_session_endpoint(
 async def switch_mode_endpoint(
     session_id: uuid.UUID,
     body: ModeSwitchRequest,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
     """Switch a session's mode."""
     session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "member")
     try:
         session = await update_session(db, session_id, mode=body.mode)
     except SessionNotFoundError:
@@ -196,12 +178,10 @@ async def switch_mode_endpoint(
 @sessions_router.get("/{session_id}/subagents", response_model=list[SessionRead])
 async def list_subagents_endpoint(
     session_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[SessionRead]:
     """Return the list of child sessions (sub-agents) for a session."""
-    session = await _get_session_or_404(db, session_id)
-    await check_project_access(db, current_user.id, session.project_id, "viewer")
+    await _get_session_or_404(db, session_id)
     try:
         children = await list_child_sessions(db, session_id)
     except SessionNotFoundError:

@@ -21,7 +21,7 @@ from codehive.core.jwt import (
     create_access_token,
     create_refresh_token,
 )
-from codehive.db.models import Base, Project, Session as SessionModel, Workspace
+from codehive.db.models import Base, Project, Session as SessionModel
 
 # All tests in this file require auth_enabled=True since they test WS auth behavior.
 pytestmark = pytest.mark.usefixtures("_enable_auth")
@@ -65,20 +65,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture
 async def session_id(db_session: AsyncSession) -> uuid.UUID:
-    """Create a workspace, project, and session, returning the session ID."""
-    ws = Workspace(
-        id=uuid.uuid4(),
-        name="test-ws",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.flush()
-
+    """Create a project and session, returning the session ID."""
     proj = Project(
         id=uuid.uuid4(),
-        workspace_id=ws.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),

@@ -1,14 +1,13 @@
-"""First-run setup: detect empty DB, seed default workspace and admin user."""
+"""First-run setup: seed default admin user when auth is enabled."""
 
 import secrets
 import string
-from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.core.auth import hash_password
-from codehive.db.models import User, Workspace, WorkspaceMember
+from codehive.db.models import User
 
 
 async def is_first_run(session: AsyncSession) -> bool:
@@ -27,33 +26,17 @@ def _generate_password(length: int = 24) -> str:
 async def seed_first_run(session: AsyncSession) -> dict[str, str] | None:
     """Seed the database on first run.
 
-    Creates a default workspace ("Default") and an admin user. Credentials
-    are read from environment variables:
+    When auth is disabled, this is a no-op.
+    When auth is enabled, creates an admin user on first run.
 
-    - ``CODEHIVE_ADMIN_USERNAME`` (default: ``"admin"``)
-    - ``CODEHIVE_ADMIN_PASSWORD`` (if unset, a random password is generated)
-
-    Returns a dict with ``username``, ``password``, and ``email`` on success,
-    or ``None`` if seeding was skipped (users already exist).
+    Returns a dict with username, password, and email on success,
+    or None if seeding was skipped.
     """
     from codehive.config import Settings
 
     settings = Settings()
 
     if not settings.auth_enabled:
-        # When auth is disabled, only create the default workspace (no admin user).
-        # Check if workspace already exists to be idempotent.
-        ws_result = await session.execute(select(Workspace).where(Workspace.name == "Default"))
-        if ws_result.scalar_one_or_none() is None:
-            now = datetime.now(UTC).replace(tzinfo=None)
-            workspace = Workspace(
-                name="Default",
-                root_path="/",
-                settings={},
-                created_at=now,
-            )
-            session.add(workspace)
-            await session.commit()
         return None
 
     if not await is_first_run(session):
@@ -63,39 +46,14 @@ async def seed_first_run(session: AsyncSession) -> dict[str, str] | None:
     password = settings.admin_password or _generate_password()
     email = f"{username}@codehive.local"
 
-    now = datetime.now(UTC).replace(tzinfo=None)
-
-    # Create default workspace
-    workspace = Workspace(
-        name="Default",
-        root_path="/",
-        settings={},
-        created_at=now,
-    )
-    session.add(workspace)
-    await session.flush()
-
-    # Create admin user
     user = User(
         email=email,
         username=username,
         password_hash=hash_password(password),
         is_admin=True,
         is_active=True,
-        workspace_id=workspace.id,
     )
     session.add(user)
-    await session.flush()
-
-    # Add admin as owner of the default workspace
-    member = WorkspaceMember(
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        created_at=now,
-    )
-    session.add(member)
-
     await session.commit()
 
     return {"username": username, "password": password, "email": email}

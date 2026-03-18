@@ -121,7 +121,6 @@ class TestAlembicMigrations:
                 lambda sync_conn: __import__("sqlalchemy").inspect(sync_conn).get_table_names()
             )
         expected_tables = {
-            "workspaces",
             "projects",
             "issues",
             "sessions",
@@ -136,7 +135,6 @@ class TestAlembicMigrations:
             "push_subscriptions",
             "users",
             "device_tokens",
-            "workspace_members",
         }
         assert expected_tables.issubset(set(tables))
         await engine.dispose()

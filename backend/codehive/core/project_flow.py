@@ -200,13 +200,11 @@ async def generate_brief(flow_state: dict[str, Any]) -> ProjectBrief:
 async def start_flow(
     db: AsyncSession,
     flow_type: FlowType,
-    workspace_id: uuid.UUID,
     initial_input: str = "",
 ) -> tuple[uuid.UUID, uuid.UUID, list[FlowQuestion]]:
     """Start a new project flow.
 
     Returns (flow_id, session_id, first_questions).
-    Raises WorkspaceNotFoundError if workspace_id is invalid.
     """
     flow_id = uuid.uuid4()
 
@@ -219,7 +217,6 @@ async def start_flow(
     # We need a project to attach the session to. Create a temporary one.
     project = await create_project(
         db,
-        workspace_id=workspace_id,
         name=f"_flow_{flow_id}",
         description="Temporary project for flow",
     )
@@ -250,7 +247,6 @@ async def start_flow(
     _FLOW_STATES[flow_id] = {
         "flow_id": flow_id,
         "flow_type": flow_type.value,
-        "workspace_id": workspace_id,
         "project_id": project.id,
         "session_id": session.id,
         "status": "active",
@@ -333,12 +329,9 @@ async def finalize_flow(
     else:
         brief = ProjectBrief(**state["brief"])
 
-    workspace_id = state["workspace_id"]
-
     # Create the real project
     project = await create_project(
         db,
-        workspace_id=workspace_id,
         name=brief.name,
         description=brief.description,
     )

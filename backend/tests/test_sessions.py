@@ -26,9 +26,8 @@ from codehive.core.session import (
     resume_session,
     update_session,
 )
-from codehive.db.models import Base, Issue, Project, Workspace
+from codehive.db.models import Base, Issue, Project
 from codehive.db.models import Session as SessionModel
-from tests.conftest import ensure_workspace_membership
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
@@ -62,25 +61,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    """Create a workspace for tests."""
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     """Create a project for session tests."""
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),
@@ -130,10 +113,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def project_member(
-    project: Project, workspace: Workspace, client: AsyncClient, db_session: AsyncSession
+    project: Project, client: AsyncClient, db_session: AsyncSession
 ) -> Project:
     """Ensure the test user is an owner of the workspace for API tests."""
-    await ensure_workspace_membership(db_session, workspace.id)
     return project
 
 
@@ -239,12 +221,9 @@ class TestCoreListSessions:
         sessions = await list_sessions(db_session, project.id)
         assert len(sessions) == 2
 
-    async def test_list_filters_by_project(
-        self, db_session: AsyncSession, workspace: Workspace, project: Project
-    ):
+    async def test_list_filters_by_project(self, db_session: AsyncSession, project: Project):
         """Sessions from other projects are not returned."""
         other_project = Project(
-            workspace_id=workspace.id,
             name="other-project",
             knowledge={},
             created_at=datetime.now(timezone.utc),

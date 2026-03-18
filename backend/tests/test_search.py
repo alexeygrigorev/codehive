@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from codehive.api.app import create_app
 from codehive.api.deps import get_db
 from codehive.core.search import SessionNotFoundError, search, search_session_history
-from codehive.db.models import Base, Event, Issue, Message, Project, Workspace
+from codehive.db.models import Base, Event, Issue, Message, Project
 from codehive.db.models import Session as SessionModel
 
 # ---------------------------------------------------------------------------
@@ -48,23 +48,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),
@@ -76,10 +61,9 @@ async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
 
 
 @pytest_asyncio.fixture
-async def project2(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project2(db_session: AsyncSession) -> Project:
     """A second project for cross-project filtering tests."""
     proj = Project(
-        workspace_id=workspace.id,
         name="other-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),

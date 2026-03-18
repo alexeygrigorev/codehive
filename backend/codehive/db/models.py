@@ -11,8 +11,7 @@ All column types are portable across PostgreSQL and SQLite:
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, Unicode
-from sqlalchemy import UniqueConstraint, text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, Unicode, text
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -67,55 +66,12 @@ class User(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
-        PortableUUID, ForeignKey("workspaces.id"), nullable=True
-    )
-
-
-class Workspace(Base):
-    __tablename__ = "workspaces"
-
-    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(Unicode(255), unique=True, nullable=False)
-    root_path: Mapped[str] = mapped_column(Unicode(1024), nullable=False)
-    settings: Mapped[dict] = mapped_column(
-        PortableJSON, nullable=False, server_default=text("'{}'")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        nullable=False, server_default=text("CURRENT_TIMESTAMP")
-    )
-
-    projects: Mapped[list["Project"]] = relationship(back_populates="workspace")
-    members: Mapped[list["WorkspaceMember"]] = relationship(back_populates="workspace")
-
-
-class WorkspaceMember(Base):
-    __tablename__ = "workspace_members"
-    __table_args__ = (UniqueConstraint("workspace_id", "user_id"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("workspaces.id"), nullable=False
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(PortableUUID, ForeignKey("users.id"), nullable=False)
-    role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        nullable=False,
-        server_default=text("CURRENT_TIMESTAMP"),
-        default=lambda: datetime.now(UTC).replace(tzinfo=None),
-    )
-
-    workspace: Mapped["Workspace"] = relationship(back_populates="members")
-    user: Mapped["User"] = relationship()
 
 
 class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("workspaces.id"), nullable=False
-    )
     name: Mapped[str] = mapped_column(Unicode(255), nullable=False)
     path: Mapped[str | None] = mapped_column(Unicode(1024), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -128,7 +84,6 @@ class Project(Base):
         nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
 
-    workspace: Mapped["Workspace"] = relationship(back_populates="projects")
     issues: Mapped[list["Issue"]] = relationship(back_populates="project")
     sessions: Mapped[list["Session"]] = relationship(back_populates="project")
 
@@ -281,9 +236,6 @@ class RemoteTarget(Base):
     __tablename__ = "remote_targets"
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("workspaces.id"), nullable=False
-    )
     label: Mapped[str] = mapped_column(Unicode(255), nullable=False)
     host: Mapped[str] = mapped_column(Unicode(500), nullable=False)
     port: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("22"))
@@ -297,8 +249,6 @@ class RemoteTarget(Base):
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
-
-    workspace: Mapped["Workspace"] = relationship()
 
 
 class CustomRole(Base):

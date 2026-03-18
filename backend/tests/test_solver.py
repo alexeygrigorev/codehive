@@ -415,7 +415,7 @@ class TestTriggerLaunchesSolver:
         from sqlalchemy import JSON, MetaData, event, text
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-        from codehive.db.models import Base, Project, Workspace
+        from codehive.db.models import Base, Project
 
         # Set up in-memory SQLite
         engine_db = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -453,18 +453,7 @@ class TestTriggerLaunchesSolver:
 
         session_factory = async_sessionmaker(engine_db, expire_on_commit=False)
         async with session_factory() as db:
-            ws = Workspace(
-                name="ws",
-                root_path="/tmp",
-                settings={},
-                created_at=datetime.now(timezone.utc),
-            )
-            db.add(ws)
-            await db.commit()
-            await db.refresh(ws)
-
             proj = Project(
-                workspace_id=ws.id,
                 name="test",
                 knowledge={},
                 created_at=datetime.now(timezone.utc),
@@ -518,7 +507,7 @@ class TestTriggerLaunchesSolver:
         from sqlalchemy import JSON, MetaData, event, text
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-        from codehive.db.models import Base, Project, Workspace
+        from codehive.db.models import Base, Project
 
         engine_db = create_async_engine("sqlite+aiosqlite:///:memory:")
 
@@ -555,18 +544,7 @@ class TestTriggerLaunchesSolver:
 
         session_factory = async_sessionmaker(engine_db, expire_on_commit=False)
         async with session_factory() as db:
-            ws = Workspace(
-                name="ws",
-                root_path="/tmp",
-                settings={},
-                created_at=datetime.now(timezone.utc),
-            )
-            db.add(ws)
-            await db.commit()
-            await db.refresh(ws)
-
             proj = Project(
-                workspace_id=ws.id,
                 name="test",
                 knowledge={},
                 created_at=datetime.now(timezone.utc),
@@ -604,7 +582,7 @@ class TestTriggerLaunchesSolver:
         from sqlalchemy import JSON, MetaData, event, text
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-        from codehive.db.models import Base, Project, Workspace
+        from codehive.db.models import Base, Project
 
         engine_db = create_async_engine("sqlite+aiosqlite:///:memory:")
 
@@ -641,18 +619,7 @@ class TestTriggerLaunchesSolver:
 
         session_factory = async_sessionmaker(engine_db, expire_on_commit=False)
         async with session_factory() as db:
-            ws = Workspace(
-                name="ws",
-                root_path="/tmp",
-                settings={},
-                created_at=datetime.now(timezone.utc),
-            )
-            db.add(ws)
-            await db.commit()
-            await db.refresh(ws)
-
             proj = Project(
-                workspace_id=ws.id,
                 name="test",
                 knowledge={},
                 created_at=datetime.now(timezone.utc),

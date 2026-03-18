@@ -14,7 +14,6 @@ from codehive.api.schemas.project_flow import (
     ProjectFlowStart,
     ProjectFlowStartResult,
 )
-from codehive.core.project import WorkspaceNotFoundError
 from codehive.core.project_flow import (
     FlowAlreadyFinalizedError,
     FlowNotFoundError,
@@ -32,15 +31,11 @@ async def start_flow_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> ProjectFlowStartResult:
     """Start a new project creation flow."""
-    try:
-        flow_id, session_id, questions = await start_flow(
-            db,
-            flow_type=body.flow_type,
-            workspace_id=body.workspace_id,
-            initial_input=body.initial_input,
-        )
-    except WorkspaceNotFoundError:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    flow_id, session_id, questions = await start_flow(
+        db,
+        flow_type=body.flow_type,
+        initial_input=body.initial_input,
+    )
 
     return ProjectFlowStartResult(
         flow_id=flow_id,

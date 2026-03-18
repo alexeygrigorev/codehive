@@ -50,7 +50,6 @@ async def create_remote_target_endpoint(
     try:
         target = await create_remote_target(
             db,
-            workspace_id=body.workspace_id,
             label=body.label,
             host=body.host,
             port=body.port,
@@ -65,10 +64,9 @@ async def create_remote_target_endpoint(
 
 @router.get("", response_model=list[RemoteTargetRead])
 async def list_remote_targets_endpoint(
-    workspace_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[RemoteTargetRead]:
-    targets = await list_remote_targets(db, workspace_id=workspace_id)
+    targets = await list_remote_targets(db)
     return [RemoteTargetRead.model_validate(t) for t in targets]
 
 

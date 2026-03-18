@@ -24,7 +24,6 @@ class RemoteTargetValidationError(Exception):
 async def create_remote_target(
     session: AsyncSession,
     *,
-    workspace_id: uuid.UUID,
     label: str,
     host: str,
     username: str,
@@ -36,7 +35,6 @@ async def create_remote_target(
 
     Args:
         session: Database session.
-        workspace_id: UUID of the workspace.
         label: Human-readable label.
         host: Hostname or IP address.
         username: SSH username.
@@ -56,7 +54,6 @@ async def create_remote_target(
         raise RemoteTargetValidationError("username is required")
 
     target = RemoteTarget(
-        workspace_id=workspace_id,
         label=label,
         host=host,
         port=port,
@@ -73,20 +70,9 @@ async def create_remote_target(
 
 async def list_remote_targets(
     session: AsyncSession,
-    workspace_id: uuid.UUID | None = None,
 ) -> list[RemoteTarget]:
-    """List remote targets, optionally filtered by workspace.
-
-    Args:
-        session: Database session.
-        workspace_id: Optional workspace UUID to filter by.
-
-    Returns:
-        List of RemoteTarget objects.
-    """
+    """List all remote targets."""
     stmt = select(RemoteTarget)
-    if workspace_id is not None:
-        stmt = stmt.where(RemoteTarget.workspace_id == workspace_id)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 

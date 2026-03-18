@@ -25,7 +25,6 @@ class ProjectFlowStart(BaseModel):
 
     flow_type: FlowType
     initial_input: str = ""
-    workspace_id: uuid.UUID
 
 
 class FlowQuestion(BaseModel):

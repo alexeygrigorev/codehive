@@ -16,7 +16,7 @@ from codehive.core.pending_questions import (
 )
 from codehive.core.scheduler import SessionScheduler
 from codehive.core.task_queue import create_task, get_task, transition_task
-from codehive.db.models import Base, Project, Workspace
+from codehive.db.models import Base, Project
 from codehive.db.models import Session as SessionModel
 
 # ---------------------------------------------------------------------------
@@ -49,23 +49,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),

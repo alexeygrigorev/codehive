@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from codehive.api.app import create_app
 from codehive.api.deps import get_db
-from codehive.db.models import Base, Issue, Project, Workspace
+from codehive.db.models import Base, Issue, Project
 from codehive.integrations.github.client import GitHubAPIError, list_issues, get_issue
 from codehive.integrations.github.importer import import_issues
 from codehive.integrations.github.mapper import map_github_issue
@@ -50,25 +50,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    """Create a workspace for tests."""
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     """Create a project for tests."""
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),

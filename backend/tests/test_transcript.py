@@ -14,7 +14,7 @@ from codehive.api.app import create_app
 from codehive.api.deps import get_db
 from codehive.core.events import SessionNotFoundError
 from codehive.core.transcript import TranscriptService
-from codehive.db.models import Base, Event, Message, Project, Workspace
+from codehive.db.models import Base, Event, Message, Project
 from codehive.db.models import Session as SessionModel
 
 # Tests that use auth-protected endpoints require auth_enabled=True.
@@ -58,23 +58,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),
@@ -402,10 +387,6 @@ class TestTranscriptRESTEndpoint:
         session_model: SessionModel,
     ):
         """GET /api/sessions/{id}/transcript returns JSON transcript by default."""
-        from tests.conftest import ensure_workspace_membership
-
-        project = await db_session.get(Project, session_model.project_id)
-        await ensure_workspace_membership(db_session, project.workspace_id)
 
         resp = await client.get(f"/api/sessions/{session_model.id}/transcript")
         assert resp.status_code == 200
@@ -422,10 +403,6 @@ class TestTranscriptRESTEndpoint:
         session_model: SessionModel,
     ):
         """GET /api/sessions/{id}/transcript?format=json returns TranscriptExportJSON schema."""
-        from tests.conftest import ensure_workspace_membership
-
-        project = await db_session.get(Project, session_model.project_id)
-        await ensure_workspace_membership(db_session, project.workspace_id)
 
         await _seed_messages(db_session, session_model.id, [("user", "Hi")])
         resp = await client.get(f"/api/sessions/{session_model.id}/transcript?format=json")
@@ -441,10 +418,6 @@ class TestTranscriptRESTEndpoint:
         session_model: SessionModel,
     ):
         """GET /api/sessions/{id}/transcript?format=markdown returns text/markdown."""
-        from tests.conftest import ensure_workspace_membership
-
-        project = await db_session.get(Project, session_model.project_id)
-        await ensure_workspace_membership(db_session, project.workspace_id)
 
         resp = await client.get(f"/api/sessions/{session_model.id}/transcript?format=markdown")
         assert resp.status_code == 200
@@ -458,10 +431,6 @@ class TestTranscriptRESTEndpoint:
         session_model: SessionModel,
     ):
         """GET /api/sessions/{id}/transcript?format=markdown includes Content-Disposition header."""
-        from tests.conftest import ensure_workspace_membership
-
-        project = await db_session.get(Project, session_model.project_id)
-        await ensure_workspace_membership(db_session, project.workspace_id)
 
         resp = await client.get(f"/api/sessions/{session_model.id}/transcript?format=markdown")
         assert resp.status_code == 200
@@ -475,10 +444,6 @@ class TestTranscriptRESTEndpoint:
         session_model: SessionModel,
     ):
         """GET /api/sessions/{id}/transcript?format=invalid returns 400."""
-        from tests.conftest import ensure_workspace_membership
-
-        project = await db_session.get(Project, session_model.project_id)
-        await ensure_workspace_membership(db_session, project.workspace_id)
 
         resp = await client.get(f"/api/sessions/{session_model.id}/transcript?format=invalid")
         assert resp.status_code == 400
@@ -488,13 +453,4 @@ class TestTranscriptRESTEndpoint:
         resp = await client.get(f"/api/sessions/{uuid.uuid4()}/transcript")
         assert resp.status_code == 404
 
-    async def test_viewer_access_required(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        session_model: SessionModel,
-    ):
-        """Transcript endpoint enforces viewer-level access (403 for unauthorized user)."""
-        # Don't set up workspace membership -- should get 403
-        resp = await client.get(f"/api/sessions/{session_model.id}/transcript")
-        assert resp.status_code == 403
+    pass

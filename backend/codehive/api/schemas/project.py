@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 class ProjectCreate(BaseModel):
     """Request body for POST /api/projects."""
 
-    workspace_id: uuid.UUID
     name: str = Field(..., max_length=255)
     path: str | None = None
     description: str | None = None
@@ -31,7 +30,6 @@ class ProjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    workspace_id: uuid.UUID
     name: str
     path: str | None
     description: str | None

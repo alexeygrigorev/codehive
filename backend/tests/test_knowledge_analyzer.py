@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -22,7 +21,7 @@ from codehive.core.knowledge_analyzer import (
     populate_knowledge,
 )
 from codehive.core.project import create_project
-from codehive.db.models import Base, Workspace
+from codehive.db.models import Base
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
@@ -52,20 +51,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
 
@@ -83,17 +68,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         token = resp.json()["access_token"]
         ac.headers["Authorization"] = f"Bearer {token}"
         yield ac
-
-
-@pytest_asyncio.fixture
-async def workspace_member(
-    workspace: Workspace, client: AsyncClient, db_session: AsyncSession
-) -> Workspace:
-    """Ensure the test user is an owner of the workspace for API tests."""
-    from tests.conftest import ensure_workspace_membership
-
-    await ensure_workspace_membership(db_session, workspace.id)
-    return workspace
 
 
 # ---------------------------------------------------------------------------
@@ -280,10 +254,8 @@ class TestConventionsDetection:
 
 @pytest.mark.asyncio
 class TestKnowledgeMerge:
-    async def test_existing_manual_knowledge_preserved(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
-        project = await create_project(db_session, workspace_id=workspace.id, name="merge-test")
+    async def test_existing_manual_knowledge_preserved(self, db_session: AsyncSession):
+        project = await create_project(db_session, name="merge-test")
         # Set manual knowledge
         await update_knowledge(
             db_session, project.id, {"custom_notes": "keep me", "decisions": [{"title": "D1"}]}
@@ -302,10 +274,8 @@ class TestKnowledgeMerge:
         assert result["tech_stack"] == {"languages": ["Python"]}
         assert result["frameworks"] == ["FastAPI"]
 
-    async def test_auto_populate_twice_no_duplicates(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
-        project = await create_project(db_session, workspace_id=workspace.id, name="dup-test")
+    async def test_auto_populate_twice_no_duplicates(self, db_session: AsyncSession):
+        project = await create_project(db_session, name="dup-test")
         analysis = {
             "tech_stack": {"languages": ["Python"]},
             "frameworks": ["FastAPI"],
@@ -317,10 +287,8 @@ class TestKnowledgeMerge:
         assert result["tech_stack"] == {"languages": ["Python"]}
         assert result["frameworks"] == ["FastAPI"]
 
-    async def test_populate_empty_analysis_preserves_knowledge(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
-        project = await create_project(db_session, workspace_id=workspace.id, name="empty-analysis")
+    async def test_populate_empty_analysis_preserves_knowledge(self, db_session: AsyncSession):
+        project = await create_project(db_session, name="empty-analysis")
         await update_knowledge(db_session, project.id, {"custom_notes": "keep me"})
         result = await populate_knowledge(db_session, project.id, {})
         assert result["custom_notes"] == "keep me"
@@ -339,9 +307,7 @@ class TestKnowledgeMerge:
 
 @pytest.mark.asyncio
 class TestAutoPopulateAPI:
-    async def test_auto_populate_endpoint(
-        self, client: AsyncClient, workspace_member: Workspace, tmp_path: Path
-    ):
+    async def test_auto_populate_endpoint(self, client: AsyncClient, tmp_path: Path):
         # Create a fake project directory with some files
         (tmp_path / "pyproject.toml").write_text(
             '[project]\ndependencies = ["fastapi", "sqlalchemy"]\n'
@@ -352,7 +318,6 @@ class TestAutoPopulateAPI:
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace_member.id),
                 "name": "auto-pop",
                 "path": str(tmp_path),
             },
@@ -369,15 +334,12 @@ class TestAutoPopulateAPI:
         assert "Python" in data["analysis"]["tech_stack"]["languages"]
         assert "FastAPI" in data["analysis"]["frameworks"]
 
-    async def test_auto_populate_populates_knowledge(
-        self, client: AsyncClient, workspace_member: Workspace, tmp_path: Path
-    ):
+    async def test_auto_populate_populates_knowledge(self, client: AsyncClient, tmp_path: Path):
         (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "^18.0.0"}}))
 
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace_member.id),
                 "name": "auto-pop-verify",
                 "path": str(tmp_path),
             },
@@ -393,12 +355,10 @@ class TestAutoPopulateAPI:
         assert "React" in knowledge["frameworks"]
         assert "JavaScript/TypeScript" in knowledge["tech_stack"]["languages"]
 
-    async def test_auto_populate_no_path_returns_400(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_auto_populate_no_path_returns_400(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "no-path"},
+            json={"name": "no-path"},
         )
         project_id = create_resp.json()["id"]
 
@@ -411,14 +371,13 @@ class TestAutoPopulateAPI:
         assert resp.status_code == 404
 
     async def test_auto_populate_preserves_existing_knowledge(
-        self, client: AsyncClient, workspace_member: Workspace, tmp_path: Path
+        self, client: AsyncClient, tmp_path: Path
     ):
         (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["fastapi"]\n')
 
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace_member.id),
                 "name": "preserve-test",
                 "path": str(tmp_path),
             },

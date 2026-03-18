@@ -457,18 +457,10 @@ async def async_client(db_session):
 
 async def _create_project(db_session) -> str:
     """Helper to create a project in DB and return its ID as string."""
-    from codehive.db.models import Workspace, Project
+    from codehive.db.models import Project
     from datetime import datetime, timezone
-    from tests.conftest import ensure_workspace_membership
-
-    ws = Workspace(
-        name="test-ws", root_path="/tmp/test-ws", settings={}, created_at=datetime.now(timezone.utc)
-    )
-    db_session.add(ws)
-    await db_session.flush()
 
     proj = Project(
-        workspace_id=ws.id,
         name="test-proj",
         path="/tmp/test",
         knowledge={},
@@ -477,8 +469,6 @@ async def _create_project(db_session) -> str:
     db_session.add(proj)
     await db_session.commit()
     await db_session.refresh(proj)
-
-    await ensure_workspace_membership(db_session, ws.id)
 
     return str(proj.id)
 

@@ -6,12 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from codehive.api.deps import get_current_user, get_db
+from codehive.api.deps import get_db
 from codehive.api.schemas.transcript import TranscriptExportJSON
 from codehive.core.events import SessionNotFoundError
-from codehive.core.permissions import check_project_access
 from codehive.core.transcript import TranscriptService
-from codehive.db.models import Session as SessionModel, User
+from codehive.db.models import Session as SessionModel
 
 transcript_router = APIRouter(prefix="/api/sessions", tags=["transcript"])
 
@@ -25,7 +24,6 @@ async def export_transcript(
     session_id: uuid.UUID,
     format: str = Query(default="json", description="Export format: json or markdown"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     transcript_service: TranscriptService = Depends(_get_transcript_service),
 ):
     """Export a session transcript as JSON or markdown."""
@@ -38,8 +36,6 @@ async def export_transcript(
     session = await db.get(SessionModel, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    await check_project_access(db, current_user.id, session.project_id, required_role="viewer")
 
     try:
         if format == "markdown":

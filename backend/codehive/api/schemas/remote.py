@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 class RemoteTargetCreate(BaseModel):
     """Request body for POST /api/remote-targets."""
 
-    workspace_id: uuid.UUID
     label: str = Field(..., max_length=255)
     host: str = Field(..., max_length=500)
     port: int = Field(default=22, ge=1, le=65535)
@@ -35,7 +34,6 @@ class RemoteTargetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    workspace_id: uuid.UUID
     label: str
     host: str
     port: int

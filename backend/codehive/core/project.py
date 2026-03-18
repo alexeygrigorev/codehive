@@ -11,15 +11,11 @@ from codehive.core.archetypes import (
     ArchetypeNotFoundError,
     apply_archetype_to_knowledge,
 )
-from codehive.db.models import Project, Workspace
+from codehive.db.models import Project
 
 
 class InvalidArchetypeError(Exception):
     """Raised when an invalid archetype name is provided."""
-
-
-class WorkspaceNotFoundError(Exception):
-    """Raised when a workspace_id does not exist."""
 
 
 class ProjectNotFoundError(Exception):
@@ -33,21 +29,16 @@ class ProjectHasDependentsError(Exception):
 async def create_project(
     session: AsyncSession,
     *,
-    workspace_id: uuid.UUID,
     name: str,
     path: str | None = None,
     description: str | None = None,
     archetype: str | None = None,
 ) -> Project:
-    """Create a new project. Raises WorkspaceNotFoundError if workspace doesn't exist.
+    """Create a new project.
 
     If archetype is set, applies archetype roles and settings to the project knowledge.
     Raises InvalidArchetypeError if the archetype name is not valid.
     """
-    workspace = await session.get(Workspace, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError(f"Workspace {workspace_id} not found")
-
     knowledge: dict = {}
     if archetype is not None:
         try:
@@ -56,7 +47,6 @@ async def create_project(
             raise InvalidArchetypeError(f"Archetype '{archetype}' not found")
 
     project = Project(
-        workspace_id=workspace_id,
         name=name,
         path=path,
         description=description,
@@ -136,14 +126,11 @@ async def get_project_by_path(
 async def get_or_create_project_by_path(
     session: AsyncSession,
     path: str,
-    *,
-    workspace_id: uuid.UUID | None = None,
 ) -> tuple[Project, bool]:
     """Look up a project by path; create it if it doesn't exist.
 
     Returns (project, created) where created is True if a new project was made.
     The project name is derived from the path basename.
-    If workspace_id is provided it is used when creating a new project.
     """
     normalized = normalize_path(path)
     existing = await get_project_by_path(session, normalized)
@@ -157,8 +144,6 @@ async def get_or_create_project_by_path(
         knowledge={},
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
-    if workspace_id is not None:
-        project.workspace_id = workspace_id
     session.add(project)
     await session.commit()
     await session.refresh(project)

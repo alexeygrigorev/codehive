@@ -12,15 +12,13 @@ from codehive.api.app import create_app
 from codehive.api.deps import get_db
 from codehive.core.project import (
     ProjectNotFoundError,
-    WorkspaceNotFoundError,
     create_project,
     delete_project,
     get_project,
     list_projects,
     update_project,
 )
-from codehive.db.models import Base, Workspace
-from tests.conftest import ensure_workspace_membership
+from codehive.db.models import Base
 
 # All tests in this file require auth_enabled=True since they test permission behavior.
 pytestmark = pytest.mark.usefixtures("_enable_auth")
@@ -65,23 +63,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    """Create a workspace for project tests."""
-    from datetime import datetime, timezone
-
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client with the DB session overridden.
 
@@ -106,15 +87,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
-@pytest_asyncio.fixture
-async def workspace_member(
-    workspace: Workspace, client: AsyncClient, db_session: AsyncSession
-) -> Workspace:
-    """Ensure the test user is an owner of the workspace for API tests."""
-    await ensure_workspace_membership(db_session, workspace.id)
-    return workspace
-
-
 # ---------------------------------------------------------------------------
 # Unit tests: Core project operations
 # ---------------------------------------------------------------------------
@@ -122,27 +94,17 @@ async def workspace_member(
 
 @pytest.mark.asyncio
 class TestCoreCreateProject:
-    async def test_create_project_success(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_create_project_success(self, db_session: AsyncSession):
         project = await create_project(
             db_session,
-            workspace_id=workspace.id,
             name="my-project",
             description="A test project",
         )
         assert project.id is not None
         assert isinstance(project.id, uuid.UUID)
         assert project.name == "my-project"
-        assert project.workspace_id == workspace.id
         assert project.created_at is not None
         assert project.knowledge == {}
-
-    async def test_create_project_nonexistent_workspace(self, db_session: AsyncSession):
-        with pytest.raises(WorkspaceNotFoundError):
-            await create_project(
-                db_session,
-                workspace_id=uuid.uuid4(),
-                name="orphan",
-            )
 
 
 @pytest.mark.asyncio
@@ -151,17 +113,17 @@ class TestCoreListProjects:
         projects = await list_projects(db_session)
         assert projects == []
 
-    async def test_list_multiple(self, db_session: AsyncSession, workspace: Workspace):
-        await create_project(db_session, workspace_id=workspace.id, name="p1")
-        await create_project(db_session, workspace_id=workspace.id, name="p2")
+    async def test_list_multiple(self, db_session: AsyncSession):
+        await create_project(db_session, name="p1")
+        await create_project(db_session, name="p2")
         projects = await list_projects(db_session)
         assert len(projects) == 2
 
 
 @pytest.mark.asyncio
 class TestCoreGetProject:
-    async def test_get_existing(self, db_session: AsyncSession, workspace: Workspace):
-        created = await create_project(db_session, workspace_id=workspace.id, name="proj")
+    async def test_get_existing(self, db_session: AsyncSession):
+        created = await create_project(db_session, name="proj")
         found = await get_project(db_session, created.id)
         assert found is not None
         assert found.id == created.id
@@ -173,10 +135,8 @@ class TestCoreGetProject:
 
 @pytest.mark.asyncio
 class TestCoreUpdateProject:
-    async def test_update_partial(self, db_session: AsyncSession, workspace: Workspace):
-        created = await create_project(
-            db_session, workspace_id=workspace.id, name="orig", description="old"
-        )
+    async def test_update_partial(self, db_session: AsyncSession):
+        created = await create_project(db_session, name="orig", description="old")
         updated = await update_project(db_session, created.id, description="new")
         assert updated.description == "new"
         assert updated.name == "orig"  # unchanged
@@ -188,8 +148,8 @@ class TestCoreUpdateProject:
 
 @pytest.mark.asyncio
 class TestCoreDeleteProject:
-    async def test_delete_success(self, db_session: AsyncSession, workspace: Workspace):
-        created = await create_project(db_session, workspace_id=workspace.id, name="del-me")
+    async def test_delete_success(self, db_session: AsyncSession):
+        created = await create_project(db_session, name="del-me")
         await delete_project(db_session, created.id)
         assert await get_project(db_session, created.id) is None
 
@@ -205,11 +165,10 @@ class TestCoreDeleteProject:
 
 @pytest.mark.asyncio
 class TestCreateProjectEndpoint:
-    async def test_create_201(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_create_201(self, client: AsyncClient):
         resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace_member.id),
                 "name": "api-project",
                 "description": "desc",
             },
@@ -217,25 +176,16 @@ class TestCreateProjectEndpoint:
         assert resp.status_code == 201
         data = resp.json()
         assert data["name"] == "api-project"
-        assert data["workspace_id"] == str(workspace_member.id)
         assert "id" in data
         assert "created_at" in data
         assert data["knowledge"] == {}
 
-    async def test_create_missing_name_422(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_create_missing_name_422(self, client: AsyncClient):
         resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id)},
+            json={},
         )
         assert resp.status_code == 422
-
-    async def test_create_bad_workspace_403(self, client: AsyncClient):
-        # Non-member access returns 403 (permission check before existence check)
-        resp = await client.post(
-            "/api/projects",
-            json={"workspace_id": str(uuid.uuid4()), "name": "orphan"},
-        )
-        assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -245,14 +195,14 @@ class TestListProjectsEndpoint:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_list_with_projects(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_list_with_projects(self, client: AsyncClient):
         await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "p1"},
+            json={"name": "p1"},
         )
         await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "p2"},
+            json={"name": "p2"},
         )
         resp = await client.get("/api/projects")
         assert resp.status_code == 200
@@ -261,10 +211,10 @@ class TestListProjectsEndpoint:
 
 @pytest.mark.asyncio
 class TestGetProjectEndpoint:
-    async def test_get_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_get_200(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "getme"},
+            json={"name": "getme"},
         )
         project_id = create_resp.json()["id"]
         resp = await client.get(f"/api/projects/{project_id}")
@@ -278,11 +228,10 @@ class TestGetProjectEndpoint:
 
 @pytest.mark.asyncio
 class TestUpdateProjectEndpoint:
-    async def test_patch_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_patch_200(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
             json={
-                "workspace_id": str(workspace_member.id),
                 "name": "patchme",
                 "description": "old",
             },
@@ -306,10 +255,10 @@ class TestUpdateProjectEndpoint:
 
 @pytest.mark.asyncio
 class TestDeleteProjectEndpoint:
-    async def test_delete_204_then_404(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_delete_204_then_404(self, client: AsyncClient):
         create_resp = await client.post(
             "/api/projects",
-            json={"workspace_id": str(workspace_member.id), "name": "deleteme"},
+            json={"name": "deleteme"},
         )
         project_id = create_resp.json()["id"]
 

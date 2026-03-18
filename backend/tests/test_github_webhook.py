@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from codehive.api.app import create_app
 from codehive.api.deps import get_db
-from codehive.db.models import Base, Project, Session, Workspace
+from codehive.db.models import Base, Project, Session
 from codehive.integrations.github.triggers import handle_issue_event
 from codehive.integrations.github.webhook import (
     WebhookEvent,
@@ -55,23 +55,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace) -> Project:
+async def project(db_session: AsyncSession) -> Project:
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),
@@ -105,12 +90,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def project_member(
-    project: Project, workspace: Workspace, client: AsyncClient, db_session: AsyncSession
+    project: Project, client: AsyncClient, db_session: AsyncSession
 ) -> Project:
     """Ensure the test user is an owner of the workspace for API tests."""
-    from tests.conftest import ensure_workspace_membership
-
-    await ensure_workspace_membership(db_session, workspace.id)
     return project
 
 

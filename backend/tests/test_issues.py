@@ -24,7 +24,7 @@ from codehive.core.issues import (
     list_issues,
     update_issue,
 )
-from codehive.db.models import Base, Workspace
+from codehive.db.models import Base
 from codehive.db.models import Session as SessionModel
 
 # ---------------------------------------------------------------------------
@@ -59,27 +59,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    """Create a workspace for tests."""
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
-async def project(db_session: AsyncSession, workspace: Workspace):
+async def project(db_session: AsyncSession):
     """Create a project for issue tests."""
     from codehive.db.models import Project
 
     proj = Project(
-        workspace_id=workspace.id,
         name="test-project",
         knowledge={},
         created_at=datetime.now(timezone.utc),

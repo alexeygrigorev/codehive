@@ -51,7 +51,6 @@ export interface CreatedSession {
 export async function startFlow(body: {
   flow_type: string;
   initial_input?: string;
-  workspace_id?: string;
 }): Promise<FlowStartResult> {
   const response = await apiClient.post("/api/project-flow/start", body);
   if (!response.ok) {

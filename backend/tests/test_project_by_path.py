@@ -16,7 +16,7 @@ from codehive.core.project import (
     get_project_by_path,
     normalize_path,
 )
-from codehive.db.models import Base, Project, Workspace
+from codehive.db.models import Base, Project
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database (same pattern as test_projects.py)
@@ -45,20 +45,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
-
-
-@pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
 
 
 @pytest_asyncio.fixture
@@ -104,11 +90,8 @@ class TestGetProjectByPath:
         result = await get_project_by_path(db_session, "/nonexistent/path")
         assert result is None
 
-    async def test_returns_project_for_known_path(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_returns_project_for_known_path(self, db_session: AsyncSession):
         project = Project(
-            workspace_id=workspace.id,
             name="myapp",
             path="/home/user/git/myapp",
             knowledge={},
@@ -123,9 +106,8 @@ class TestGetProjectByPath:
         assert found.id == project.id
         assert found.name == "myapp"
 
-    async def test_trailing_slash_matches(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_trailing_slash_matches(self, db_session: AsyncSession):
         project = Project(
-            workspace_id=workspace.id,
             name="myapp",
             path="/home/user/git/myapp",
             knowledge={},
@@ -147,36 +129,37 @@ class TestGetProjectByPath:
 
 @pytest.mark.asyncio
 class TestGetOrCreateProjectByPath:
-    async def test_creates_project_with_correct_name(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_creates_project_with_correct_name(self, db_session: AsyncSession):
         project, created = await get_or_create_project_by_path(
-            db_session, "/home/user/git/myapp", workspace_id=workspace.id
+            db_session,
+            "/home/user/git/myapp",
         )
         assert created is True
         assert project.name == "myapp"
         assert project.path == "/home/user/git/myapp"
         assert project.id is not None
 
-    async def test_idempotent_returns_existing(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_idempotent_returns_existing(self, db_session: AsyncSession):
         project1, created1 = await get_or_create_project_by_path(
-            db_session, "/home/user/git/myapp", workspace_id=workspace.id
+            db_session,
+            "/home/user/git/myapp",
         )
         project2, created2 = await get_or_create_project_by_path(
-            db_session, "/home/user/git/myapp", workspace_id=workspace.id
+            db_session,
+            "/home/user/git/myapp",
         )
         assert created1 is True
         assert created2 is False
         assert project1.id == project2.id
 
-    async def test_trailing_slash_idempotent(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_trailing_slash_idempotent(self, db_session: AsyncSession):
         project1, created1 = await get_or_create_project_by_path(
-            db_session, "/home/user/git/myapp", workspace_id=workspace.id
+            db_session,
+            "/home/user/git/myapp",
         )
         project2, created2 = await get_or_create_project_by_path(
-            db_session, "/home/user/git/myapp/", workspace_id=workspace.id
+            db_session,
+            "/home/user/git/myapp/",
         )
         assert created1 is True
         assert created2 is False
@@ -194,11 +177,13 @@ class TestGetProjectByPathEndpoint:
         resp = await client.get("/api/projects/by-path", params={"path": "/nonexistent"})
         assert resp.status_code == 404
 
-    async def test_returns_created_project(self, client: AsyncClient, workspace: Workspace):
+    async def test_returns_created_project(self, client: AsyncClient):
         # First create via POST
         resp = await client.post(
             "/api/projects/by-path",
-            json={"path": "/tmp/testproject", "workspace_id": str(workspace.id)},
+            json={
+                "path": "/tmp/testproject",
+            },
         )
         assert resp.status_code == 201
         project_id = resp.json()["id"]
@@ -212,10 +197,12 @@ class TestGetProjectByPathEndpoint:
 
 @pytest.mark.asyncio
 class TestPostProjectByPathEndpoint:
-    async def test_create_new_returns_201(self, client: AsyncClient, workspace: Workspace):
+    async def test_create_new_returns_201(self, client: AsyncClient):
         resp = await client.post(
             "/api/projects/by-path",
-            json={"path": "/tmp/testproject", "workspace_id": str(workspace.id)},
+            json={
+                "path": "/tmp/testproject",
+            },
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -223,17 +210,21 @@ class TestPostProjectByPathEndpoint:
         assert data["path"] == "/tmp/testproject"
         assert "id" in data
 
-    async def test_existing_returns_200_same_id(self, client: AsyncClient, workspace: Workspace):
+    async def test_existing_returns_200_same_id(self, client: AsyncClient):
         resp1 = await client.post(
             "/api/projects/by-path",
-            json={"path": "/tmp/testproject", "workspace_id": str(workspace.id)},
+            json={
+                "path": "/tmp/testproject",
+            },
         )
         assert resp1.status_code == 201
         project_id = resp1.json()["id"]
 
         resp2 = await client.post(
             "/api/projects/by-path",
-            json={"path": "/tmp/testproject", "workspace_id": str(workspace.id)},
+            json={
+                "path": "/tmp/testproject",
+            },
         )
         assert resp2.status_code == 200
         assert resp2.json()["id"] == project_id

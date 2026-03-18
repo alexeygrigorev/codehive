@@ -1,7 +1,6 @@
 """Tests for auth bypass when auth_enabled=False (issue #88a)."""
 
 import os
-import uuid
 from collections.abc import AsyncGenerator
 from unittest import mock
 
@@ -11,7 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from codehive.db.models import Base, Workspace
+from codehive.db.models import Base, User
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
@@ -151,25 +150,6 @@ class TestGetCurrentUserBypass:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-class TestPermissionBypass:
-    async def test_check_workspace_access_bypassed(self, db_session: AsyncSession):
-        """With auth_enabled=False, check_workspace_access returns None."""
-        with mock.patch.dict(os.environ, {"CODEHIVE_AUTH_ENABLED": "false"}):
-            from codehive.core.permissions import check_workspace_access
-
-            result = await check_workspace_access(db_session, uuid.uuid4(), uuid.uuid4(), "owner")
-            assert result is None
-
-    async def test_check_project_access_bypassed(self, db_session: AsyncSession):
-        """With auth_enabled=False, check_project_access returns None."""
-        with mock.patch.dict(os.environ, {"CODEHIVE_AUTH_ENABLED": "false"}):
-            from codehive.core.permissions import check_project_access
-
-            result = await check_project_access(db_session, uuid.uuid4(), uuid.uuid4(), "owner")
-            assert result is None
-
-
 # ---------------------------------------------------------------------------
 # Unit: Auth config endpoint
 # ---------------------------------------------------------------------------
@@ -226,35 +206,17 @@ class TestApiWithAuthEnabled:
 
 @pytest.mark.asyncio
 class TestFirstRunAuthDisabled:
-    async def test_seed_creates_workspace_no_user(self, db_session: AsyncSession):
-        """With auth_enabled=False, seed creates workspace but no user."""
+    async def test_seed_no_op_when_auth_disabled(self, db_session: AsyncSession):
+        """With auth_enabled=False, seed is a no-op."""
         with mock.patch.dict(os.environ, {"CODEHIVE_AUTH_ENABLED": "false"}):
             from codehive.core.first_run import seed_first_run
-            from codehive.db.models import User
 
             result = await seed_first_run(db_session)
             assert result is None
 
-            # Workspace should be created
-            ws_result = await db_session.execute(
-                select(Workspace).where(Workspace.name == "Default")
-            )
-            assert ws_result.scalar_one_or_none() is not None
-
             # No user should be created
             user_count = await db_session.execute(select(func.count()).select_from(User))
             assert user_count.scalar_one() == 0
-
-    async def test_seed_idempotent_auth_disabled(self, db_session: AsyncSession):
-        """Running seed twice with auth_enabled=False doesn't create duplicate workspaces."""
-        with mock.patch.dict(os.environ, {"CODEHIVE_AUTH_ENABLED": "false"}):
-            from codehive.core.first_run import seed_first_run
-
-            await seed_first_run(db_session)
-            await seed_first_run(db_session)
-
-            ws_count = await db_session.execute(select(func.count()).select_from(Workspace))
-            assert ws_count.scalar_one() == 1
 
     async def test_seed_with_auth_enabled_creates_user(self, db_session: AsyncSession):
         """With auth_enabled=True, seed creates user as before."""

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -30,7 +29,7 @@ from codehive.core.project_flow import (
     respond_to_flow,
     start_flow,
 )
-from codehive.db.models import Base, Workspace
+from codehive.db.models import Base
 
 # ---------------------------------------------------------------------------
 # Fixtures: async SQLite in-memory database
@@ -63,20 +62,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def workspace(db_session: AsyncSession) -> Workspace:
-    ws = Workspace(
-        name="test-workspace",
-        root_path="/tmp/test",
-        settings={},
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(ws)
-    await db_session.commit()
-    await db_session.refresh(ws)
-    return ws
-
-
-@pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
 
@@ -93,17 +78,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         token = resp.json()["access_token"]
         ac.headers["Authorization"] = f"Bearer {token}"
         yield ac
-
-
-@pytest_asyncio.fixture
-async def workspace_member(
-    workspace: Workspace, client: AsyncClient, db_session: AsyncSession
-) -> Workspace:
-    """Ensure the test user is an owner of the workspace for API tests."""
-    from tests.conftest import ensure_workspace_membership
-
-    await ensure_workspace_membership(db_session, workspace.id)
-    return workspace
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +135,10 @@ class TestSchemaValidation:
 
 @pytest.mark.asyncio
 class TestFlowCreation:
-    async def test_start_interview_flow(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_start_interview_flow(self, db_session: AsyncSession):
         flow_id, session_id, questions = await start_flow(
             db_session,
             flow_type=FlowType.interview,
-            workspace_id=workspace.id,
             initial_input="Build a task manager",
         )
         assert isinstance(flow_id, uuid.UUID)
@@ -176,48 +149,38 @@ class TestFlowCreation:
             assert q.text
             assert q.category
 
-    async def test_start_brainstorm_flow(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_start_brainstorm_flow(self, db_session: AsyncSession):
         flow_id, session_id, questions = await start_flow(
             db_session,
             flow_type=FlowType.brainstorm,
-            workspace_id=workspace.id,
         )
         assert isinstance(flow_id, uuid.UUID)
         assert len(questions) >= 1
 
-    async def test_start_spec_from_notes_short_input(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_start_spec_from_notes_short_input(self, db_session: AsyncSession):
         flow_id, session_id, questions = await start_flow(
             db_session,
             flow_type=FlowType.spec_from_notes,
-            workspace_id=workspace.id,
             initial_input="short",
         )
         # Short notes should get clarifying questions
         assert len(questions) >= 1
 
-    async def test_start_spec_from_notes_long_input(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_start_spec_from_notes_long_input(self, db_session: AsyncSession):
         long_input = "A" * 100 + " Build a web application with React frontend and Python backend"
         flow_id, session_id, questions = await start_flow(
             db_session,
             flow_type=FlowType.spec_from_notes,
-            workspace_id=workspace.id,
             initial_input=long_input,
         )
         # Long enough notes produce no clarifying questions
         assert questions == []
 
-    async def test_start_from_repo_calls_analyze(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_start_from_repo_calls_analyze(self, db_session: AsyncSession):
         """start_from_repo invokes analyze_codebase and includes follow-up questions."""
         flow_id, session_id, questions = await start_flow(
             db_session,
             flow_type=FlowType.start_from_repo,
-            workspace_id=workspace.id,
             initial_input="/nonexistent/path",
         )
         # With a non-existent path, analysis is empty, so we get tech stack question
@@ -287,13 +250,10 @@ class TestRespondAndFinalize:
         with pytest.raises(FlowNotFoundError):
             await respond_to_flow(uuid.uuid4(), [])
 
-    async def test_respond_interview_produces_brief(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_respond_interview_produces_brief(self, db_session: AsyncSession):
         flow_id, _, _ = await start_flow(
             db_session,
             flow_type=FlowType.interview,
-            workspace_id=workspace.id,
         )
         next_q, brief = await respond_to_flow(
             flow_id,
@@ -304,13 +264,10 @@ class TestRespondAndFinalize:
         assert brief is not None
         assert brief.name
 
-    async def test_respond_brainstorm_has_followup(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_respond_brainstorm_has_followup(self, db_session: AsyncSession):
         flow_id, _, _ = await start_flow(
             db_session,
             flow_type=FlowType.brainstorm,
-            workspace_id=workspace.id,
         )
         next_q, brief = await respond_to_flow(
             flow_id,
@@ -321,13 +278,10 @@ class TestRespondAndFinalize:
         assert brief is None
         assert len(next_q) >= 1
 
-    async def test_finalize_creates_project_and_sessions(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_finalize_creates_project_and_sessions(self, db_session: AsyncSession):
         flow_id, _, _ = await start_flow(
             db_session,
             flow_type=FlowType.interview,
-            workspace_id=workspace.id,
         )
         await respond_to_flow(
             flow_id,
@@ -341,13 +295,10 @@ class TestRespondAndFinalize:
             assert s["name"]
             assert s["mode"]
 
-    async def test_finalize_already_finalized_raises(
-        self, db_session: AsyncSession, workspace: Workspace
-    ):
+    async def test_finalize_already_finalized_raises(self, db_session: AsyncSession):
         flow_id, _, _ = await start_flow(
             db_session,
             flow_type=FlowType.interview,
-            workspace_id=workspace.id,
         )
         await respond_to_flow(
             flow_id,
@@ -357,11 +308,10 @@ class TestRespondAndFinalize:
         with pytest.raises(FlowAlreadyFinalizedError):
             await finalize_flow(db_session, flow_id)
 
-    async def test_finalize_writes_knowledge(self, db_session: AsyncSession, workspace: Workspace):
+    async def test_finalize_writes_knowledge(self, db_session: AsyncSession):
         flow_id, _, _ = await start_flow(
             db_session,
             flow_type=FlowType.interview,
-            workspace_id=workspace.id,
         )
         await respond_to_flow(
             flow_id,
@@ -387,12 +337,11 @@ class TestRespondAndFinalize:
 
 @pytest.mark.asyncio
 class TestProjectFlowAPI:
-    async def test_start_interview_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_start_interview_200(self, client: AsyncClient):
         resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "interview",
-                "workspace_id": str(workspace_member.id),
                 "initial_input": "Build a web app",
             },
         )
@@ -407,36 +356,31 @@ class TestProjectFlowAPI:
             assert "text" in q
             assert "category" in q
 
-    async def test_start_brainstorm_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_start_brainstorm_200(self, client: AsyncClient):
         resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "brainstorm",
-                "workspace_id": str(workspace_member.id),
             },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["first_questions"]) >= 1
 
-    async def test_start_invalid_flow_type_422(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_start_invalid_flow_type_422(self, client: AsyncClient):
         resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "totally_invalid",
-                "workspace_id": str(workspace_member.id),
             },
         )
         assert resp.status_code == 422
 
-    async def test_respond_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_respond_200(self, client: AsyncClient):
         start_resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "interview",
-                "workspace_id": str(workspace_member.id),
             },
         )
         flow_id = start_resp.json()["flow_id"]
@@ -460,12 +404,11 @@ class TestProjectFlowAPI:
         )
         assert resp.status_code == 404
 
-    async def test_finalize_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_finalize_200(self, client: AsyncClient):
         start_resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "interview",
-                "workspace_id": str(workspace_member.id),
             },
         )
         flow_id = start_resp.json()["flow_id"]
@@ -488,14 +431,11 @@ class TestProjectFlowAPI:
             assert "name" in s
             assert "mode" in s
 
-    async def test_finalize_already_finalized_409(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_finalize_already_finalized_409(self, client: AsyncClient):
         start_resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "interview",
-                "workspace_id": str(workspace_member.id),
             },
         )
         flow_id = start_resp.json()["flow_id"]
@@ -512,14 +452,13 @@ class TestProjectFlowAPI:
         resp2 = await client.post(f"/api/project-flow/{flow_id}/finalize")
         assert resp2.status_code == 409
 
-    async def test_full_flow_end_to_end(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_full_flow_end_to_end(self, client: AsyncClient):
         """Full flow: start -> respond -> finalize, verify project and sessions."""
         # Start
         start_resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "interview",
-                "workspace_id": str(workspace_member.id),
                 "initial_input": "Build a task tracking app",
             },
         )
@@ -560,14 +499,11 @@ class TestProjectFlowAPI:
         assert "architecture" in proj_data["knowledge"]
         assert "open_decisions" in proj_data["knowledge"]
 
-    async def test_start_spec_from_notes_200(
-        self, client: AsyncClient, workspace_member: Workspace
-    ):
+    async def test_start_spec_from_notes_200(self, client: AsyncClient):
         resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "spec_from_notes",
-                "workspace_id": str(workspace_member.id),
                 "initial_input": "A web application for managing tasks with user auth, CRUD, etc.",
             },
         )
@@ -576,12 +512,11 @@ class TestProjectFlowAPI:
         assert "flow_id" in data
         assert "first_questions" in data
 
-    async def test_start_from_repo_200(self, client: AsyncClient, workspace_member: Workspace):
+    async def test_start_from_repo_200(self, client: AsyncClient):
         resp = await client.post(
             "/api/project-flow/start",
             json={
                 "flow_type": "start_from_repo",
-                "workspace_id": str(workspace_member.id),
                 "initial_input": "/nonexistent/path",
             },
         )
