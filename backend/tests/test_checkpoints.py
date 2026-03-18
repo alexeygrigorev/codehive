@@ -341,15 +341,15 @@ class TestRollbackCheckpointEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: NativeEngine auto-checkpoint
+# Unit tests: ZaiEngine auto-checkpoint
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 class TestAutoCheckpoint:
     async def _make_engine(self):
-        """Build a NativeEngine with all mocked dependencies."""
-        from codehive.engine.native import NativeEngine
+        """Build a ZaiEngine with all mocked dependencies."""
+        from codehive.engine.zai_engine import ZaiEngine
 
         client = AsyncMock()
         event_bus = AsyncMock()
@@ -358,7 +358,7 @@ class TestAutoCheckpoint:
         git_ops = AsyncMock()
         diff_service = AsyncMock()
 
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client,
             event_bus=event_bus,
             file_ops=file_ops,
@@ -375,7 +375,7 @@ class TestAutoCheckpoint:
         git_ops.commit.return_value = "autochecksha"
         file_ops.edit_file.return_value = "ok"
 
-        with patch("codehive.engine.native.create_checkpoint") as mock_cp:
+        with patch("codehive.engine.zai_engine.create_checkpoint") as mock_cp:
             mock_cp.return_value = AsyncMock()
             await engine._execute_tool(
                 "edit_file",
@@ -400,7 +400,7 @@ class TestAutoCheckpoint:
         shell_result.timed_out = False
         shell_runner.run.return_value = shell_result
 
-        with patch("codehive.engine.native.create_checkpoint") as mock_cp:
+        with patch("codehive.engine.zai_engine.create_checkpoint") as mock_cp:
             mock_cp.return_value = AsyncMock()
             await engine._execute_tool(
                 "run_shell",
@@ -418,7 +418,7 @@ class TestAutoCheckpoint:
         engine, git_ops, file_ops, _ = await self._make_engine()
         file_ops.read_file.return_value = "file content"
 
-        with patch("codehive.engine.native.create_checkpoint") as mock_cp:
+        with patch("codehive.engine.zai_engine.create_checkpoint") as mock_cp:
             await engine._execute_tool(
                 "read_file",
                 {"path": "foo.py"},
@@ -434,7 +434,7 @@ class TestAutoCheckpoint:
         git_ops.commit.return_value = "labelsha"
         file_ops.edit_file.return_value = "ok"
 
-        with patch("codehive.engine.native.create_checkpoint") as mock_cp:
+        with patch("codehive.engine.zai_engine.create_checkpoint") as mock_cp:
             mock_cp.return_value = AsyncMock()
             await engine._execute_tool(
                 "edit_file",

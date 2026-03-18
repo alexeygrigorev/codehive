@@ -1,7 +1,7 @@
 """Tests for tool permissions and approval callback (issue #86).
 
 Covers:
-- Approval callback logic in NativeEngine
+- Approval callback logic in ZaiEngine
 - Auto-approve mode
 - Always-approved set management
 - CLI flag parsing
@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from codehive.engine.native import DESTRUCTIVE_TOOLS, NativeEngine
+from codehive.engine.zai_engine import DESTRUCTIVE_TOOLS, ZaiEngine
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -38,8 +38,8 @@ from codehive.execution.shell import ShellRunner
 
 def _make_engine(
     approval_callback: Any = None,
-) -> NativeEngine:
-    """Create a NativeEngine with mocked dependencies."""
+) -> ZaiEngine:
+    """Create a ZaiEngine with mocked dependencies."""
     client = MagicMock()
     event_bus = MagicMock()
     event_bus.publish = AsyncMock()
@@ -48,7 +48,7 @@ def _make_engine(
     git_ops = MagicMock(spec=GitOps)
     diff_service = MagicMock(spec=DiffService)
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,
@@ -79,7 +79,7 @@ class TestDestructiveTools:
 
 
 # ---------------------------------------------------------------------------
-# Unit: Approval callback in NativeEngine._execute_tool
+# Unit: Approval callback in ZaiEngine._execute_tool
 # ---------------------------------------------------------------------------
 
 

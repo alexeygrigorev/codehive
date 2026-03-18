@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from codehive.engine.native import NativeEngine, TOOL_DEFINITIONS
+from codehive.engine.zai_engine import ZaiEngine, TOOL_DEFINITIONS
 from codehive.engine.orchestrator import (
     ORCHESTRATOR_SYSTEM_PROMPT,
     aggregate_reports,
@@ -95,8 +95,8 @@ class _TextStreamIter:
         return chunk
 
 
-def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
-    """Create a NativeEngine with mocked dependencies and return (engine, mocks)."""
+def _make_engine(tmp_path: Path) -> tuple[ZaiEngine, dict[str, Any]]:
+    """Create a ZaiEngine with mocked dependencies and return (engine, mocks)."""
     client = AsyncMock()
     event_bus = AsyncMock()
     file_ops = FileOps(tmp_path)
@@ -104,7 +104,7 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     git_ops = GitOps(tmp_path)
     diff_service = DiffService()
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,
@@ -283,11 +283,11 @@ class TestAggregateReports:
 
 
 # ---------------------------------------------------------------------------
-# Unit: NativeEngine with orchestrator mode
+# Unit: ZaiEngine with orchestrator mode
 # ---------------------------------------------------------------------------
 
 
-class TestNativeEngineOrchestratorMode:
+class TestZaiEngineOrchestratorMode:
     @pytest.mark.asyncio
     async def test_orchestrator_mode_uses_filtered_tools_and_system_prompt(self, tmp_path: Path):
         """In orchestrator mode, API is called with filtered tools and system prompt."""

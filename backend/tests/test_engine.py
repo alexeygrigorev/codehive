@@ -1,4 +1,4 @@
-"""Tests for codehive.engine: EngineAdapter protocol and NativeEngine."""
+"""Tests for codehive.engine: EngineAdapter protocol and ZaiEngine."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from codehive.engine import EngineAdapter, NativeEngine
+from codehive.engine import EngineAdapter, ZaiEngine
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -105,8 +105,8 @@ class _TextStreamIter:
         return chunk
 
 
-def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
-    """Create a NativeEngine with mocked dependencies and return (engine, mocks)."""
+def _make_engine(tmp_path: Path) -> tuple[ZaiEngine, dict[str, Any]]:
+    """Create a ZaiEngine with mocked dependencies and return (engine, mocks)."""
     client = AsyncMock()
     event_bus = AsyncMock()
     file_ops = FileOps(tmp_path)
@@ -114,7 +114,7 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     git_ops = GitOps(tmp_path)
     diff_service = DiffService()
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,
@@ -167,7 +167,7 @@ async def _collect_events(aiter: Any) -> list[dict]:
 
 class TestEngineAdapterProtocol:
     def test_native_engine_satisfies_protocol(self, tmp_path: Path):
-        """NativeEngine satisfies the EngineAdapter protocol."""
+        """ZaiEngine satisfies the EngineAdapter protocol."""
         engine, _ = _make_engine(tmp_path)
         assert isinstance(engine, EngineAdapter)
 
@@ -191,7 +191,7 @@ class TestEngineAdapterProtocol:
 
 class TestToolDefinitions:
     def test_tool_names(self, tmp_path: Path):
-        """NativeEngine exposes the correct tool names."""
+        """ZaiEngine exposes the correct tool names."""
         engine, _ = _make_engine(tmp_path)
         names = [t["name"] for t in engine.tool_definitions]
         assert "read_file" in names

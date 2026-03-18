@@ -26,7 +26,7 @@ from codehive.core.session import (
 from codehive.core.subagent import InvalidReportError, SubAgentManager
 from codehive.db.models import Base, Project
 from codehive.db.models import Session as SessionModel
-from codehive.engine.native import NativeEngine, TOOL_DEFINITIONS
+from codehive.engine.zai_engine import ZaiEngine, TOOL_DEFINITIONS
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -396,7 +396,7 @@ class TestSpawnSubagentToolDispatch:
     async def test_dispatch_calls_subagent_manager(self, tmp_path: Path):
         client_mock = AsyncMock()
         event_bus = AsyncMock()
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client_mock,
             event_bus=event_bus,
             file_ops=FileOps(tmp_path),

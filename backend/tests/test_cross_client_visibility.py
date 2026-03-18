@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from codehive.core.events import LocalEventBus
 from codehive.db.models import Base, Project
 from codehive.db.models import Session as SessionModel
-from codehive.engine.native import NativeEngine
+from codehive.engine.zai_engine import ZaiEngine
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -203,7 +203,7 @@ class _TextStreamIter:
 
 def _make_engine_with_bus(
     tmp_path: Any, event_bus: LocalEventBus
-) -> tuple[NativeEngine, dict[str, Any]]:
+) -> tuple[ZaiEngine, dict[str, Any]]:
     """Create an engine backed by a real LocalEventBus (not a mock)."""
     client = AsyncMock()
     file_ops = FileOps(tmp_path)
@@ -211,7 +211,7 @@ def _make_engine_with_bus(
     git_ops = GitOps(tmp_path)
     diff_service = DiffService()
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,

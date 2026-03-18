@@ -334,7 +334,7 @@ class TestEngineEventEnrichment:
         event_bus: EventBus,
     ):
         """edit_file tool call emits a file.changed event."""
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
 
         mock_file_ops = AsyncMock()
         mock_file_ops.edit_file = AsyncMock(return_value="File edited successfully")
@@ -345,7 +345,7 @@ class TestEngineEventEnrichment:
         mock_git.commit = AsyncMock(return_value="abc123")
         mock_diff = MagicMock()
 
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=AsyncMock(),
             event_bus=event_bus,
             file_ops=mock_file_ops,
@@ -382,7 +382,7 @@ class TestEngineEventEnrichment:
         event_bus: EventBus,
     ):
         """run_shell tool call emits a terminal.output event."""
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
 
         mock_file_ops = AsyncMock()
         mock_file_ops._root = MagicMock()
@@ -403,7 +403,7 @@ class TestEngineEventEnrichment:
         mock_git.commit = AsyncMock(return_value="abc123")
         mock_diff = MagicMock()
 
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=AsyncMock(),
             event_bus=event_bus,
             file_ops=mock_file_ops,

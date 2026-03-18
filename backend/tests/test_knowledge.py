@@ -435,12 +435,12 @@ class TestBuildKnowledgeContext:
 
 @pytest.mark.asyncio
 class TestEngineKnowledgeInjection:
-    """Test that NativeEngine injects knowledge into the system prompt."""
+    """Test that ZaiEngine injects knowledge into the system prompt."""
 
     async def test_engine_includes_knowledge_in_system_prompt(self, db_session: AsyncSession):
         """When a session's project has knowledge, it appears in the system prompt."""
         from dataclasses import dataclass
-        from codehive.engine import NativeEngine
+        from codehive.engine import ZaiEngine
         from codehive.execution.diff import DiffService
         from codehive.execution.file_ops import FileOps
         from codehive.execution.git_ops import GitOps
@@ -505,7 +505,7 @@ class TestEngineKnowledgeInjection:
 
         client_mock.messages.stream = MagicMock(return_value=_Stream())
 
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client_mock,
             event_bus=AsyncMock(),
             file_ops=FileOps(Path("/tmp")),
@@ -530,7 +530,7 @@ class TestEngineKnowledgeInjection:
     async def test_engine_no_knowledge_block_when_empty(self, db_session: AsyncSession):
         """When project knowledge is empty, no knowledge block in system prompt."""
         from dataclasses import dataclass
-        from codehive.engine import NativeEngine
+        from codehive.engine import ZaiEngine
         from codehive.execution.diff import DiffService
         from codehive.execution.file_ops import FileOps
         from codehive.execution.git_ops import GitOps
@@ -589,7 +589,7 @@ class TestEngineKnowledgeInjection:
 
         client_mock.messages.stream = MagicMock(return_value=_Stream2())
 
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client_mock,
             event_bus=AsyncMock(),
             file_ops=FileOps(Path("/tmp")),
@@ -609,7 +609,7 @@ class TestEngineKnowledgeInjection:
     async def test_engine_includes_charter_in_system_prompt(self, db_session: AsyncSession):
         """When project has a charter, it appears in the system prompt."""
         from dataclasses import dataclass
-        from codehive.engine import NativeEngine
+        from codehive.engine import ZaiEngine
         from codehive.execution.diff import DiffService
         from codehive.execution.file_ops import FileOps
         from codehive.execution.git_ops import GitOps
@@ -676,7 +676,7 @@ class TestEngineKnowledgeInjection:
 
         client_mock.messages.stream = MagicMock(return_value=_Stream3())
 
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client_mock,
             event_bus=AsyncMock(),
             file_ops=FileOps(Path("/tmp")),

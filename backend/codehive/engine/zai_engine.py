@@ -1,4 +1,4 @@
-"""Native engine: Anthropic SDK conversation loop with tool use."""
+"""Z.ai engine: Anthropic-compatible SDK conversation loop."""
 
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ class _SessionState:
         self.pending_actions: dict[str, Any] = {}
 
 
-class NativeEngine:
+class ZaiEngine:
     """Engine adapter using the Anthropic SDK for LLM conversations.
 
     Implements the EngineAdapter protocol.

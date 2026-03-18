@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.db.models import Issue, Project, Session as SessionModel
-from codehive.engine.native import NativeEngine
+from codehive.engine.zai_engine import ZaiEngine
 from codehive.execution.git_ops import GitOps
 from codehive.execution.shell import ShellRunner
 from codehive.integrations.github.closer import close_github_issue, comment_failure
@@ -109,7 +109,7 @@ async def solve_issue(
     project_id: uuid.UUID,
     issue_id: uuid.UUID,
     session_id: uuid.UUID,
-    engine: NativeEngine,
+    engine: ZaiEngine,
     git_ops: GitOps,
     shell_runner: ShellRunner,
     test_command: str | None = None,

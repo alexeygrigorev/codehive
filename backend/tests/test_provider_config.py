@@ -127,19 +127,19 @@ class TestBuildEngineZai:
 
     @pytest.mark.asyncio
     async def test_build_engine_passes_model_from_config(self, monkeypatch):
-        """When session config contains model, NativeEngine receives it."""
+        """When session config contains model, ZaiEngine receives it."""
         monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-key")
 
         captured_engine_kwargs = {}
 
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
 
         def capturing_init(self_engine, **kwargs):
             captured_engine_kwargs.update(kwargs)
 
         with (
             patch("anthropic.AsyncAnthropic", MagicMock),
-            patch.object(NativeEngine, "__init__", capturing_init),
+            patch.object(ZaiEngine, "__init__", capturing_init),
         ):
             from codehive.api.routes.sessions import _build_engine
 

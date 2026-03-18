@@ -1,6 +1,6 @@
 """Tests for issue #83: Streaming support.
 
-Covers NativeEngine streaming (message.delta events), ClaudeCodeParser delta mapping,
+Covers ZaiEngine streaming (message.delta events), ClaudeCodeParser delta mapping,
 and TUI bindings.
 """
 
@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from codehive.engine.claude_code_parser import ClaudeCodeParser
-from codehive.engine.native import NativeEngine
+from codehive.engine.zai_engine import ZaiEngine
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -107,7 +107,7 @@ class _TextStreamIter:
         return chunk
 
 
-def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
+def _make_engine(tmp_path: Path) -> tuple[ZaiEngine, dict[str, Any]]:
     client = AsyncMock()
     event_bus = AsyncMock()
     file_ops = FileOps(tmp_path)
@@ -115,7 +115,7 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     git_ops = GitOps(tmp_path)
     diff_service = DiffService()
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,
@@ -164,13 +164,13 @@ async def _collect_events(aiter: Any) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Unit: NativeEngine streaming
+# Unit: ZaiEngine streaming
 # ---------------------------------------------------------------------------
 
 SESSION_ID = uuid.uuid4()
 
 
-class TestNativeEngineStreaming:
+class TestZaiEngineStreaming:
     @pytest.mark.asyncio
     async def test_yields_delta_events_before_created(self, tmp_path: Path):
         """send_message yields multiple message.delta events followed by message.created."""

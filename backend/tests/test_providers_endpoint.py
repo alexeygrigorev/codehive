@@ -286,14 +286,14 @@ class TestBuildEngineProviderRouting:
 
         captured_engine_kwargs = {}
 
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
 
         def capturing_init(self_engine, **kwargs):
             captured_engine_kwargs.update(kwargs)
 
         with (
             patch("anthropic.AsyncAnthropic", MagicMock),
-            patch.object(NativeEngine, "__init__", capturing_init),
+            patch.object(ZaiEngine, "__init__", capturing_init),
         ):
             from codehive.api.routes.sessions import _build_engine
 
@@ -311,14 +311,14 @@ class TestBuildEngineProviderRouting:
 
         captured_engine_kwargs = {}
 
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
 
         def capturing_init(self_engine, **kwargs):
             captured_engine_kwargs.update(kwargs)
 
         with (
             patch("anthropic.AsyncAnthropic", MagicMock),
-            patch.object(NativeEngine, "__init__", capturing_init),
+            patch.object(ZaiEngine, "__init__", capturing_init),
         ):
             from codehive.api.routes.sessions import _build_engine
 
@@ -350,7 +350,7 @@ class TestBuildEngineProviderRouting:
 
     @pytest.mark.asyncio
     async def test_native_engine_defaults_to_zai(self, monkeypatch):
-        """NativeEngine defaults to zai provider (not anthropic)."""
+        """ZaiEngine defaults to zai provider (not anthropic)."""
         monkeypatch.setenv("CODEHIVE_ZAI_API_KEY", "sk-zai-default")
 
         captured_kwargs = {}
@@ -371,7 +371,7 @@ class TestBuildEngineProviderRouting:
 
     @pytest.mark.asyncio
     async def test_native_engine_unsupported_provider_raises_400(self, monkeypatch):
-        """NativeEngine with unsupported provider raises 400."""
+        """ZaiEngine with unsupported provider raises 400."""
         from fastapi import HTTPException
 
         from codehive.api.routes.sessions import _build_engine

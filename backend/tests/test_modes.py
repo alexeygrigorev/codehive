@@ -188,8 +188,8 @@ class MockResponse:
 
 
 def _make_engine(tmp_path: Path):
-    """Create a NativeEngine with mocked dependencies."""
-    from codehive.engine import NativeEngine
+    """Create a ZaiEngine with mocked dependencies."""
+    from codehive.engine import ZaiEngine
     from codehive.execution.diff import DiffService
     from codehive.execution.file_ops import FileOps
     from codehive.execution.git_ops import GitOps
@@ -202,7 +202,7 @@ def _make_engine(tmp_path: Path):
     git_ops = GitOps(tmp_path)
     diff_service = DiffService()
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,

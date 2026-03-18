@@ -25,7 +25,7 @@ from codehive.core.approval import (
     get_default_policy,
     resolve_request,
 )
-from codehive.engine.native import NativeEngine
+from codehive.engine.zai_engine import ZaiEngine
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -65,8 +65,8 @@ class MockResponse:
             self.content = []
 
 
-def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
-    """Create a NativeEngine with mocked dependencies."""
+def _make_engine(tmp_path: Path) -> tuple[ZaiEngine, dict[str, Any]]:
+    """Create a ZaiEngine with mocked dependencies."""
     client = AsyncMock()
     event_bus = AsyncMock()
     file_ops = FileOps(tmp_path)
@@ -74,7 +74,7 @@ def _make_engine(tmp_path: Path) -> tuple[NativeEngine, dict[str, Any]]:
     git_ops = GitOps(tmp_path)
     diff_service = DiffService()
 
-    engine = NativeEngine(
+    engine = ZaiEngine(
         client=client,
         event_bus=event_bus,
         file_ops=file_ops,

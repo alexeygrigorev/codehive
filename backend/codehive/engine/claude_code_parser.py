@@ -14,7 +14,7 @@ class ClaudeCodeParser:
 
     Each line from the Claude Code CLI ``--output-format stream-json`` is a JSON
     object with a ``type`` field.  This parser maps those into the same event dict
-    format used by :class:`~codehive.engine.native.NativeEngine`.
+    format used by :class:`~codehive.engine.zai_engine.ZaiEngine`.
 
     The parser is a pure-function style class with no side effects, making it
     straightforward to unit test.

@@ -23,7 +23,7 @@ from codehive.core.session import (
 from codehive.core.task_queue import create_task, transition_task
 from codehive.db.models import Base, Event, Project
 from codehive.db.models import Session as SessionModel
-from codehive.engine.native import TOOL_DEFINITIONS, NativeEngine
+from codehive.engine.zai_engine import TOOL_DEFINITIONS, ZaiEngine
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -459,7 +459,7 @@ class TestToolDispatch:
     async def test_dispatch_query_agent(self, tmp_path: Path):
         client_mock = AsyncMock()
         event_bus = AsyncMock()
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client_mock,
             event_bus=event_bus,
             file_ops=FileOps(tmp_path),
@@ -503,7 +503,7 @@ class TestToolDispatch:
     async def test_dispatch_send_to_agent(self, tmp_path: Path):
         client_mock = AsyncMock()
         event_bus = AsyncMock()
-        engine = NativeEngine(
+        engine = ZaiEngine(
             client=client_mock,
             event_bus=event_bus,
             file_ops=FileOps(tmp_path),

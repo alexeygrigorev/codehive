@@ -248,12 +248,12 @@ class CodeApp(App):
 
         from codehive.execution.diff import DiffService
 
-        # If an API key is provided (e.g. for Z.ai), use NativeEngine.
+        # If an API key is provided (e.g. for Z.ai), use ZaiEngine.
         # Otherwise, default to ClaudeCodeEngine (uses `claude` CLI, no key needed).
         if self._api_key:
             from anthropic import AsyncAnthropic
 
-            from codehive.engine.native import NativeEngine
+            from codehive.engine.zai_engine import ZaiEngine
             from codehive.execution.file_ops import FileOps
             from codehive.execution.git_ops import GitOps
             from codehive.execution.shell import ShellRunner
@@ -264,7 +264,7 @@ class CodeApp(App):
             client = AsyncAnthropic(**client_kwargs)
 
             from codehive.config import Settings as _Settings
-            from codehive.engine.native import DEFAULT_MODEL
+            from codehive.engine.zai_engine import DEFAULT_MODEL
 
             try:
                 _settings = _Settings()
@@ -274,7 +274,7 @@ class CodeApp(App):
 
             model = self._model or default_model
 
-            self._engine = NativeEngine(
+            self._engine = ZaiEngine(
                 client=client,
                 event_bus=_NoOpEventBus(),  # type: ignore[arg-type]
                 file_ops=FileOps(project_root=self._project_dir),
@@ -523,7 +523,7 @@ class CodeApp(App):
     # ---- Approval callback ------------------------------------------------
 
     async def _approval_callback(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
-        """Called by NativeEngine before executing destructive tools.
+        """Called by ZaiEngine before executing destructive tools.
 
         Returns True to proceed, False to reject.
         """

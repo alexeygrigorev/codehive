@@ -130,7 +130,7 @@ def _generate_repo_followup_questions(analysis: dict[str, Any]) -> list[FlowQues
 async def generate_brief(flow_state: dict[str, Any]) -> ProjectBrief:
     """Synthesize answers and analysis into a ProjectBrief.
 
-    In production this would call the NativeEngine. For now we build
+    In production this would call the ZaiEngine. For now we build
     a deterministic brief from the collected answers and analysis data.
     """
     answers = flow_state.get("answers_received", [])

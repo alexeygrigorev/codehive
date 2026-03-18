@@ -85,7 +85,7 @@ def _make_db(issue=None, project=None, session_row=None):
 
 
 def _make_engine():
-    """Return a mock NativeEngine."""
+    """Return a mock ZaiEngine."""
     engine = AsyncMock()
     engine.create_session = AsyncMock()
 

@@ -54,7 +54,7 @@ def _make_local_app() -> _LocalCodeApp:
 class TestBackendModeInit:
     @pytest.mark.asyncio
     async def test_backend_mode_no_engine(self) -> None:
-        """In backend mode, _init_engine does NOT instantiate NativeEngine."""
+        """In backend mode, _init_engine does NOT instantiate ZaiEngine."""
         app = CodeApp(
             project_dir="/tmp/test-project",
             backend_url="http://localhost:7433",
@@ -231,7 +231,7 @@ class TestLocalModeRegression:
 
     @pytest.mark.asyncio
     async def test_local_mode_init_creates_engine(self) -> None:
-        """In local mode, _init_engine creates a NativeEngine (mocked)."""
+        """In local mode, _init_engine creates a ZaiEngine (mocked)."""
         app = _make_local_app()
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()

@@ -461,9 +461,9 @@ class TestEngineSelection:
 
     @pytest.mark.asyncio
     async def test_build_engine_returns_native_engine(self) -> None:
-        """_build_engine returns NativeEngine for 'native' with zai provider."""
+        """_build_engine returns ZaiEngine for 'native' with zai provider."""
         from codehive.api.routes.sessions import _build_engine
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
 
         with patch.dict(
             "os.environ",
@@ -472,7 +472,7 @@ class TestEngineSelection:
             engine = await _build_engine(
                 {"project_root": "/tmp", "provider": "zai"}, engine_type="native"
             )
-            assert isinstance(engine, NativeEngine)
+            assert isinstance(engine, ZaiEngine)
 
     @pytest.mark.asyncio
     async def test_build_engine_unknown_raises_400(self) -> None:
