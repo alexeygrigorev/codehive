@@ -1,8 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
+import { useAudioWaveform } from "@/hooks/useAudioWaveform";
 import VoiceButton from "@/components/VoiceButton";
 import TranscriptPreview from "@/components/TranscriptPreview";
+import RecordingOverlay from "@/components/RecordingOverlay";
 
 export interface ChatInputProps {
   onSend: (content: string) => void;
@@ -20,7 +22,41 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
     resetTranscript,
   } = useVoiceInput();
 
-  const showTranscriptPreview = !isListening && transcript.length > 0;
+  const {
+    start: startWaveform,
+    stop: stopWaveform,
+    waveformData,
+    elapsedSeconds,
+  } = useAudioWaveform();
+
+  const [isProcessing, setIsProcessing] = useState(false);
+  const wasListeningRef = useRef(false);
+
+  const showTranscriptPreview =
+    !isListening && !isProcessing && transcript.length > 0;
+
+  // Track transitions from listening to not-listening for processing state
+  useEffect(() => {
+    if (wasListeningRef.current && !isListening) {
+      // Just stopped listening - show processing briefly
+      setIsProcessing(true);
+      const timer = setTimeout(() => {
+        setIsProcessing(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+    wasListeningRef.current = isListening;
+  }, [isListening]);
+
+  const handleStartListening = useCallback(() => {
+    startListening();
+    startWaveform();
+  }, [startListening, startWaveform]);
+
+  const handleStopListening = useCallback(() => {
+    stopListening();
+    stopWaveform();
+  }, [stopListening, stopWaveform]);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
@@ -65,22 +101,34 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
           />
         </div>
       )}
+      {(isListening || isProcessing) && (
+        <div className="mb-2">
+          <RecordingOverlay
+            waveformData={waveformData}
+            elapsedSeconds={elapsedSeconds}
+            isProcessing={isProcessing}
+            onStop={handleStopListening}
+          />
+        </div>
+      )}
       <div className="flex gap-2">
-        <textarea
-          className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="Type a message..."
-          rows={1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          aria-label="Message input"
-        />
+        {!isListening && !isProcessing && (
+          <textarea
+            className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="Type a message..."
+            rows={1}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={disabled}
+            aria-label="Message input"
+          />
+        )}
         <VoiceButton
           isListening={isListening}
           isSupported={isSupported}
-          onStartListening={startListening}
-          onStopListening={stopListening}
+          onStartListening={handleStartListening}
+          onStopListening={handleStopListening}
         />
         <button
           type="button"

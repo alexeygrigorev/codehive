@@ -1,5 +1,14 @@
 import "@testing-library/jest-dom/vitest";
 
+// Provide a default ResizeObserver mock for jsdom (which doesn't implement it)
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof window.ResizeObserver;
+}
+
 // Provide a default matchMedia mock for jsdom (which doesn't implement it)
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({

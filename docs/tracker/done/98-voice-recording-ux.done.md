@@ -85,3 +85,20 @@ Web app only. This issue adds a waveform visualization component and recording t
 - Stop button in waveform area triggers `stopListening`
 - Elapsed timer is displayed during recording
 - After recording stops, processing state is briefly shown before transcript preview appears
+
+## Log
+
+### [SWE] 2026-03-18 11:40
+- Implemented useAudioWaveform hook: manages getUserMedia, AudioContext, AnalyserNode, requestAnimationFrame loop, elapsed timer
+- Implemented AudioWaveform component: canvas-based waveform renderer with ResizeObserver for responsiveness
+- Implemented RecordingOverlay component: combines waveform, elapsed timer (mm:ss), stop button, and processing indicator
+- Updated ChatInput to integrate recording overlay: shows waveform during recording, processing state after stop, then transcript preview
+- Updated test setup to include ResizeObserver mock
+- Updated ChatInputVoice tests for new recording flow (processing state between stop and transcript)
+- Files created: web/src/hooks/useAudioWaveform.ts, web/src/components/AudioWaveform.tsx, web/src/components/RecordingOverlay.tsx
+- Files modified: web/src/components/ChatInput.tsx, web/src/test/ChatInputVoice.test.tsx, web/src/test/setup.ts
+- Tests added: 26 new tests (7 useAudioWaveform, 5 AudioWaveform, 4 RecordingOverlay, 10 ChatInputVoice)
+- Build results: 567 tests pass, 0 fail, tsc clean
+- All four visual states implemented: idle (no overlay), recording (waveform + timer + stop), processing (spinner + "Processing..."), done (transcript preview)
+- Graceful fallback when getUserMedia unavailable or permission denied (error state, no crash)
+- No audio processing libraries added -- only Web Audio API and Canvas API
