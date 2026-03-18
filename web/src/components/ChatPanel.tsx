@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
+import { normalizeEvent } from "@/api/websocket";
 import type { SessionEvent } from "@/api/websocket";
+import { useWebSocket } from "@/context/WebSocketContext";
 import { approveAction, rejectAction } from "@/api/approvals";
 import MessageBubble from "./MessageBubble";
 import ToolCallResult from "./ToolCallResult";
@@ -20,6 +22,7 @@ interface ChatItem {
 export interface ChatPanelProps {
   sessionId: string;
   sessionName?: string;
+  onFirstMessage?: (content: string) => void;
 }
 
 const CHAT_EVENT_TYPES = [
@@ -30,11 +33,13 @@ const CHAT_EVENT_TYPES = [
   "approval.required",
 ];
 
-export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
+export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: ChatPanelProps) {
   const events = useSessionEvents(CHAT_EVENT_TYPES);
+  const { injectEvents } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const firstMessageSentRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [approvalStates, setApprovalStates] = useState<
     Record<string, { status: ApprovalStatus; loading: boolean }>
@@ -125,6 +130,16 @@ export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
     autoScrollRef.current = atBottom;
   }, []);
 
+  // Detect if session already has user messages (e.g. re-entering existing session)
+  useEffect(() => {
+    const hasUserMessage = chatItems.some(
+      (item) => item.kind === "message" && item.event.data.role === "user",
+    );
+    if (hasUserMessage) {
+      firstMessageSentRef.current = true;
+    }
+  }, [chatItems]);
+
   useEffect(() => {
     if (autoScrollRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -135,12 +150,20 @@ export default function ChatPanel({ sessionId, sessionName }: ChatPanelProps) {
     async (content: string) => {
       setSending(true);
       try {
-        await sendMessage(sessionId, content);
+        const rawEvents = await sendMessage(sessionId, content);
+        const normalized = rawEvents.map((e) =>
+          normalizeEvent(e as unknown as Record<string, unknown>),
+        );
+        injectEvents(normalized);
+        if (!firstMessageSentRef.current) {
+          firstMessageSentRef.current = true;
+          onFirstMessage?.(content);
+        }
       } finally {
         setSending(false);
       }
     },
-    [sessionId],
+    [sessionId, injectEvents, onFirstMessage],
   );
 
   const handleApprove = useCallback(

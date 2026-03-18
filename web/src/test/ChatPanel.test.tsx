@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ChatPanel from "@/components/ChatPanel";
 import type { SessionEvent } from "@/api/websocket";
@@ -12,9 +12,45 @@ vi.mock("@/api/messages", () => ({
   sendMessage: vi.fn(),
 }));
 
+vi.mock("@/context/WebSocketContext", () => ({
+  useWebSocket: vi.fn(() => ({
+    injectEvents: vi.fn(),
+  })),
+}));
+
+vi.mock("@/api/websocket", async () => {
+  const actual = await vi.importActual("@/api/websocket");
+  return {
+    ...actual,
+    normalizeEvent: vi.fn((e: Record<string, unknown>) => e),
+  };
+});
+
+vi.mock("@/hooks/useVoiceInput", () => ({
+  useVoiceInput: vi.fn(() => ({
+    isListening: false,
+    transcript: "",
+    isSupported: false,
+    startListening: vi.fn(),
+    stopListening: vi.fn(),
+    resetTranscript: vi.fn(),
+  })),
+}));
+
+vi.mock("@/hooks/useAudioWaveform", () => ({
+  useAudioWaveform: vi.fn(() => ({
+    start: vi.fn(),
+    stop: vi.fn(),
+    waveformData: [],
+    elapsedSeconds: 0,
+  })),
+}));
+
 import { useSessionEvents } from "@/hooks/useSessionEvents";
+import { sendMessage } from "@/api/messages";
 
 const mockUseSessionEvents = vi.mocked(useSessionEvents);
+const mockSendMessage = vi.mocked(sendMessage);
 
 function makeEvent(
   id: string,
@@ -124,5 +160,78 @@ describe("ChatPanel", () => {
     expect(screen.getByText("exec")).toBeInTheDocument();
     expect(screen.getByText("done")).toBeInTheDocument();
     expect(screen.getByText("Command completed")).toBeInTheDocument();
+  });
+
+  it("calls onFirstMessage after first user message is sent", async () => {
+    mockUseSessionEvents.mockReturnValue([]);
+    mockSendMessage.mockResolvedValue([]);
+    const onFirstMessage = vi.fn();
+
+    render(
+      <ChatPanel sessionId="s1" onFirstMessage={onFirstMessage} />,
+    );
+
+    const input = screen.getByLabelText("Message input");
+    fireEvent.change(input, { target: { value: "Hello world" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledWith("s1", "Hello world");
+    });
+    expect(onFirstMessage).toHaveBeenCalledWith("Hello world");
+  });
+
+  it("does not call onFirstMessage on subsequent messages", async () => {
+    mockUseSessionEvents.mockReturnValue([]);
+    mockSendMessage.mockResolvedValue([]);
+    const onFirstMessage = vi.fn();
+
+    render(
+      <ChatPanel sessionId="s1" onFirstMessage={onFirstMessage} />,
+    );
+
+    const input = screen.getByLabelText("Message input");
+
+    // First message
+    fireEvent.change(input, { target: { value: "First message" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    });
+    expect(onFirstMessage).toHaveBeenCalledTimes(1);
+
+    // Second message
+    fireEvent.change(input, { target: { value: "Second message" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledTimes(2);
+    });
+    expect(onFirstMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call onFirstMessage when session already has user messages", async () => {
+    mockUseSessionEvents.mockReturnValue([
+      makeEvent("e1", "message.created", {
+        role: "user",
+        content: "Previous message",
+      }),
+    ]);
+    mockSendMessage.mockResolvedValue([]);
+    const onFirstMessage = vi.fn();
+
+    render(
+      <ChatPanel sessionId="s1" onFirstMessage={onFirstMessage} />,
+    );
+
+    const input = screen.getByLabelText("Message input");
+    fireEvent.change(input, { target: { value: "New message" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledWith("s1", "New message");
+    });
+    expect(onFirstMessage).not.toHaveBeenCalled();
   });
 });

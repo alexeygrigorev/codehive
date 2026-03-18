@@ -3,6 +3,15 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ProjectPage from "@/pages/ProjectPage";
 
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 vi.mock("@/api/projects", () => ({
   fetchProject: vi.fn(),
 }));
@@ -10,6 +19,7 @@ vi.mock("@/api/projects", () => ({
 vi.mock("@/api/sessions", () => ({
   fetchSessions: vi.fn(),
   createSession: vi.fn(),
+  updateSession: vi.fn(),
 }));
 
 vi.mock("@/api/issues", () => ({
@@ -158,24 +168,9 @@ describe("ProjectPage", () => {
     });
   });
 
-  it("New Session button opens creation form with engine and mode dropdowns", async () => {
-    renderProjectPage();
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
-    });
-
-    // Form not visible initially
-    expect(screen.queryByPlaceholderText("Session name")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("+ New Session"));
-    expect(screen.getByPlaceholderText("Session name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Engine")).toBeInTheDocument();
-    expect(screen.getByLabelText("Mode")).toBeInTheDocument();
-  });
-
-  it("submitting session creation form calls createSession with correct params", async () => {
+  it("clicking + New Session creates session with defaults and navigates to session page", async () => {
     const newSession = {
-      id: "s2",
+      id: "s-new",
       project_id: "p1",
       issue_id: null,
       parent_session_id: null,
@@ -194,10 +189,6 @@ describe("ProjectPage", () => {
     });
 
     fireEvent.click(screen.getByText("+ New Session"));
-    fireEvent.change(screen.getByPlaceholderText("Session name"), {
-      target: { value: "New Session" },
-    });
-    fireEvent.click(screen.getByText("Create Session"));
 
     await waitFor(() => {
       expect(mockCreateSession).toHaveBeenCalledWith("p1", {
@@ -206,11 +197,32 @@ describe("ProjectPage", () => {
         mode: "execution",
       });
     });
+    expect(mockNavigate).toHaveBeenCalledWith("/sessions/s-new");
   });
 
-  it("session creation form closes after successful creation", async () => {
-    const newSession = {
-      id: "s2",
+  it("+ New Session button is disabled while creating", async () => {
+    let resolveCreate: (value: unknown) => void;
+    mockCreateSession.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+
+    renderProjectPage();
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("+ New Session"));
+
+    await waitFor(() => {
+      const button = screen.getByText("Creating...");
+      expect(button).toBeDisabled();
+    });
+
+    // Resolve to clean up
+    resolveCreate!({
+      id: "s-new",
       project_id: "p1",
       issue_id: null,
       parent_session_id: null,
@@ -220,8 +232,11 @@ describe("ProjectPage", () => {
       status: "idle",
       config: null,
       created_at: "2026-01-02T00:00:00Z",
-    };
-    mockCreateSession.mockResolvedValue(newSession);
+    });
+  });
+
+  it("shows error when session creation fails", async () => {
+    mockCreateSession.mockRejectedValue(new Error("Server error"));
 
     renderProjectPage();
     await waitFor(() => {
@@ -229,14 +244,21 @@ describe("ProjectPage", () => {
     });
 
     fireEvent.click(screen.getByText("+ New Session"));
-    fireEvent.change(screen.getByPlaceholderText("Session name"), {
-      target: { value: "New Session" },
-    });
-    fireEvent.click(screen.getByText("Create Session"));
 
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText("Session name")).not.toBeInTheDocument();
+      expect(screen.getByText("Server error")).toBeInTheDocument();
     });
+  });
+
+  it("no session creation form elements exist on the page", async () => {
+    renderProjectPage();
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByPlaceholderText("Session name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Engine")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mode")).not.toBeInTheDocument();
   });
 
   it("renders session list with correct data from API", async () => {

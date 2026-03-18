@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchProject, type ProjectRead } from "@/api/projects";
 import { createSession, fetchSessions, type SessionRead } from "@/api/sessions";
 import {
@@ -14,30 +14,15 @@ import Breadcrumb from "@/components/Breadcrumb";
 
 type Tab = "sessions" | "issues";
 
-const engines = ["native", "claude_code"] as const;
-const modes = [
-  "execution",
-  "brainstorm",
-  "interview",
-  "planning",
-  "review",
-] as const;
-
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [sessions, setSessions] = useState<SessionRead[]>([]);
   const [issues, setIssues] = useState<IssueRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
-
-  // Session creation form state
-  const [showSessionForm, setShowSessionForm] = useState(false);
-  const [sessionName, setSessionName] = useState("");
-  const [sessionEngine, setSessionEngine] = useState<string>("native");
-  const [sessionMode, setSessionMode] = useState<string>("execution");
-  const [sessionIssueId, setSessionIssueId] = useState<string>("");
   const [creatingSession, setCreatingSession] = useState(false);
 
   // Issues filter state
@@ -104,23 +89,16 @@ export default function ProjectPage() {
     loadIssues(status);
   }
 
-  async function handleCreateSession(e: React.FormEvent) {
-    e.preventDefault();
-    if (!sessionName.trim() || !projectId) return;
+  async function handleNewSession() {
+    if (!projectId) return;
     setCreatingSession(true);
     try {
       const session = await createSession(projectId, {
-        name: sessionName.trim(),
-        engine: sessionEngine,
-        mode: sessionMode,
-        ...(sessionIssueId ? { issue_id: sessionIssueId } : {}),
+        name: "New Session",
+        engine: "native",
+        mode: "execution",
       });
-      setSessions((prev) => [...prev, session]);
-      setSessionName("");
-      setSessionEngine("native");
-      setSessionMode("execution");
-      setSessionIssueId("");
-      setShowSessionForm(false);
+      navigate(`/sessions/${session.id}`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create session",
@@ -140,7 +118,7 @@ export default function ProjectPage() {
     return (
       <div>
         <h1 className="text-2xl font-bold dark:text-gray-100">Project</h1>
-        <p className="text-gray-500 mt-4">Loading project...</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-4">Loading project...</p>
       </div>
     );
   }
@@ -183,7 +161,7 @@ export default function ProjectPage() {
           <p className="mt-1 text-gray-600 dark:text-gray-400">{project.description}</p>
         )}
         {project.path && (
-          <p className="mt-1 text-sm text-gray-500">Path: {project.path}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Path: {project.path}</p>
         )}
       </div>
 
@@ -224,104 +202,13 @@ export default function ProjectPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Sessions</h2>
               <button
-                onClick={() => setShowSessionForm(!showSessionForm)}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm"
+                onClick={handleNewSession}
+                disabled={creatingSession}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
               >
-                + New Session
+                {creatingSession ? "Creating..." : "+ New Session"}
               </button>
             </div>
-
-            {showSessionForm && (
-              <form
-                onSubmit={handleCreateSession}
-                className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
-              >
-                <div className="mb-3">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    value={sessionName}
-                    onChange={(e) => setSessionName(e.target.value)}
-                    placeholder="Session name"
-                    required
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label htmlFor="session-engine" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Engine
-                    </label>
-                    <select
-                      id="session-engine"
-                      value={sessionEngine}
-                      onChange={(e) => setSessionEngine(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      {engines.map((eng) => (
-                        <option key={eng} value={eng}>
-                          {eng}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="session-mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Mode
-                    </label>
-                    <select
-                      id="session-mode"
-                      value={sessionMode}
-                      onChange={(e) => setSessionMode(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      {modes.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {issues.length > 0 && (
-                  <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Link to Issue (optional)
-                    </label>
-                    <select
-                      value={sessionIssueId}
-                      onChange={(e) => setSessionIssueId(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">None</option>
-                      {issues.map((issue) => (
-                        <option key={issue.id} value={issue.id}>
-                          {issue.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    disabled={creatingSession || !sessionName.trim()}
-                    className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
-                  >
-                    {creatingSession ? "Creating..." : "Create Session"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowSessionForm(false)}
-                    className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
 
             <SessionList sessions={sessions} />
           </div>

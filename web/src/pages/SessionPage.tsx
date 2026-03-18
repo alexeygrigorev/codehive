@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { WebSocketProvider } from "@/context/WebSocketContext";
 import { apiClient } from "@/api/client";
 import type { SessionRead } from "@/api/sessions";
+import { updateSession } from "@/api/sessions";
 import { fetchProject, type ProjectRead } from "@/api/projects";
 import Breadcrumb from "@/components/Breadcrumb";
 import ChatPanel from "@/components/ChatPanel";
@@ -113,11 +114,26 @@ export default function SessionPage() {
     [sessionId],
   );
 
+  const handleFirstMessage = useCallback(
+    async (content: string) => {
+      if (!sessionId) return;
+      const derivedName = content.slice(0, 50).trim() || "New Session";
+      setSession((prev) => (prev ? { ...prev, name: derivedName } : prev));
+      try {
+        await updateSession(sessionId, { name: derivedName });
+      } catch {
+        // Failure to rename is non-critical
+        console.warn("Failed to auto-rename session");
+      }
+    },
+    [sessionId],
+  );
+
   if (loading) {
     return (
       <div>
         <h1 className="text-2xl font-bold dark:text-gray-100">Session</h1>
-        <p className="text-gray-500 mt-4">Loading session...</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-4">Loading session...</p>
       </div>
     );
   }
@@ -141,16 +157,16 @@ export default function SessionPage() {
   }
 
   const statusColors: Record<string, string> = {
-    idle: "bg-gray-100 text-gray-700",
-    planning: "bg-yellow-100 text-yellow-800",
-    executing: "bg-blue-100 text-blue-800",
-    waiting_input: "bg-purple-100 text-purple-800",
-    completed: "bg-green-100 text-green-800",
-    failed: "bg-red-100 text-red-800",
+    idle: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+    planning: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    executing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    waiting_input: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+    completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   };
 
   const statusClass =
-    statusColors[session.status] ?? "bg-gray-100 text-gray-700";
+    statusColors[session.status] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
 
   return (
     <WebSocketProvider sessionId={sessionId}>
@@ -222,7 +238,7 @@ export default function SessionPage() {
           data-testid="session-content"
         >
           <div className={isMobile ? "" : "flex-1 min-w-0"}>
-            <ChatPanel sessionId={sessionId} />
+            <ChatPanel sessionId={sessionId} onFirstMessage={handleFirstMessage} />
           </div>
           {isMobile ? (
             <div className="border-t border-gray-200 dark:border-gray-700">

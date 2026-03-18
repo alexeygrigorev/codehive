@@ -31,6 +31,17 @@ export async function createSession(
   return response.json() as Promise<SessionRead>;
 }
 
+export async function updateSession(
+  sessionId: string,
+  body: { name?: string; mode?: string; config?: Record<string, unknown> },
+): Promise<SessionRead> {
+  const response = await apiClient.patch(`/api/sessions/${sessionId}`, body);
+  if (!response.ok) {
+    throw new Error(`Failed to update session: ${response.status}`);
+  }
+  return response.json() as Promise<SessionRead>;
+}
+
 export async function fetchSessions(
   projectId: string,
 ): Promise<SessionRead[]> {
