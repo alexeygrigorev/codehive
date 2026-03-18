@@ -299,7 +299,7 @@ async def send_agent_message_endpoint(
 async def _build_engine(session_config: dict, engine_type: str = "native") -> Any:
     """Construct an engine adapter based on the engine type.
 
-    Returns a NativeEngine for ``"native"`` and a ClaudeCodeEngine for
+    Returns a ZaiEngine for ``"native"`` and a ClaudeCodeEngine for
     ``"claude_code"``.  Raises 400 for unknown engine types.
 
     Separated into a helper so tests can override it easily.
@@ -315,6 +315,14 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
         from codehive.engine.claude_code_engine import ClaudeCodeEngine
 
         return ClaudeCodeEngine(
+            diff_service=diff_service,
+            working_dir=str(project_root),
+        )
+
+    if engine_type == "codex_cli":
+        from codehive.engine.codex_cli_engine import CodexCLIEngine
+
+        return CodexCLIEngine(
             diff_service=diff_service,
             working_dir=str(project_root),
         )
@@ -374,14 +382,14 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
 
         from codehive.config import Settings
         from codehive.core.events import EventBus
-        from codehive.engine.native import NativeEngine
+        from codehive.engine.zai_engine import ZaiEngine
         from codehive.execution.file_ops import FileOps
         from codehive.execution.git_ops import GitOps
         from codehive.execution.shell import ShellRunner
 
         settings = Settings()
 
-        # NativeEngine uses the Anthropic-compatible SDK.
+        # ZaiEngine uses the Anthropic-compatible SDK.
         # The only supported provider is "zai" (Z.ai uses an Anthropic-compatible API).
         provider = session_config.get("provider", "zai")
 
@@ -398,7 +406,7 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported provider for native engine: {provider}. "
-                "Use 'zai' for NativeEngine, or 'claude_code' for Claude CLI.",
+                "Use 'zai' for ZaiEngine, or 'claude_code' for Claude CLI.",
             )
 
         client_kwargs: dict[str, Any] = {"api_key": api_key}
@@ -420,7 +428,7 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
 
         model = session_config.get("model", "") or default_model
 
-        return NativeEngine(
+        return ZaiEngine(
             client=client,
             event_bus=event_bus,  # type: ignore[arg-type]
             file_ops=file_ops,
