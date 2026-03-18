@@ -27,6 +27,10 @@ vi.mock("@/api/issues", () => ({
   createIssue: vi.fn(),
 }));
 
+vi.mock("@/api/providers", () => ({
+  fetchProviders: vi.fn(),
+}));
+
 vi.mock("@/api/subagents", () => ({
   fetchSubAgents: vi.fn().mockResolvedValue([]),
 }));
@@ -34,12 +38,14 @@ vi.mock("@/api/subagents", () => ({
 import { fetchProject } from "@/api/projects";
 import { fetchSessions, createSession } from "@/api/sessions";
 import { fetchIssues, createIssue } from "@/api/issues";
+import { fetchProviders } from "@/api/providers";
 
 const mockFetchProject = vi.mocked(fetchProject);
 const mockFetchSessions = vi.mocked(fetchSessions);
 const mockCreateSession = vi.mocked(createSession);
 const mockFetchIssues = vi.mocked(fetchIssues);
 const mockCreateIssue = vi.mocked(createIssue);
+const mockFetchProviders = vi.mocked(fetchProviders);
 
 const project = {
   id: "p1",
@@ -89,11 +95,27 @@ function renderProjectPage(projectId: string = "p1") {
 }
 
 describe("ProjectPage", () => {
+  const defaultProviders = [
+    {
+      name: "anthropic",
+      base_url: "https://api.anthropic.com",
+      api_key_set: true,
+      default_model: "claude-sonnet-4-20250514",
+    },
+    {
+      name: "zai",
+      base_url: "https://api.z.ai/api/anthropic",
+      api_key_set: true,
+      default_model: "glm-4.7",
+    },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchProject.mockResolvedValue(project);
     mockFetchSessions.mockResolvedValue(sessions);
     mockFetchIssues.mockResolvedValue(issues);
+    mockFetchProviders.mockResolvedValue(defaultProviders);
   });
 
   it("renders loading state initially", () => {
@@ -168,7 +190,7 @@ describe("ProjectPage", () => {
     });
   });
 
-  it("clicking + New Session creates session with defaults and navigates to session page", async () => {
+  it("clicking + New Session opens dialog, submit creates session and navigates", async () => {
     const newSession = {
       id: "s-new",
       project_id: "p1",
@@ -178,7 +200,7 @@ describe("ProjectPage", () => {
       engine: "native",
       mode: "execution",
       status: "idle",
-      config: null,
+      config: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
       created_at: "2026-01-02T00:00:00Z",
     };
     mockCreateSession.mockResolvedValue(newSession);
@@ -188,19 +210,27 @@ describe("ProjectPage", () => {
       expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
+    // Click opens dialog
     fireEvent.click(screen.getByText("+ New Session"));
+    await waitFor(() => {
+      expect(screen.getByTestId("new-session-dialog")).toBeInTheDocument();
+    });
+
+    // Submit the dialog (default values)
+    fireEvent.click(screen.getByTestId("create-session-btn"));
 
     await waitFor(() => {
       expect(mockCreateSession).toHaveBeenCalledWith("p1", {
         name: "New Session",
         engine: "native",
         mode: "execution",
+        config: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
       });
     });
     expect(mockNavigate).toHaveBeenCalledWith("/sessions/s-new");
   });
 
-  it("+ New Session button is disabled while creating", async () => {
+  it("Create button in dialog is disabled while creating", async () => {
     let resolveCreate: (value: unknown) => void;
     mockCreateSession.mockReturnValue(
       new Promise((resolve) => {
@@ -213,11 +243,19 @@ describe("ProjectPage", () => {
       expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
+    // Open dialog
     fireEvent.click(screen.getByText("+ New Session"));
+    await waitFor(() => {
+      expect(screen.getByTestId("new-session-dialog")).toBeInTheDocument();
+    });
+
+    // Submit
+    fireEvent.click(screen.getByTestId("create-session-btn"));
 
     await waitFor(() => {
-      const button = screen.getByText("Creating...");
+      const button = screen.getByTestId("create-session-btn");
       expect(button).toBeDisabled();
+      expect(button).toHaveTextContent("Creating...");
     });
 
     // Resolve to clean up
@@ -243,7 +281,12 @@ describe("ProjectPage", () => {
       expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
+    // Open dialog and submit
     fireEvent.click(screen.getByText("+ New Session"));
+    await waitFor(() => {
+      expect(screen.getByTestId("new-session-dialog")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("create-session-btn"));
 
     await waitFor(() => {
       expect(screen.getByText("Server error")).toBeInTheDocument();

@@ -40,6 +40,8 @@ from codehive.api.routes.error_tracking import router as error_tracking_router
 from codehive.api.routes.project_flow import router as project_flow_router
 from codehive.api.routes.transcript import transcript_router
 from codehive.api.routes.async_dispatch import async_dispatch_router
+from codehive.api.routes.providers import providers_router
+from codehive.api.routes.usage import session_usage_router, usage_router
 from codehive.api.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -151,5 +153,8 @@ def create_app() -> FastAPI:
     app.include_router(transcript_router, dependencies=_auth)
     app.include_router(error_tracking_router, dependencies=_auth)
     app.include_router(async_dispatch_router, dependencies=_auth)
+    app.include_router(providers_router, dependencies=_auth)
+    app.include_router(usage_router, dependencies=_auth)
+    app.include_router(session_usage_router, dependencies=_auth)
 
     return app

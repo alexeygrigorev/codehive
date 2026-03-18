@@ -330,12 +330,30 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
         from codehive.execution.shell import ShellRunner
 
         settings = Settings()
-        if not settings.anthropic_api_key:
-            raise HTTPException(status_code=503, detail="Engine not configured")
 
-        client_kwargs: dict[str, Any] = {"api_key": settings.anthropic_api_key}
-        if settings.anthropic_base_url:
-            client_kwargs["base_url"] = settings.anthropic_base_url
+        # Determine provider from session config (default: anthropic)
+        provider = session_config.get("provider", "anthropic")
+
+        if provider == "zai":
+            api_key = settings.zai_api_key
+            if not api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Z.ai provider not configured: missing API key",
+                )
+            base_url = settings.zai_base_url
+            default_model = "glm-4.7"
+        else:
+            # Default: anthropic
+            api_key = settings.anthropic_api_key
+            if not api_key:
+                raise HTTPException(status_code=503, detail="Engine not configured")
+            base_url = settings.anthropic_base_url
+            default_model = settings.default_model
+
+        client_kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
         client = AsyncAnthropic(**client_kwargs)
         redis_client: Any = None
         try:
@@ -350,7 +368,7 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
         shell_runner = ShellRunner()
         git_ops = GitOps(repo_path=project_root)
 
-        model = session_config.get("model", "") or settings.default_model
+        model = session_config.get("model", "") or default_model
 
         return NativeEngine(
             client=client,

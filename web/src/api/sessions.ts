@@ -15,7 +15,13 @@ export interface SessionRead {
 
 export async function createSession(
   projectId: string,
-  body: { name: string; engine?: string; mode?: string; issue_id?: string },
+  body: {
+    name: string;
+    engine?: string;
+    mode?: string;
+    issue_id?: string;
+    config?: Record<string, unknown>;
+  },
 ): Promise<SessionRead> {
   const response = await apiClient.post(
     `/api/projects/${projectId}/sessions`,

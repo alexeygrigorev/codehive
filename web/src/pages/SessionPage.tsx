@@ -207,8 +207,22 @@ export default function SessionPage() {
               {session.status}
             </span>
           </div>
-          {/* Right group: mode indicator + approval badge */}
+          {/* Right group: provider badge + mode indicator + approval badge */}
           <div className="flex items-center gap-2">
+            {session.config &&
+              (session.config.provider || session.config.model) && (
+                <span
+                  className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+                  data-testid="provider-badge"
+                >
+                  {(session.config.provider as string) === "zai"
+                    ? "Z.ai"
+                    : "Anthropic"}
+                  {session.config.model
+                    ? ` / ${session.config.model as string}`
+                    : ""}
+                </span>
+              )}
             <button
               type="button"
               className="mode-indicator-button"

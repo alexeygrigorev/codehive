@@ -224,6 +224,66 @@ describe("SessionPage", () => {
     });
   });
 
+  it("shows provider badge when session has provider config", async () => {
+    const sessionWithProvider = {
+      ...mockSession,
+      config: { provider: "zai", model: "glm-4.7" },
+    };
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(sessionWithProvider), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-badge")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("provider-badge")).toHaveTextContent(
+      "Z.ai / glm-4.7",
+    );
+  });
+
+  it("shows Anthropic provider badge", async () => {
+    const sessionWithProvider = {
+      ...mockSession,
+      config: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
+    };
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(sessionWithProvider), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-badge")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("provider-badge")).toHaveTextContent(
+      "Anthropic / claude-sonnet-4-20250514",
+    );
+  });
+
+  it("does not show provider badge when config is null", async () => {
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(mockSession), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Session")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("provider-badge")).not.toBeInTheDocument();
+  });
+
   it("does not render SessionHistorySearch in main content flow", async () => {
     mockGet.mockResolvedValue(
       new Response(JSON.stringify(mockSession), {

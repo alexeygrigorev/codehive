@@ -11,6 +11,7 @@ import {
 import SessionList from "@/components/SessionList";
 import IssueList from "@/components/IssueList";
 import Breadcrumb from "@/components/Breadcrumb";
+import NewSessionDialog from "@/components/NewSessionDialog";
 
 type Tab = "sessions" | "issues";
 
@@ -24,6 +25,7 @@ export default function ProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
   const [creatingSession, setCreatingSession] = useState(false);
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
 
   // Issues filter state
   const [issueFilter, setIssueFilter] = useState<IssueStatus | null>(null);
@@ -89,15 +91,21 @@ export default function ProjectPage() {
     loadIssues(status);
   }
 
-  async function handleNewSession() {
+  async function handleNewSession(data: {
+    name: string;
+    provider: string;
+    model: string;
+  }) {
     if (!projectId) return;
     setCreatingSession(true);
     try {
       const session = await createSession(projectId, {
-        name: "New Session",
+        name: data.name,
         engine: "native",
         mode: "execution",
+        config: { provider: data.provider, model: data.model },
       });
+      setShowNewSessionDialog(false);
       navigate(`/sessions/${session.id}`);
     } catch (err) {
       setError(
@@ -202,15 +210,21 @@ export default function ProjectPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Sessions</h2>
               <button
-                onClick={handleNewSession}
+                onClick={() => setShowNewSessionDialog(true)}
                 disabled={creatingSession}
                 className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
               >
-                {creatingSession ? "Creating..." : "+ New Session"}
+                + New Session
               </button>
             </div>
 
             <SessionList sessions={sessions} />
+            <NewSessionDialog
+              open={showNewSessionDialog}
+              onClose={() => setShowNewSessionDialog(false)}
+              onSubmit={handleNewSession}
+              creating={creatingSession}
+            />
           </div>
         )}
 
