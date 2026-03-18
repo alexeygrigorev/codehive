@@ -10,7 +10,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 
 # revision identifiers, used by Alembic.
 revision: str = "a1b2c3d4e5f6"
@@ -20,12 +20,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add github_config JSONB column to projects table."""
+    """Add github_config JSON column to projects table."""
     op.add_column(
         "projects",
         sa.Column(
             "github_config",
-            postgresql.JSONB(astext_type=sa.Text()),
+            sa.JSON().with_variant(PG_JSONB(), "postgresql"),
             nullable=True,
         ),
     )

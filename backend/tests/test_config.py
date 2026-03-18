@@ -62,17 +62,15 @@ class TestDatabaseSettings:
 
     @pytest.mark.usefixtures("_isolated_settings")
     def test_database_url_default(self):
-        """Verify database_url returns the expected default Postgres connection string."""
+        """Verify database_url returns the expected default SQLite connection string."""
         settings = Settings(_env_file=None)
-        assert settings.database_url == (
-            "postgresql+asyncpg://codehive:codehive@localhost:5432/codehive"
-        )
+        assert settings.database_url == "sqlite+aiosqlite:///codehive.db"
 
     @pytest.mark.usefixtures("_isolated_settings")
     def test_redis_url_default(self):
-        """Verify redis_url returns the expected default Redis connection string."""
+        """Verify redis_url defaults to empty string (no Redis = LocalEventBus)."""
         settings = Settings(_env_file=None)
-        assert settings.redis_url == "redis://localhost:6379/0"
+        assert settings.redis_url == ""
 
     def test_database_url_override(self, monkeypatch):
         """Verify database_url can be overridden via environment variable."""

@@ -36,8 +36,8 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    database_url: str = "postgresql+asyncpg://codehive:codehive@localhost:5432/codehive"
-    redis_url: str = "redis://localhost:6379/0"
+    database_url: str = "sqlite+aiosqlite:///codehive.db"
+    redis_url: str = ""
 
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""

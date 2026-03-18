@@ -26,7 +26,15 @@ _TABLES = {
 
 
 def upgrade() -> None:
-    """Add search_vector tsvector columns, GIN indexes, and update triggers."""
+    """Add search_vector tsvector columns, GIN indexes, and update triggers.
+
+    This migration is PostgreSQL-only.  On SQLite it is a no-op because
+    tsvector, GIN indexes, and PL/pgSQL triggers are not supported.
+    """
+    conn = op.get_bind()
+    if conn.dialect.name != "postgresql":
+        return
+
     for table, columns in _TABLES.items():
         # Add tsvector column
         op.execute(f"ALTER TABLE {table} ADD COLUMN search_vector tsvector")
@@ -61,6 +69,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop triggers, trigger functions, indexes, and tsvector columns."""
+    conn = op.get_bind()
+    if conn.dialect.name != "postgresql":
+        return
+
     for table in _TABLES:
         op.execute(f"DROP TRIGGER IF EXISTS {table}_search_vector_trigger ON {table}")
         op.execute(f"DROP FUNCTION IF EXISTS {table}_search_vector_update()")

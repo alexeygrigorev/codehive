@@ -6,9 +6,8 @@ Create Date: 2026-03-16 12:00:00.000000
 
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f6a7b8c9d0e1"
@@ -20,16 +19,16 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "workspace_members",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column(
             "workspace_id",
-            UUID(as_uuid=True),
+            sa.String(36),
             sa.ForeignKey("workspaces.id"),
             nullable=False,
         ),
         sa.Column(
             "user_id",
-            UUID(as_uuid=True),
+            sa.String(36),
             sa.ForeignKey("users.id"),
             nullable=False,
         ),
@@ -38,7 +37,7 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime,
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.UniqueConstraint("workspace_id", "user_id"),
     )

@@ -22,8 +22,8 @@ def upgrade() -> None:
     """Create remote_targets table."""
     op.create_table(
         "remote_targets",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("workspace_id", sa.UUID(), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
+        sa.Column("workspace_id", sa.String(36), nullable=False),
         sa.Column("label", sa.Unicode(255), nullable=False),
         sa.Column("host", sa.Unicode(500), nullable=False),
         sa.Column("port", sa.Integer(), server_default=sa.text("22"), nullable=False),
@@ -45,7 +45,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(),
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["workspace_id"], ["workspaces.id"]),

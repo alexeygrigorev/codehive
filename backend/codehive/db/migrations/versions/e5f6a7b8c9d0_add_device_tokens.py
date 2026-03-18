@@ -22,15 +22,15 @@ def upgrade() -> None:
     """Create device_tokens table."""
     op.create_table(
         "device_tokens",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("user_id", sa.UUID(), nullable=True),
+        sa.Column("id", sa.String(36), nullable=False),
+        sa.Column("user_id", sa.String(36), nullable=True),
         sa.Column("token", sa.Text(), nullable=False),
         sa.Column("platform", sa.Text(), nullable=False),
         sa.Column("device_id", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(),
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),

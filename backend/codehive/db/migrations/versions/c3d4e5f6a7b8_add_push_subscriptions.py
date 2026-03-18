@@ -22,14 +22,14 @@ def upgrade() -> None:
     """Create push_subscriptions table."""
     op.create_table(
         "push_subscriptions",
-        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("endpoint", sa.Text(), nullable=False),
         sa.Column("p256dh", sa.Text(), nullable=False),
         sa.Column("auth", sa.Text(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(),
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),

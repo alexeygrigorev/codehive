@@ -1,10 +1,10 @@
-"""Alembic environment configuration — async (asyncpg) support."""
+"""Alembic environment configuration — async engine support (PostgreSQL & SQLite)."""
 
 import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 
@@ -13,6 +13,13 @@ from codehive.db.models import Base  # noqa: F401
 
 # Alembic Config object.
 config = context.config
+
+# Override sqlalchemy.url from Settings so the database URL is always
+# read from the canonical application configuration (env vars / .env).
+from codehive.config import Settings  # noqa: E402
+
+_settings = Settings()
+config.set_main_option("sqlalchemy.url", _settings.database_url)
 
 # Set up Python logging from the .ini file.
 if config.config_file_name is not None:
@@ -44,11 +51,11 @@ def do_run_migrations(connection):
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode using an async engine."""
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    url = config.get_main_option("sqlalchemy.url")
+    engine_kwargs: dict = {"poolclass": pool.NullPool}
+    if url and url.startswith("sqlite"):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    connectable = create_async_engine(url, **engine_kwargs)
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
