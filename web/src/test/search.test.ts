@@ -4,7 +4,6 @@ import { searchAll, searchSessionHistory } from "@/api/search";
 describe("API: search", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    localStorage.setItem("codehive_access_token", "test-token");
   });
 
   it("searchAll(query) calls GET /api/search?q=query", async () => {
@@ -20,11 +19,6 @@ describe("API: search", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "http://localhost:7433/api/search?q=query",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
     );
     expect(result).toEqual(mockData);
   });
@@ -42,11 +36,6 @@ describe("API: search", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "http://localhost:7433/api/search?q=query&type=session&limit=10",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
     );
   });
 
@@ -63,11 +52,6 @@ describe("API: search", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "http://localhost:7433/api/search?q=test&limit=20&offset=40",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
     );
   });
 
@@ -92,11 +76,6 @@ describe("API: search", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "http://localhost:7433/api/sessions/sess-1/history?q=query",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
     );
     expect(result).toEqual(mockData);
   });

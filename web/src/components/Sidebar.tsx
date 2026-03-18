@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { fetchProjects, type ProjectRead } from "@/api/projects";
 import { fetchSessions, type SessionRead } from "@/api/sessions";
-import UserMenu from "@/components/UserMenu";
-
 const SIDEBAR_COLLAPSED_KEY = "codehive-sidebar-collapsed";
 
 const statusDotColors: Record<string, string> = {
@@ -121,11 +119,6 @@ export default function Sidebar() {
           {collapsed ? "\u25B6" : "\u25C0"}
         </button>
       </div>
-      {!collapsed && (
-        <div className="px-4 pb-2">
-          <UserMenu />
-        </div>
-      )}
       <nav className="mt-2 flex-1 overflow-y-auto">
         <ul className="space-y-0.5">
           <li>

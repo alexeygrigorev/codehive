@@ -18,21 +18,6 @@ vi.mock("@/api/sessions", () => ({
 vi.mock("@/api/search", () => ({
   searchAll: vi.fn(() => Promise.resolve({ results: [], total: 0, has_more: false })),
 }));
-vi.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({
-    user: null,
-    isAuthenticated: true,
-    isLoading: false,
-    authEnabled: false,
-    login: vi.fn(),
-    register: vi.fn(),
-    logout: vi.fn(),
-    refreshAccessToken: vi.fn(),
-    accessToken: null,
-    refreshToken: null,
-  }),
-}));
-
 function enableDarkMode() {
   document.documentElement.classList.add("dark");
 }

@@ -11,10 +11,6 @@ vi.mock("@/api/sessions", () => ({
   fetchSessions: vi.fn(),
 }));
 
-vi.mock("@/components/UserMenu", () => ({
-  default: () => <div data-testid="user-menu">UserMenu</div>,
-}));
-
 import { fetchProjects } from "@/api/projects";
 import { fetchSessions } from "@/api/sessions";
 

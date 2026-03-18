@@ -10,10 +10,6 @@ import RolesPage from "@/pages/RolesPage";
 import SearchPage from "@/pages/SearchPage";
 import NewProjectPage from "@/pages/NewProjectPage";
 import NotFoundPage from "@/pages/NotFoundPage";
-import LoginPage from "@/pages/LoginPage";
-import RegisterPage from "@/pages/RegisterPage";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 
@@ -24,23 +20,19 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route element={<ProtectedRoute />}>
-        <Route element={<Layout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects/new" element={<NewProjectPage />} />
-          <Route path="/projects/:projectId" element={<ProjectPage />} />
-          <Route path="/sessions/:sessionId" element={<SessionPage />} />
-          <Route
-            path="/sessions/:sessionId/replay"
-            element={<ReplayPage />}
-          />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/questions" element={<QuestionsPage />} />
-          <Route path="/roles" element={<RolesPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
+      <Route element={<Layout />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/projects/new" element={<NewProjectPage />} />
+        <Route path="/projects/:projectId" element={<ProjectPage />} />
+        <Route path="/sessions/:sessionId" element={<SessionPage />} />
+        <Route
+          path="/sessions/:sessionId/replay"
+          element={<ReplayPage />}
+        />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/questions" element={<QuestionsPage />} />
+        <Route path="/roles" element={<RolesPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );
@@ -50,9 +42,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <AppRoutes />
       </ThemeProvider>
     </BrowserRouter>
   );
