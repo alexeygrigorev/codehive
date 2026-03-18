@@ -79,6 +79,7 @@ function renderSessionPage(sessionId: string = "sess-123") {
 describe("SessionPage with mode and approvals", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("shows SessionModeIndicator with the session's current mode", async () => {

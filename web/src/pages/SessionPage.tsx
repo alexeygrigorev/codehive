@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { WebSocketProvider } from "@/context/WebSocketContext";
 import { apiClient } from "@/api/client";
 import type { SessionRead } from "@/api/sessions";
@@ -10,8 +10,25 @@ import SidebarTabs from "@/components/sidebar/SidebarTabs";
 import SessionModeIndicator from "@/components/SessionModeIndicator";
 import SessionModeSwitcher from "@/components/SessionModeSwitcher";
 import SessionApprovalBadge from "@/components/SessionApprovalBadge";
-import SessionHistorySearch from "@/components/SessionHistorySearch";
 import { useResponsive } from "@/hooks/useResponsive";
+
+const SIDEBAR_STORAGE_KEY = "session-sidebar-collapsed";
+
+function getSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setSidebarCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+  } catch {
+    // localStorage unavailable
+  }
+}
 
 export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -22,6 +39,17 @@ export default function SessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [modeLoading, setModeLoading] = useState(false);
   const [showModeSwitcher, setShowModeSwitcher] = useState(false);
+  const [sidebarCollapsed, _setSidebarCollapsed] = useState(
+    getSidebarCollapsed,
+  );
+
+  function toggleSidebar() {
+    _setSidebarCollapsed((prev) => {
+      const next = !prev;
+      setSidebarCollapsed(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!sessionId) return;
@@ -36,13 +64,13 @@ export default function SessionPage() {
         const data = (await response.json()) as SessionRead;
         if (!cancelled) {
           setSession(data);
-          // Fetch parent project for breadcrumb
+          // Fetch parent project for breadcrumb and header
           if (data.project_id) {
             try {
               const proj = await fetchProject(data.project_id);
               if (!cancelled) setProject(proj);
             } catch {
-              // Project fetch failure is non-critical for breadcrumbs
+              // Project fetch failure is non-critical
             }
           }
         }
@@ -138,9 +166,33 @@ export default function SessionPage() {
             />
           </div>
         )}
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">{session.name}</h1>
+        <div
+          className="flex items-center justify-between border-b border-gray-200 px-4 py-2"
+          data-testid="session-header"
+        >
+          {/* Left group: project name link + session name + status */}
+          <div className="flex items-center gap-2">
+            {project && (
+              <>
+                <Link
+                  to={`/projects/${project.id}`}
+                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+                  data-testid="project-link"
+                >
+                  {project.name}
+                </Link>
+                <span className="text-gray-300">/</span>
+              </>
+            )}
+            <h1 className="text-lg font-bold text-gray-900">{session.name}</h1>
+            <span
+              className={`session-status inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass}`}
+            >
+              {session.status}
+            </span>
+          </div>
+          {/* Right group: mode indicator + approval badge */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               className="mode-indicator-button"
@@ -151,11 +203,6 @@ export default function SessionPage() {
             </button>
             <SessionApprovalBadge />
           </div>
-          <span
-            className={`session-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusClass}`}
-          >
-            {session.status}
-          </span>
         </div>
         {showModeSwitcher && (
           <div className="border-b border-gray-200 px-4 py-2">
@@ -166,7 +213,6 @@ export default function SessionPage() {
             />
           </div>
         )}
-        <SessionHistorySearch sessionId={sessionId} />
         <div
           className={
             isMobile
@@ -178,24 +224,39 @@ export default function SessionPage() {
           <div className={isMobile ? "" : "flex-1 min-w-0"}>
             <ChatPanel sessionId={sessionId} />
           </div>
-          <div
-            className={
-              isMobile
-                ? "border-t border-gray-200"
-                : "w-80 border-l border-gray-200"
-            }
-          >
-            {isMobile ? (
+          {isMobile ? (
+            <div className="border-t border-gray-200">
               <details className="session-sidebar-toggle">
                 <summary className="px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer">
                   Sidebar
                 </summary>
                 <SidebarTabs sessionId={sessionId} />
               </details>
-            ) : (
-              <SidebarTabs sessionId={sessionId} />
-            )}
-          </div>
+            </div>
+          ) : (
+            <div
+              className="border-l border-gray-200 flex flex-shrink-0 transition-all duration-200"
+              style={{ width: sidebarCollapsed ? 32 : 320 }}
+              data-testid="session-sidebar"
+            >
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="flex items-center justify-center w-8 flex-shrink-0 hover:bg-gray-100 text-gray-400 hover:text-gray-600 border-r border-gray-200"
+                aria-label={
+                  sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                }
+                data-testid="sidebar-toggle"
+              >
+                {sidebarCollapsed ? "\u25C0" : "\u25B6"}
+              </button>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <SidebarTabs sessionId={sessionId} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </WebSocketProvider>

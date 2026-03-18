@@ -78,9 +78,20 @@ const mockSession = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
+const mockProject = {
+  id: "proj-1",
+  name: "Test Project",
+  path: "/path/to/project",
+  description: null,
+  archetype: null,
+  knowledge: null,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
 describe("SessionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("renders loading state while fetching session metadata", () => {
@@ -170,5 +181,64 @@ describe("SessionPage", () => {
         "sess-123",
       );
     });
+  });
+
+  it("shows project name as a link when project is loaded", async () => {
+    mockGet
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(mockSession), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(mockProject), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-link")).toBeInTheDocument();
+    });
+    const link = screen.getByTestId("project-link");
+    expect(link).toHaveTextContent("Test Project");
+    expect(link).toHaveAttribute("href", "/projects/proj-1");
+  });
+
+  it("shows sidebar toggle button", async () => {
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(mockSession), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-toggle")).toBeInTheDocument();
+    });
+  });
+
+  it("does not render SessionHistorySearch in main content flow", async () => {
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(mockSession), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Session")).toBeInTheDocument();
+    });
+    // SessionHistorySearch should not be rendered directly in the page
+    expect(
+      screen.queryByTestId("session-history-search"),
+    ).not.toBeInTheDocument();
   });
 });

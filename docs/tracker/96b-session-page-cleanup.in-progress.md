@@ -122,3 +122,31 @@ Improve the session page layout and replace the raw timeline with a clean tool c
 - The existing `TimelinePanel` component can be refactored in place or replaced with a new component
 - Keep the same tab structure in `SidebarTabs` -- just rename "Timeline" to "Activity" and swap the panel component
 - This is a single-user self-hosted tool -- no multi-user concerns
+
+## Log
+
+### [SWE] 2026-03-18 10:35
+- Created `ActivityPanel` component replacing raw `TimelinePanel` in sidebar
+  - Groups events by type: tool calls show tool name, file changes show filename, messages show role
+  - Falls back to formatted event type (dots/underscores to title case) for unknown types
+  - Color-coded dots by category (blue=tool, green=file, purple=message, gray=other)
+  - Most recent events displayed first
+  - Exports `buildActivityEntry` and `formatEventType` for unit testing
+- Updated `SidebarTabs`: renamed "Timeline" tab to "Activity", added "Search" tab
+  - Swapped `TimelinePanel` for `ActivityPanel`
+  - Added `SessionHistorySearch` as a sidebar tab instead of main content flow
+- Updated `SessionPage` with collapsible right sidebar
+  - Toggle button (chevron) on left edge of sidebar
+  - Collapsed state: 32px thin strip; expanded: 320px full sidebar
+  - Collapse state persists in localStorage (key: `session-sidebar-collapsed`)
+  - CSS transition on width change
+- Cleaned up session header layout
+  - Left group: project name link + "/" + session name + status badge
+  - Right group: mode indicator button + approval badge
+  - Removed `SessionHistorySearch` from main content flow (moved to sidebar Search tab)
+  - Project name shown as clickable link to `/projects/{id}`
+- Files created: `web/src/components/sidebar/ActivityPanel.tsx`, `web/src/test/ActivityPanel.test.tsx`, `web/src/test/SessionSidebar.test.tsx`
+- Files modified: `web/src/components/sidebar/SidebarTabs.tsx`, `web/src/pages/SessionPage.tsx`, `web/src/test/SidebarTabs.test.tsx`, `web/src/test/SessionPage.test.tsx`, `web/src/test/SessionPageModeApprovals.test.tsx`
+- Tests added: 25 new tests (14 ActivityPanel, 4 buildActivityEntry/formatEventType, 7 collapsible sidebar)
+- Build results: 546 tests pass, 0 fail, tsc --noEmit clean
+- TimelinePanel component retained in codebase (not deleted) for backward compatibility; simply no longer referenced by SidebarTabs

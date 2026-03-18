@@ -1,20 +1,22 @@
 import { useState } from "react";
 import TodoPanel from "./TodoPanel";
 import ChangedFilesPanel from "./ChangedFilesPanel";
-import TimelinePanel from "./TimelinePanel";
+import ActivityPanel from "./ActivityPanel";
 import SubAgentPanel from "./SubAgentPanel";
 import QuestionsPanel from "./QuestionsPanel";
 import CheckpointPanel from "./CheckpointPanel";
 import AgentCommPanel from "./AgentCommPanel";
+import SessionHistorySearch from "@/components/SessionHistorySearch";
 
 export type TabKey =
   | "todo"
   | "changed-files"
-  | "timeline"
+  | "activity"
   | "sub-agents"
   | "comms"
   | "questions"
-  | "checkpoints";
+  | "checkpoints"
+  | "search";
 
 interface TabDef {
   key: TabKey;
@@ -24,11 +26,12 @@ interface TabDef {
 const TABS: TabDef[] = [
   { key: "todo", label: "ToDo" },
   { key: "changed-files", label: "Changed Files" },
-  { key: "timeline", label: "Timeline" },
+  { key: "activity", label: "Activity" },
   { key: "sub-agents", label: "Sub-agents" },
   { key: "comms", label: "Comms" },
   { key: "questions", label: "Questions" },
   { key: "checkpoints", label: "Checkpoints" },
+  { key: "search", label: "Search" },
 ];
 
 interface SidebarTabsProps {
@@ -79,12 +82,15 @@ export default function SidebarTabs({
         {activeTab === "changed-files" && (
           <ChangedFilesPanel sessionId={sessionId} />
         )}
-        {activeTab === "timeline" && <TimelinePanel sessionId={sessionId} />}
+        {activeTab === "activity" && <ActivityPanel sessionId={sessionId} />}
         {activeTab === "sub-agents" && <SubAgentPanel sessionId={sessionId} />}
         {activeTab === "comms" && <AgentCommPanel sessionId={sessionId} />}
         {activeTab === "questions" && <QuestionsPanel sessionId={sessionId} />}
         {activeTab === "checkpoints" && (
           <CheckpointPanel sessionId={sessionId} />
+        )}
+        {activeTab === "search" && (
+          <SessionHistorySearch sessionId={sessionId} />
         )}
       </div>
     </div>

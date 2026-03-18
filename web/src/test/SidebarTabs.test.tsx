@@ -12,8 +12,8 @@ vi.mock("@/components/sidebar/ChangedFilesPanel", () => ({
     <div data-testid="changed-files-panel">ChangedFilesPanel</div>
   ),
 }));
-vi.mock("@/components/sidebar/TimelinePanel", () => ({
-  default: () => <div data-testid="timeline-panel">TimelinePanel</div>,
+vi.mock("@/components/sidebar/ActivityPanel", () => ({
+  default: () => <div data-testid="activity-panel">ActivityPanel</div>,
 }));
 vi.mock("@/components/sidebar/SubAgentPanel", () => ({
   default: ({ sessionId }: { sessionId?: string }) => (
@@ -43,18 +43,26 @@ vi.mock("@/components/sidebar/AgentCommPanel", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/SessionHistorySearch", () => ({
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="search-panel" data-session-id={sessionId ?? ""}>
+      SessionHistorySearch
+    </div>
+  ),
+}));
 
 describe("SidebarTabs", () => {
-  it("renders all seven tab labels", () => {
+  it("renders all eight tab labels", () => {
     render(<SidebarTabs sessionId="s1" />);
 
     expect(screen.getByText("ToDo")).toBeInTheDocument();
     expect(screen.getByText("Changed Files")).toBeInTheDocument();
-    expect(screen.getByText("Timeline")).toBeInTheDocument();
+    expect(screen.getByText("Activity")).toBeInTheDocument();
     expect(screen.getByText("Sub-agents")).toBeInTheDocument();
     expect(screen.getByText("Comms")).toBeInTheDocument();
     expect(screen.getByText("Questions")).toBeInTheDocument();
     expect(screen.getByText("Checkpoints")).toBeInTheDocument();
+    expect(screen.getByText("Search")).toBeInTheDocument();
   });
 
   it("defaults to the ToDo tab being selected", () => {
@@ -70,9 +78,9 @@ describe("SidebarTabs", () => {
     const onTabChange = vi.fn();
     render(<SidebarTabs sessionId="s1" onTabChange={onTabChange} />);
 
-    await user.click(screen.getByText("Timeline"));
+    await user.click(screen.getByText("Activity"));
 
-    expect(onTabChange).toHaveBeenCalledWith("timeline");
+    expect(onTabChange).toHaveBeenCalledWith("activity");
   });
 
   it("clicking a tab switches the visible panel", async () => {
@@ -108,10 +116,10 @@ describe("SidebarTabs", () => {
     const todoTab = screen.getByText("ToDo");
     expect(todoTab.className).toContain("sidebar-tab-active");
 
-    await user.click(screen.getByText("Timeline"));
+    await user.click(screen.getByText("Activity"));
 
     expect(todoTab.className).not.toContain("sidebar-tab-active");
-    expect(screen.getByText("Timeline").className).toContain(
+    expect(screen.getByText("Activity").className).toContain(
       "sidebar-tab-active",
     );
   });
@@ -165,6 +173,26 @@ describe("SidebarTabs", () => {
     const panel = screen.getByTestId("agent-comm-panel");
     expect(panel).toBeInTheDocument();
     expect(panel.getAttribute("data-session-id")).toBe("s1");
+    expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
+  });
+
+  it("clicking the Activity tab renders ActivityPanel", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Activity"));
+
+    expect(screen.getByTestId("activity-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
+  });
+
+  it("clicking the Search tab renders SessionHistorySearch", async () => {
+    const user = userEvent.setup();
+    render(<SidebarTabs sessionId="s1" />);
+
+    await user.click(screen.getByText("Search"));
+
+    expect(screen.getByTestId("search-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("todo-panel")).not.toBeInTheDocument();
   });
 });
