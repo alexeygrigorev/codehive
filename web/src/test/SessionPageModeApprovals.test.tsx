@@ -31,6 +31,7 @@ vi.mock("@/context/WebSocketContext", () => ({
     removeListener: vi.fn(),
     injectEvents: vi.fn(),
   }),
+  useWebSocketSafe: () => null,
 }));
 
 vi.mock("@/components/ChatPanel", () => ({

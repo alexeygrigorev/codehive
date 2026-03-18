@@ -11,6 +11,7 @@ import SidebarTabs from "@/components/sidebar/SidebarTabs";
 import SessionModeIndicator from "@/components/SessionModeIndicator";
 import SessionModeSwitcher from "@/components/SessionModeSwitcher";
 import SessionApprovalBadge from "@/components/SessionApprovalBadge";
+import ContextProgressBar from "@/components/ContextProgressBar";
 import { useResponsive } from "@/hooks/useResponsive";
 
 const SIDEBAR_STORAGE_KEY = "session-sidebar-collapsed";
@@ -223,6 +224,7 @@ export default function SessionPage() {
                     : ""}
                 </span>
               )}
+            <ContextProgressBar sessionId={sessionId} />
             <button
               type="button"
               className="mode-indicator-button"

@@ -157,3 +157,8 @@ export function useWebSocket(): WebSocketContextValue {
   }
   return context;
 }
+
+/** Like useWebSocket but returns null when outside a WebSocketProvider. */
+export function useWebSocketSafe(): WebSocketContextValue | null {
+  return useContext(WebSocketContext);
+}

@@ -63,3 +63,19 @@ export async function fetchSessionUsage(sessionId: string): Promise<UsageSummary
   }
   return response.json() as Promise<UsageSummary>;
 }
+
+export interface ContextUsage {
+  used_tokens: number;
+  context_window: number;
+  usage_percent: number;
+  model: string;
+  estimated: boolean;
+}
+
+export async function fetchSessionContext(sessionId: string): Promise<ContextUsage> {
+  const response = await apiClient.get(`/api/sessions/${sessionId}/context`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session context: ${response.status}`);
+  }
+  return response.json() as Promise<ContextUsage>;
+}

@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from codehive.api.app import create_app
 from codehive.api.deps import get_db
-from codehive.core.usage import estimate_cost
+from codehive.core.usage import (
+    MODEL_CONTEXT_WINDOWS,
+    estimate_cost,
+    get_context_usage,
+    get_context_window,
+)
 from codehive.db.models import Base, Project, UsageRecord
 from codehive.db.models import Session as SessionModel
 
@@ -312,3 +317,147 @@ class TestUsageAPI:
         assert "output_tokens" in record
         assert "estimated_cost" in record
         assert "created_at" in record
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: Context window lookup
+# ---------------------------------------------------------------------------
+
+
+class TestContextWindowLookup:
+    def test_known_model_sonnet(self):
+        assert MODEL_CONTEXT_WINDOWS["claude-sonnet-4-20250514"] == 200_000
+
+    def test_known_model_opus(self):
+        assert MODEL_CONTEXT_WINDOWS["claude-opus-4-20250514"] == 200_000
+
+    def test_known_model_haiku(self):
+        assert MODEL_CONTEXT_WINDOWS["claude-haiku-3-20250307"] == 200_000
+
+    def test_short_alias(self):
+        assert MODEL_CONTEXT_WINDOWS["claude-sonnet-4"] == 200_000
+
+    def test_codex_mini(self):
+        assert MODEL_CONTEXT_WINDOWS["codex-mini-latest"] == 200_000
+
+    def test_get_context_window_known(self):
+        assert get_context_window("claude-sonnet-4-20250514") == 200_000
+
+    def test_get_context_window_unknown_returns_default(self):
+        assert get_context_window("totally-unknown-model") == 200_000
+
+    def test_get_context_window_prefix_match(self):
+        assert get_context_window("claude-sonnet-4-20250514-extended") == 200_000
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: Context usage function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestContextUsageFunction:
+    async def test_context_usage_with_records(
+        self,
+        db_session: AsyncSession,
+        session_model: SessionModel,
+        usage_records: list[UsageRecord],
+    ):
+        result = await get_context_usage(db_session, session_model.id)
+        # The most recent usage record has input_tokens=1000 (first created,
+        # but with the earliest created_at due to timedelta subtraction).
+        # Actually record[0] has input_tokens=1000 and created_at=now-0days,
+        # record[1] has input_tokens=2000 and created_at=now-1day,
+        # record[2] has input_tokens=3000 and created_at=now-2days.
+        # Most recent by created_at desc => record[0] with input_tokens=1000.
+        assert result["used_tokens"] == 1000
+        assert result["context_window"] == 200_000
+        assert result["usage_percent"] == 0.5
+        assert result["model"] == "claude-sonnet-4-20250514"
+        assert result["estimated"] is False
+
+    async def test_context_usage_no_records(
+        self,
+        db_session: AsyncSession,
+        session_model: SessionModel,
+    ):
+        result = await get_context_usage(db_session, session_model.id)
+        assert result["used_tokens"] == 0
+        assert result["context_window"] == 200_000
+        assert result["usage_percent"] == 0.0
+        assert result["estimated"] is False
+
+    async def test_context_usage_nonexistent_session(
+        self,
+        db_session: AsyncSession,
+    ):
+        result = await get_context_usage(db_session, uuid.uuid4())
+        assert result["used_tokens"] == 0
+        assert result["estimated"] is True
+
+    async def test_context_usage_cli_engine(
+        self,
+        db_session: AsyncSession,
+        project: Project,
+    ):
+        """CLI engines should set estimated=True."""
+        sess = SessionModel(
+            project_id=project.id,
+            name="cli-session",
+            engine="claude_code",
+            mode="execution",
+            status="idle",
+            config={"model": "claude-sonnet-4"},
+            created_at=datetime.now(timezone.utc),
+        )
+        db_session.add(sess)
+        await db_session.commit()
+        await db_session.refresh(sess)
+
+        result = await get_context_usage(db_session, sess.id)
+        assert result["estimated"] is True
+        assert result["used_tokens"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: Context usage API endpoint
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestContextUsageAPI:
+    async def test_get_session_context(
+        self,
+        client: AsyncClient,
+        session_model: SessionModel,
+        usage_records: list[UsageRecord],
+    ):
+        resp = await client.get(f"/api/sessions/{session_model.id}/context")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["used_tokens"] == 1000
+        assert data["context_window"] == 200_000
+        assert data["usage_percent"] == 0.5
+        assert data["model"] == "claude-sonnet-4-20250514"
+        assert "estimated" in data
+
+    async def test_get_session_context_no_records(
+        self,
+        client: AsyncClient,
+        session_model: SessionModel,
+    ):
+        resp = await client.get(f"/api/sessions/{session_model.id}/context")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["used_tokens"] == 0
+        assert data["usage_percent"] == 0.0
+
+    async def test_get_session_context_nonexistent(
+        self,
+        client: AsyncClient,
+    ):
+        resp = await client.get(f"/api/sessions/{uuid.uuid4()}/context")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["used_tokens"] == 0
+        assert data["estimated"] is True

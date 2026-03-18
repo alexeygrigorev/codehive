@@ -32,6 +32,7 @@ vi.mock("@/context/WebSocketContext", () => ({
     removeListener: vi.fn(),
     injectEvents: vi.fn(),
   }),
+  useWebSocketSafe: () => null,
 }));
 
 // Mock ChatPanel to isolate SessionPage tests

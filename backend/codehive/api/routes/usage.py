@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
-from codehive.core.usage import estimate_cost
+from codehive.core.usage import estimate_cost, get_context_usage
 from codehive.db.models import Session as SessionModel
 from codehive.db.models import UsageRecord
 
@@ -137,6 +137,24 @@ async def get_usage_summary(
     rows = result.scalars().all()
     records = [_record_to_read(r) for r in rows]
     return _compute_summary(records)
+
+
+class ContextUsageResponse(BaseModel):
+    used_tokens: int
+    context_window: int
+    usage_percent: float
+    model: str
+    estimated: bool = False
+
+
+@session_usage_router.get("/{session_id}/context", response_model=ContextUsageResponse)
+async def get_session_context(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ContextUsageResponse:
+    """Get context window usage for a specific session."""
+    data = await get_context_usage(db, session_id)
+    return ContextUsageResponse(**data)  # type: ignore[arg-type]
 
 
 @session_usage_router.get("/{session_id}/usage", response_model=UsageSummary)
