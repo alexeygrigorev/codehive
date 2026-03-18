@@ -389,17 +389,24 @@ class ZaiEngine:
                     from codehive.db.models import Session as SessionModel
 
                     session_row = await db.get(SessionModel, session_id)
-                    threshold = 0.80
-                    if session_row is not None:
-                        threshold = (session_row.config or {}).get("compaction_threshold", 0.80)
+                    config = (session_row.config or {}) if session_row is not None else {}
+                    threshold = config.get("compaction_threshold", 0.80)
+                    compaction_enabled = config.get("compaction_enabled", True)
+                    preserve_last_n = config.get("compaction_preserve_last_n", 4)
 
                     context_window = get_context_window(self._model)
                     input_tokens = response.usage.input_tokens
 
-                    if should_compact(input_tokens, context_window, threshold):
+                    if compaction_enabled and should_compact(
+                        input_tokens, context_window, threshold
+                    ):
                         summarize_fn = await create_anthropic_summarizer(self._client)
                         compactor = ContextCompactor(summarize_fn)
-                        result = await compactor.compact(state.messages, model=self._model)
+                        result = await compactor.compact(
+                            state.messages,
+                            model=self._model,
+                            preserve_last_n=preserve_last_n,
+                        )
                         if result.compacted:
                             state.messages = result.messages
                             # Emit compaction event

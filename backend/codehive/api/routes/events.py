@@ -24,12 +24,15 @@ async def list_events(
     session_id: uuid.UUID,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    type: str | None = Query(default=None, description="Filter by event type"),
     db: AsyncSession = Depends(get_db),
     event_bus: EventBus = Depends(_get_event_bus),
 ) -> list[EventRead]:
     """Return historical events for a session, ordered by created_at ascending."""
     try:
-        events = await event_bus.get_events(db, session_id, limit=limit, offset=offset)
+        events = await event_bus.get_events(
+            db, session_id, limit=limit, offset=offset, event_type=type
+        )
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     return [EventRead.model_validate(e) for e in events]

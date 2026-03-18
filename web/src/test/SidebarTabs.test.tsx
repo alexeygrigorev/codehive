@@ -50,9 +50,16 @@ vi.mock("@/components/SessionHistorySearch", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/sidebar/CompactionPanel", () => ({
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="compaction-panel" data-session-id={sessionId ?? ""}>
+      CompactionPanel
+    </div>
+  ),
+}));
 
 describe("SidebarTabs", () => {
-  it("renders all eight tab labels", () => {
+  it("renders all tab labels", () => {
     render(<SidebarTabs sessionId="s1" />);
 
     expect(screen.getByText("ToDo")).toBeInTheDocument();
@@ -63,6 +70,8 @@ describe("SidebarTabs", () => {
     expect(screen.getByText("Questions")).toBeInTheDocument();
     expect(screen.getByText("Checkpoints")).toBeInTheDocument();
     expect(screen.getByText("Search")).toBeInTheDocument();
+    expect(screen.getByText("Usage")).toBeInTheDocument();
+    expect(screen.getByText("Compaction")).toBeInTheDocument();
   });
 
   it("defaults to the ToDo tab being selected", () => {

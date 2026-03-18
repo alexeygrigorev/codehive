@@ -100,6 +100,7 @@ class EventBus:
         *,
         limit: int = 50,
         offset: int = 0,
+        event_type: str | None = None,
     ) -> list[Event]:
         """Return historical events for a session ordered by created_at ascending."""
         # Verify session exists
@@ -107,13 +108,10 @@ class EventBus:
         if session is None:
             raise SessionNotFoundError(f"Session {session_id} not found")
 
-        stmt = (
-            select(Event)
-            .where(Event.session_id == session_id)
-            .order_by(Event.created_at.asc())
-            .offset(offset)
-            .limit(limit)
-        )
+        stmt = select(Event).where(Event.session_id == session_id)
+        if event_type is not None:
+            stmt = stmt.where(Event.type == event_type)
+        stmt = stmt.order_by(Event.created_at.asc()).offset(offset).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
@@ -190,19 +188,17 @@ class LocalEventBus:
         *,
         limit: int = 50,
         offset: int = 0,
+        event_type: str | None = None,
     ) -> list[Event]:
         """Return historical events for a session ordered by created_at ascending."""
         session = await db.get(SessionModel, session_id)
         if session is None:
             raise SessionNotFoundError(f"Session {session_id} not found")
 
-        stmt = (
-            select(Event)
-            .where(Event.session_id == session_id)
-            .order_by(Event.created_at.asc())
-            .offset(offset)
-            .limit(limit)
-        )
+        stmt = select(Event).where(Event.session_id == session_id)
+        if event_type is not None:
+            stmt = stmt.where(Event.type == event_type)
+        stmt = stmt.order_by(Event.created_at.asc()).offset(offset).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
