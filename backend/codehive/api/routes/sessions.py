@@ -20,6 +20,7 @@ from codehive.execution.diff import DiffService
 from codehive.core.session import (
     InvalidStatusTransitionError,
     IssueNotFoundError,
+    NoUserMessageError,
     ProjectNotFoundError,
     SessionHasDependentsError,
     SessionNotFoundError,
@@ -29,6 +30,7 @@ from codehive.core.session import (
     list_child_sessions,
     list_sessions,
     pause_session,
+    resume_interrupted_session,
     resume_session,
     update_session,
 )
@@ -156,6 +158,24 @@ async def resume_session_endpoint(
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     except InvalidStatusTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return SessionRead.model_validate(session)
+
+
+@sessions_router.post("/{session_id}/resume-interrupted", response_model=SessionRead)
+async def resume_interrupted_endpoint(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> SessionRead:
+    """Resume an interrupted session by replaying the last user message."""
+    await _get_session_or_404(db, session_id)
+    try:
+        session, _last_message = await resume_interrupted_session(db, session_id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except InvalidStatusTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NoUserMessageError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return SessionRead.model_validate(session)
 
@@ -355,6 +375,12 @@ async def send_message_endpoint(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Mark session as executing
+    try:
+        await update_session(db, session_id, status="executing")
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
     try:
         engine = await _build_engine(session.config, engine_type=session.engine)
 
@@ -362,8 +388,21 @@ async def send_message_endpoint(
         async for event in engine.send_message(session_id, body.content, db=db):
             events.append(event)
 
+        # Engine finished a turn -- mark as waiting_input
+        await update_session(db, session_id, status="waiting_input")
+
         return events
     except HTTPException:
+        # On HTTP errors, mark as failed
+        try:
+            await update_session(db, session_id, status="failed")
+        except Exception:
+            pass
         raise
     except Exception as exc:
+        # On unexpected errors, mark as failed
+        try:
+            await update_session(db, session_id, status="failed")
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=str(exc))

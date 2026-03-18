@@ -1,14 +1,17 @@
 """Session business logic (DB queries, state machine)."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.schemas.session import QueueEmptyAction
-from codehive.db.models import Issue, Project
+from codehive.db.models import Issue, Message, Project
 from codehive.db.models import Session as SessionModel
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectNotFoundError(Exception):
@@ -29,6 +32,10 @@ class SessionHasDependentsError(Exception):
 
 class InvalidStatusTransitionError(Exception):
     """Raised when a status transition is not allowed."""
+
+
+class NoUserMessageError(Exception):
+    """Raised when an interrupted session has no user messages to replay."""
 
 
 def _validate_queue_empty_action(config: dict | None) -> None:
@@ -237,3 +244,61 @@ async def resume_session(
     await db.commit()
     await db.refresh(session)
     return session
+
+
+async def mark_interrupted_sessions(db: AsyncSession) -> int:
+    """Bulk-update all sessions with status ``executing`` to ``interrupted``.
+
+    Returns the number of sessions that were updated.
+    """
+    result = await db.execute(
+        update(SessionModel).where(SessionModel.status == "executing").values(status="interrupted")
+    )
+    await db.commit()
+    count = result.rowcount  # type: ignore[union-attr]
+    if count:
+        logger.info("Marked %d executing session(s) as interrupted", count)
+    return count
+
+
+async def resume_interrupted_session(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+) -> tuple[SessionModel, str]:
+    """Resume an interrupted session.
+
+    Validates that the session status is ``interrupted``, fetches the last
+    user message, and transitions the status to ``executing``.
+
+    Returns a tuple of (session, last_user_message_content).
+
+    Raises:
+        SessionNotFoundError: if the session does not exist
+        InvalidStatusTransitionError: if the session is not in ``interrupted`` status
+        NoUserMessageError: if there are no user messages in the session
+    """
+    session = await db.get(SessionModel, session_id)
+    if session is None:
+        raise SessionNotFoundError(f"Session {session_id} not found")
+
+    if session.status != "interrupted":
+        raise InvalidStatusTransitionError(
+            f"Cannot resume-interrupted session in '{session.status}' status. "
+            f"Resume-interrupted is only allowed from: interrupted"
+        )
+
+    # Fetch the last user message
+    result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session_id, Message.role == "user")
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_msg = result.scalars().first()
+    if last_msg is None:
+        raise NoUserMessageError(f"Session {session_id} has no user messages to replay")
+
+    session.status = "executing"
+    await db.commit()
+    await db.refresh(session)
+    return session, last_msg.content

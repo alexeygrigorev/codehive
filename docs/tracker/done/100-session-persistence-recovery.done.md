@@ -107,3 +107,26 @@ This issue covers backend-only changes: session status lifecycle, startup recove
 - The engine's in-memory state (tool call results, pending API response) is lost on crash -- that's acceptable
 - The key insight: we're not trying to resume mid-tool-call, just resume the conversation from the last known state
 - This ties into #99 (detachable sessions) -- a detached session that finishes normally goes to `completed`, one that crashes goes to `interrupted`
+
+## Log
+
+### [SWE] 2026-03-18 12:00
+- Implemented session persistence and recovery after restart
+- Added `mark_interrupted_sessions()` -- bulk updates all `executing` sessions to `interrupted`
+- Added `resume_interrupted_session()` -- validates `interrupted` status, fetches last user message, transitions to `executing`
+- Added `NoUserMessageError` exception for sessions with no user messages to replay
+- Updated app lifespan: startup marks executing sessions as interrupted, shutdown does the same
+- Added `POST /api/sessions/{id}/resume-interrupted` endpoint (returns 200 on success, 409 on wrong status/no messages, 404 on not found)
+- Updated `send_message_endpoint` to set session status to `executing` at start, `waiting_input` when done, `failed` on error
+- Files modified:
+  - `backend/codehive/core/session.py` -- added `mark_interrupted_sessions()`, `resume_interrupted_session()`, `NoUserMessageError`
+  - `backend/codehive/api/app.py` -- added startup recovery and graceful shutdown in lifespan
+  - `backend/codehive/api/routes/sessions.py` -- added `resume-interrupted` endpoint, status transitions in `send_message`
+- Tests added: 16 tests in `backend/tests/test_session_persistence.py`
+  - 4 unit tests for `mark_interrupted_sessions` (marks only executing, returns zero, idempotent, marks multiple)
+  - 4 unit tests for `resume_interrupted_session` (happy path, wrong status, no messages, not found)
+  - 2 unit tests for interrupted status validity (valid status, not pausable)
+  - 2 integration tests for startup/shutdown recovery
+  - 4 integration tests for resume-interrupted endpoint (200, 409 wrong status, 404, 409 no messages)
+- Build results: 1713 tests pass, 0 fail, 3 skipped, ruff clean
+- Known limitations: none

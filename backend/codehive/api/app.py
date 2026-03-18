@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 
 import contextlib
+import logging
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends, FastAPI
@@ -12,6 +13,7 @@ from codehive.api.deps import get_current_user
 from codehive.api.errors import register_error_handling
 from codehive.logging import configure_logging
 from codehive.core.first_run import print_credentials, seed_first_run
+from codehive.core.session import mark_interrupted_sessions
 from codehive.db.session import async_session_factory
 from codehive.api.routes.approvals import approvals_router
 from codehive.api.routes.auth import auth_router
@@ -39,19 +41,33 @@ from codehive.api.routes.project_flow import router as project_flow_router
 from codehive.api.routes.transcript import transcript_router
 from codehive.api.ws import router as ws_router
 
+logger = logging.getLogger(__name__)
+
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        """Run first-run setup on startup."""
+        """Run first-run setup and session recovery on startup; mark sessions on shutdown."""
         session_maker = async_session_factory()
         async with session_maker() as db:
             credentials = await seed_first_run(db)
             if credentials is not None:
                 print_credentials(credentials)
+
+        # Startup recovery: mark any sessions stuck in 'executing' as 'interrupted'
+        async with session_maker() as db:
+            count = await mark_interrupted_sessions(db)
+            logger.info("Startup recovery: %d session(s) marked as interrupted", count)
+
         yield
+
+        # Graceful shutdown: mark executing sessions as interrupted
+        async with session_maker() as db:
+            count = await mark_interrupted_sessions(db)
+            if count:
+                logger.info("Shutdown: marked %d executing session(s) as interrupted", count)
 
     settings = Settings()
     configure_logging(settings)
