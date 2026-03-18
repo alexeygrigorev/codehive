@@ -10,6 +10,7 @@ import {
 } from "@/api/issues";
 import SessionList from "@/components/SessionList";
 import IssueList from "@/components/IssueList";
+import Breadcrumb from "@/components/Breadcrumb";
 
 type Tab = "sessions" | "issues";
 
@@ -163,10 +164,13 @@ export default function ProjectPage() {
 
   return (
     <div>
-      <Link to="/" className="text-sm text-blue-600 hover:underline">
-        &larr; Back to Dashboard
-      </Link>
-      <div className="mt-4">
+      <Breadcrumb
+        segments={[
+          { label: "Dashboard", to: "/" },
+          { label: project.name, to: `/projects/${project.id}` },
+        ]}
+      />
+      <div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{project.name}</h1>
           {project.archetype && (

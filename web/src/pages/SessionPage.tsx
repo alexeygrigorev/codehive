@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { WebSocketProvider } from "@/context/WebSocketContext";
 import { apiClient } from "@/api/client";
 import type { SessionRead } from "@/api/sessions";
+import { fetchProject, type ProjectRead } from "@/api/projects";
+import Breadcrumb from "@/components/Breadcrumb";
 import ChatPanel from "@/components/ChatPanel";
 import SidebarTabs from "@/components/sidebar/SidebarTabs";
 import SessionModeIndicator from "@/components/SessionModeIndicator";
@@ -15,6 +17,7 @@ export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { isMobile } = useResponsive();
   const [session, setSession] = useState<SessionRead | null>(null);
+  const [project, setProject] = useState<ProjectRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modeLoading, setModeLoading] = useState(false);
@@ -33,6 +36,15 @@ export default function SessionPage() {
         const data = (await response.json()) as SessionRead;
         if (!cancelled) {
           setSession(data);
+          // Fetch parent project for breadcrumb
+          if (data.project_id) {
+            try {
+              const proj = await fetchProject(data.project_id);
+              if (!cancelled) setProject(proj);
+            } catch {
+              // Project fetch failure is non-critical for breadcrumbs
+            }
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -115,6 +127,17 @@ export default function SessionPage() {
   return (
     <WebSocketProvider sessionId={sessionId}>
       <div className="flex h-full flex-col">
+        {project && (
+          <div className="px-4 pt-3">
+            <Breadcrumb
+              segments={[
+                { label: "Dashboard", to: "/" },
+                { label: project.name, to: `/projects/${project.id}` },
+                { label: session.name, to: `/sessions/${session.id}` },
+              ]}
+            />
+          </div>
+        )}
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-gray-900">{session.name}</h1>

@@ -96,7 +96,7 @@ describe("ProjectPage", () => {
   it("renders Sessions and Issues tabs", async () => {
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
     expect(screen.getByRole("tab", { name: "Sessions" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Issues" })).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe("ProjectPage", () => {
   it("Sessions tab is active by default and shows SessionList", async () => {
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
     const sessionsTab = screen.getByRole("tab", { name: "Sessions" });
     expect(sessionsTab).toHaveAttribute("aria-selected", "true");
@@ -115,7 +115,7 @@ describe("ProjectPage", () => {
   it("clicking Issues tab shows IssueList", async () => {
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("tab", { name: "Issues" }));
@@ -130,14 +130,14 @@ describe("ProjectPage", () => {
   it("project header is visible regardless of active tab", async () => {
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
     expect(screen.getByText("A great project")).toBeInTheDocument();
     expect(screen.getByText("web-app")).toBeInTheDocument();
     expect(screen.getByText("Path: /tmp/my-project")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Issues" }));
-    expect(screen.getByText("My Project")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     expect(screen.getByText("A great project")).toBeInTheDocument();
   });
 
@@ -161,7 +161,7 @@ describe("ProjectPage", () => {
   it("New Session button opens creation form with engine and mode dropdowns", async () => {
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
     // Form not visible initially
@@ -190,7 +190,7 @@ describe("ProjectPage", () => {
 
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("+ New Session"));
@@ -225,7 +225,7 @@ describe("ProjectPage", () => {
 
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("+ New Session"));
@@ -291,7 +291,7 @@ describe("ProjectPage", () => {
 
     renderProjectPage();
     await waitFor(() => {
-      expect(screen.getByText("My Project")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
     // Switch to issues tab
