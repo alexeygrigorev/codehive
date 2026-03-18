@@ -1,9 +1,10 @@
 """Tests for WebSocket JWT authentication (issue #72)."""
 
+import contextlib
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -110,6 +111,12 @@ def app(db_session: AsyncSession):
         yield db_session
 
     application.dependency_overrides[get_db] = _override_get_db
+
+    @contextlib.asynccontextmanager
+    async def _noop_lifespan(app):  # type: ignore[no-untyped-def]
+        yield
+
+    application.router.lifespan_context = _noop_lifespan
     return application
 
 
@@ -128,26 +135,20 @@ def refresh_token() -> str:
     return create_refresh_token(uuid.uuid4())
 
 
-def _make_mock_redis():
-    """Create a mock Redis whose listen() yields one test message then stops."""
+def _make_mock_event_bus():
+    """Create a mock event bus whose subscribe() yields one test message then stops."""
+    import asyncio as _asyncio
+    from contextlib import asynccontextmanager
 
-    async def _listen():
-        # Yield a real message so the handler sends it over the websocket
-        yield {"type": "message", "data": b'{"event": "test"}'}
+    @asynccontextmanager
+    async def _subscribe(session_id):
+        queue: _asyncio.Queue[str] = _asyncio.Queue()
+        await queue.put('{"event": "test"}')
+        yield queue
 
-    mock_pubsub = MagicMock()
-    mock_pubsub.subscribe = AsyncMock()
-    mock_pubsub.unsubscribe = AsyncMock()
-    mock_pubsub.aclose = AsyncMock()
-    mock_pubsub.listen = _listen
-
-    mock_redis = MagicMock()
-    mock_redis.pubsub.return_value = mock_pubsub
-    mock_redis.close = AsyncMock()
-
-    mock_redis_class = MagicMock()
-    mock_redis_class.from_url.return_value = mock_redis
-    return mock_redis_class
+    bus = MagicMock()
+    bus.subscribe = _subscribe
+    return bus
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ class TestVerifyWsToken:
 @pytest.mark.asyncio
 class TestWsAuthQueryParam:
     async def test_valid_token_accepted(self, app, session_id, valid_token):
-        with patch("redis.asyncio.Redis", _make_mock_redis()):
+        with patch("codehive.api.ws.create_event_bus", return_value=_make_mock_event_bus()):
             with TestClient(app) as client:
                 with client.websocket_connect(
                     f"/api/sessions/{session_id}/ws?token={valid_token}"
@@ -235,7 +236,7 @@ class TestWsAuthQueryParam:
 @pytest.mark.asyncio
 class TestWsAuthFirstMessage:
     async def test_valid_auth_message_accepted(self, app, session_id, valid_token):
-        with patch("redis.asyncio.Redis", _make_mock_redis()):
+        with patch("codehive.api.ws.create_event_bus", return_value=_make_mock_event_bus()):
             with TestClient(app) as client:
                 with client.websocket_connect(f"/api/sessions/{session_id}/ws") as ws:
                     ws.send_json({"type": "auth", "token": valid_token})

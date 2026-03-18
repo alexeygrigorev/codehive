@@ -1,5 +1,6 @@
 """Tests for Event Bus, REST events endpoint, and WebSocket streaming."""
 
+import contextlib
 import json
 import uuid
 from collections.abc import AsyncGenerator
@@ -118,6 +119,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
+
+    @contextlib.asynccontextmanager
+    async def _noop_lifespan(app):  # type: ignore[no-untyped-def]
+        yield
+
+    app.router.lifespan_context = _noop_lifespan
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -343,6 +350,12 @@ class TestWebSocketEndpoint:
 
         app.dependency_overrides[get_db] = _override_get_db
 
+        @contextlib.asynccontextmanager
+        async def _noop_lifespan(app):  # type: ignore[no-untyped-def]
+            yield
+
+        app.router.lifespan_context = _noop_lifespan
+
         # starlette's sync TestClient handles WebSocket testing
         with TestClient(app) as tc:
             with pytest.raises(Exception):
@@ -365,6 +378,12 @@ class TestWebSocketEndpoint:
             yield db_session
 
         app.dependency_overrides[get_db] = _override_get_db
+
+        @contextlib.asynccontextmanager
+        async def _noop_lifespan(app):  # type: ignore[no-untyped-def]
+            yield
+
+        app.router.lifespan_context = _noop_lifespan
 
         token = create_access_token(uuid.uuid4())
 

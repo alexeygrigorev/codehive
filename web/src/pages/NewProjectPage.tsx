@@ -5,7 +5,7 @@ import {
   type FlowStartResult,
   type ProjectBrief,
 } from "@/api/projectFlow";
-import { createProject, fetchDefaultWorkspaceId } from "@/api/projects";
+import { createProject } from "@/api/projects";
 import FlowChat from "@/components/project-flow/FlowChat";
 import BriefReview from "@/components/project-flow/BriefReview";
 
@@ -58,9 +58,7 @@ export default function NewProjectPage() {
     setLoading(true);
     setError(null);
     try {
-      const wsId = await fetchDefaultWorkspaceId();
       const project = await createProject({
-        workspace_id: wsId,
         name: name.trim(),
       });
       navigate(`/projects/${project.id}`);
@@ -171,7 +169,7 @@ export default function NewProjectPage() {
             value={initialInput}
             onChange={(e) => setInitialInput(e.target.value)}
             placeholder={
-              selectedType === "from_notes"
+              selectedType === "spec_from_notes"
                 ? "Paste your notes, ideas, or documentation here..."
                 : "https://github.com/user/repo"
             }
