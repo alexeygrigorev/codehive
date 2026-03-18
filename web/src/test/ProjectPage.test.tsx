@@ -97,15 +97,17 @@ function renderProjectPage(projectId: string = "p1") {
 describe("ProjectPage", () => {
   const defaultProviders = [
     {
-      name: "anthropic",
-      base_url: "https://api.anthropic.com",
-      api_key_set: true,
+      name: "claude",
+      type: "claude_code",
+      available: true,
+      reason: "",
       default_model: "claude-sonnet-4-20250514",
     },
     {
       name: "zai",
-      base_url: "https://api.z.ai/api/anthropic",
-      api_key_set: true,
+      type: "native",
+      available: true,
+      reason: "",
       default_model: "glm-4.7",
     },
   ];
@@ -222,9 +224,9 @@ describe("ProjectPage", () => {
     await waitFor(() => {
       expect(mockCreateSession).toHaveBeenCalledWith("p1", {
         name: "New Session",
-        engine: "native",
+        engine: "claude_code",
         mode: "execution",
-        config: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
+        config: { provider: "claude", model: "claude-sonnet-4-20250514" },
       });
     });
     expect(mockNavigate).toHaveBeenCalledWith("/sessions/s-new");

@@ -462,6 +462,9 @@ async def send_message_endpoint(
     try:
         engine = await _build_engine(session.config, engine_type=session.engine)
 
+        if hasattr(engine, "create_session"):
+            await engine.create_session(session_id)
+
         events: list[dict[str, Any]] = []
         async for event in engine.send_message(session_id, body.content, db=db):
             events.append(event)
@@ -512,6 +515,9 @@ async def send_message_stream_endpoint(
     async def _event_generator() -> AsyncIterator[str]:
         try:
             engine = await _build_engine(session.config, engine_type=session.engine)
+
+            if hasattr(engine, "create_session"):
+                await engine.create_session(session_id)
 
             async for event in engine.send_message(session_id, body.content, db=db):
                 yield f"data: {json.dumps(event)}\n\n"

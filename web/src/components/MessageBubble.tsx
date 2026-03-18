@@ -10,6 +10,8 @@ const roleStyles: Record<string, string> = {
   system:
     "mx-auto bg-yellow-50 text-yellow-800 text-center italic dark:bg-yellow-900 dark:text-yellow-200",
   tool: "mr-auto bg-gray-800 text-green-300 font-mono text-sm dark:bg-gray-950 dark:text-green-400",
+  error:
+    "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800",
 };
 
 export default function MessageBubble({ role, content }: MessageBubbleProps) {

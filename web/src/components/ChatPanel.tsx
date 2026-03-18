@@ -32,6 +32,8 @@ const CHAT_EVENT_TYPES = [
   "tool.call.started",
   "tool.call.finished",
   "approval.required",
+  "context.compacted",
+  "error",
 ];
 
 export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: ChatPanelProps) {
@@ -117,8 +119,36 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
             finishEvent: event,
           });
         }
+      } else if (event.type === "error") {
+        items.push({
+          id: event.id,
+          kind: "message",
+          event: {
+            ...event,
+            type: "message.created",
+            data: {
+              role: "error",
+              content: (event.data.content as string) ?? "Unknown error",
+            },
+          },
+        });
       } else if (event.type === "approval.required") {
         items.push({ id: event.id, kind: "approval", event });
+      } else if (event.type === "context.compacted") {
+        const mc = event.data.messages_compacted ?? 0;
+        const mp = event.data.messages_preserved ?? 0;
+        items.push({
+          id: event.id,
+          kind: "message",
+          event: {
+            ...event,
+            type: "message.created",
+            data: {
+              role: "system",
+              content: `Context compacted: ${mc} messages summarized, ${mp} preserved`,
+            },
+          },
+        });
       }
     }
 
@@ -177,12 +207,13 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
             return;
           }
           injectEvents([normalized]);
-          // Stop thinking on first assistant content
+          // Stop thinking on first assistant content or error
           if (
             normalized.type === "message.delta" ||
             (normalized.type === "message.created" &&
               normalized.data.role === "assistant") ||
-            normalized.type === "tool.call.started"
+            normalized.type === "tool.call.started" ||
+            normalized.type === "error"
           ) {
             setIsThinking(false);
           }

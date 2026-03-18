@@ -101,7 +101,7 @@ export default function ProjectPage() {
     try {
       const session = await createSession(projectId, {
         name: data.name,
-        engine: "native",
+        engine: "claude_code",
         mode: "execution",
         config: { provider: data.provider, model: data.model },
       });

@@ -26,7 +26,7 @@ export async function createSession(
   const response = await apiClient.post(
     `/api/projects/${projectId}/sessions`,
     {
-      engine: "native",
+      engine: "claude_code",
       mode: "execution",
       ...body,
     },

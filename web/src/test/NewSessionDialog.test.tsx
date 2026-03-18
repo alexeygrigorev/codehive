@@ -11,21 +11,24 @@ const mockFetchProviders = vi.mocked(fetchProviders);
 
 const providers = [
   {
-    name: "anthropic",
-    base_url: "https://api.anthropic.com",
-    api_key_set: true,
+    name: "claude",
+    type: "claude_code",
+    available: true,
+    reason: "",
     default_model: "claude-sonnet-4-20250514",
   },
   {
     name: "zai",
-    base_url: "https://api.z.ai/api/anthropic",
-    api_key_set: true,
+    type: "native",
+    available: true,
+    reason: "",
     default_model: "glm-4.7",
   },
   {
     name: "openai",
-    base_url: "https://api.openai.com",
-    api_key_set: true,
+    type: "codex",
+    available: true,
+    reason: "",
     default_model: "codex-mini-latest",
   },
 ];
@@ -83,7 +86,7 @@ describe("NewSessionDialog", () => {
     expect(select.options).toHaveLength(3);
   });
 
-  it("default provider is anthropic with correct model", async () => {
+  it("default provider is claude with correct model", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -98,7 +101,7 @@ describe("NewSessionDialog", () => {
     });
 
     const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    expect(select.value).toBe("anthropic");
+    expect(select.value).toBe("claude");
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
     expect(modelInput.value).toBe("claude-sonnet-4-20250514");
@@ -246,7 +249,7 @@ describe("NewSessionDialog", () => {
   it("shows key status indicator for each provider", async () => {
     const providersWithMissingKey = [
       { ...providers[0] },
-      { ...providers[1], api_key_set: false },
+      { ...providers[1], available: false, reason: "no key" },
       { ...providers[2] },
     ];
     mockFetchProviders.mockResolvedValue(providersWithMissingKey);
