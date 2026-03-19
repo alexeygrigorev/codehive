@@ -177,7 +177,10 @@ class ZaiEngine:
         self._approval_callback = approval_callback
         self._sessions: dict[uuid.UUID, _SessionState] = {}
         self._task_fetcher: Any = None  # Optional callback for fetching tasks
-        self._subagent_manager = SubAgentManager(event_bus=event_bus)
+        self._subagent_manager = SubAgentManager(
+            event_bus=event_bus,
+            engine_builder=self._build_child_engine,
+        )
         self._agent_comm = AgentCommService(event_bus=event_bus)
         self._approval_policies: dict[uuid.UUID, ApprovalPolicy] = {}
 
@@ -671,6 +674,13 @@ class ZaiEngine:
         """Return the accumulated diff for the session via DiffService."""
         return self._diff_service.get_session_changes(str(session_id))
 
+    @staticmethod
+    async def _build_child_engine(session_config: dict[str, Any], engine_type: str) -> Any:
+        """Build an engine for a child session using the shared factory."""
+        from codehive.api.routes.sessions import _build_engine
+
+        return await _build_engine(session_config, engine_type=engine_type)
+
     # ------------------------------------------------------------------
     # Internal tool dispatch
     # ------------------------------------------------------------------
@@ -873,14 +883,19 @@ class ZaiEngine:
                         "content": "spawn_subagent requires an active session with DB access",
                         "is_error": True,
                     }
-                result = await self._subagent_manager.spawn_subagent(
-                    db,
-                    parent_session_id=session_id,
-                    mission=tool_input["mission"],
-                    role=tool_input["role"],
-                    scope=tool_input["scope"],
-                    config=tool_input.get("config"),
-                )
+                try:
+                    result = await self._subagent_manager.spawn_subagent(
+                        db,
+                        parent_session_id=session_id,
+                        mission=tool_input["mission"],
+                        role=tool_input["role"],
+                        scope=tool_input["scope"],
+                        engine=tool_input.get("engine"),
+                        initial_message=tool_input.get("initial_message"),
+                        config=tool_input.get("config"),
+                    )
+                except Exception as exc:
+                    return {"content": str(exc), "is_error": True}
                 return {"content": json.dumps(result)}
 
             elif tool_name == "query_agent":

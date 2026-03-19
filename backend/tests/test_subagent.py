@@ -4,6 +4,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,9 +24,10 @@ from codehive.core.session import (
     get_session_tree,
     list_child_sessions,
 )
-from codehive.core.subagent import InvalidReportError, SubAgentManager
+from codehive.core.subagent import InvalidEngineError, InvalidReportError, SubAgentManager
 from codehive.db.models import Base, Project
 from codehive.db.models import Session as SessionModel
+from codehive.engine.tools.spawn_subagent import VALID_ENGINE_TYPES
 from codehive.engine.zai_engine import ZaiEngine, TOOL_DEFINITIONS
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -431,6 +433,8 @@ class TestSpawnSubagentToolDispatch:
             mission="test mission",
             role="swe",
             scope=["a.py"],
+            engine=None,
+            initial_message=None,
             config=None,
         )
         assert "child_session_id" in result["content"]
@@ -528,3 +532,435 @@ class TestSubagentsEndpoint:
     async def test_list_subagents_404(self, client: AsyncClient):
         resp = await client.get(f"/api/sessions/{uuid.uuid4()}/subagents")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Unit: SubAgentManager engine selection
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestSubAgentManagerEngineSelection:
+    async def test_spawn_without_engine_inherits_parent(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent() without engine parameter: child inherits parent's engine."""
+        manager = SubAgentManager()
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Inherit engine",
+            role="swe",
+            scope=["a.py"],
+        )
+        child_id = uuid.UUID(result["child_session_id"])
+        child = await get_session(db_session, child_id)
+        assert child is not None
+        assert child.engine == parent_session.engine
+        assert result["engine"] == parent_session.engine
+
+    async def test_spawn_with_claude_code_engine(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent() with engine='claude_code': child has claude_code engine."""
+        manager = SubAgentManager()
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Use claude_code",
+            role="swe",
+            scope=["b.py"],
+            engine="claude_code",
+        )
+        child_id = uuid.UUID(result["child_session_id"])
+        child = await get_session(db_session, child_id)
+        assert child is not None
+        assert child.engine == "claude_code"
+        assert result["engine"] == "claude_code"
+
+    async def test_spawn_with_codex_cli_engine(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent() with engine='codex_cli': child has codex_cli engine."""
+        manager = SubAgentManager()
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Use codex_cli",
+            role="swe",
+            scope=[],
+            engine="codex_cli",
+        )
+        child_id = uuid.UUID(result["child_session_id"])
+        child = await get_session(db_session, child_id)
+        assert child is not None
+        assert child.engine == "codex_cli"
+
+    async def test_spawn_with_invalid_engine_raises(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent() with invalid engine: raises InvalidEngineError."""
+        manager = SubAgentManager()
+        with pytest.raises(InvalidEngineError, match="Unknown engine 'nonexistent_engine'"):
+            await manager.spawn_subagent(
+                db_session,
+                parent_session_id=parent_session.id,
+                mission="Bad engine",
+                role="swe",
+                scope=[],
+                engine="nonexistent_engine",
+            )
+
+    async def test_spawn_event_includes_engine(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """The subagent.spawned event includes the engine field."""
+        bus = _make_event_bus_mock()
+        manager = SubAgentManager(event_bus=bus)
+        await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Engine event",
+            role="swe",
+            scope=[],
+            engine="gemini_cli",
+        )
+        call_args = bus.publish.call_args
+        event_data = call_args[0][3]
+        assert event_data["engine"] == "gemini_cli"
+
+
+# ---------------------------------------------------------------------------
+# Unit: spawn_subagent tool schema -- engine and initial_message
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnSubagentToolSchemaNew:
+    def test_engine_property_in_schema(self):
+        """Tool schema includes 'engine' as optional string property."""
+        tool = next(t for t in TOOL_DEFINITIONS if t["name"] == "spawn_subagent")
+        props = tool["input_schema"]["properties"]
+        assert "engine" in props
+        assert props["engine"]["type"] == "string"
+        # engine should NOT be required
+        assert "engine" not in tool["input_schema"]["required"]
+
+    def test_initial_message_property_in_schema(self):
+        """Tool schema includes 'initial_message' as optional string property."""
+        tool = next(t for t in TOOL_DEFINITIONS if t["name"] == "spawn_subagent")
+        props = tool["input_schema"]["properties"]
+        assert "initial_message" in props
+        assert props["initial_message"]["type"] == "string"
+        assert "initial_message" not in tool["input_schema"]["required"]
+
+
+# ---------------------------------------------------------------------------
+# Unit: spawn_subagent tool dispatch -- engine and initial_message params
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestSpawnSubagentToolDispatchNew:
+    async def test_dispatch_passes_engine_param(self, tmp_path: Path):
+        """Tool dispatch passes engine to SubAgentManager."""
+        client_mock = AsyncMock()
+        event_bus = AsyncMock()
+        engine = ZaiEngine(
+            client=client_mock,
+            event_bus=event_bus,
+            file_ops=FileOps(tmp_path),
+            shell_runner=ShellRunner(),
+            git_ops=GitOps(tmp_path),
+            diff_service=DiffService(),
+        )
+        mock_result = {
+            "child_session_id": str(uuid.uuid4()),
+            "parent_session_id": str(uuid.uuid4()),
+            "mission": "test",
+            "role": "swe",
+            "status": "idle",
+            "engine": "claude_code",
+        }
+        engine._subagent_manager = AsyncMock()
+        engine._subagent_manager.spawn_subagent = AsyncMock(return_value=mock_result)
+
+        db_mock = AsyncMock()
+        session_id = uuid.uuid4()
+
+        result = await engine._execute_tool(
+            "spawn_subagent",
+            {
+                "mission": "test",
+                "role": "swe",
+                "scope": [],
+                "engine": "claude_code",
+            },
+            session_id=session_id,
+            db=db_mock,
+        )
+
+        engine._subagent_manager.spawn_subagent.assert_called_once_with(
+            db_mock,
+            parent_session_id=session_id,
+            mission="test",
+            role="swe",
+            scope=[],
+            engine="claude_code",
+            initial_message=None,
+            config=None,
+        )
+        assert not result.get("is_error", False)
+
+    async def test_dispatch_passes_initial_message(self, tmp_path: Path):
+        """Tool dispatch passes initial_message to SubAgentManager."""
+        client_mock = AsyncMock()
+        event_bus = AsyncMock()
+        engine = ZaiEngine(
+            client=client_mock,
+            event_bus=event_bus,
+            file_ops=FileOps(tmp_path),
+            shell_runner=ShellRunner(),
+            git_ops=GitOps(tmp_path),
+            diff_service=DiffService(),
+        )
+        mock_result = {
+            "child_session_id": str(uuid.uuid4()),
+            "parent_session_id": str(uuid.uuid4()),
+            "mission": "test",
+            "role": "swe",
+            "status": "idle",
+            "engine": "native",
+            "response": "Done!",
+        }
+        engine._subagent_manager = AsyncMock()
+        engine._subagent_manager.spawn_subagent = AsyncMock(return_value=mock_result)
+
+        db_mock = AsyncMock()
+        session_id = uuid.uuid4()
+
+        result = await engine._execute_tool(
+            "spawn_subagent",
+            {
+                "mission": "test",
+                "role": "swe",
+                "scope": [],
+                "initial_message": "Do the thing",
+            },
+            session_id=session_id,
+            db=db_mock,
+        )
+
+        call_kwargs = engine._subagent_manager.spawn_subagent.call_args
+        assert call_kwargs[1]["initial_message"] == "Do the thing"
+        assert not result.get("is_error", False)
+        assert "Done!" in result["content"]
+
+    async def test_dispatch_invalid_engine_returns_error(self, tmp_path: Path):
+        """Tool dispatch returns error for invalid engine (via SubAgentManager)."""
+        client_mock = AsyncMock()
+        event_bus = AsyncMock()
+        engine = ZaiEngine(
+            client=client_mock,
+            event_bus=event_bus,
+            file_ops=FileOps(tmp_path),
+            shell_runner=ShellRunner(),
+            git_ops=GitOps(tmp_path),
+            diff_service=DiffService(),
+        )
+        engine._subagent_manager = AsyncMock()
+        engine._subagent_manager.spawn_subagent = AsyncMock(
+            side_effect=InvalidEngineError("Unknown engine 'bad'")
+        )
+
+        db_mock = AsyncMock()
+        session_id = uuid.uuid4()
+
+        result = await engine._execute_tool(
+            "spawn_subagent",
+            {"mission": "test", "role": "swe", "scope": [], "engine": "bad"},
+            session_id=session_id,
+            db=db_mock,
+        )
+
+        assert result["is_error"] is True
+        assert "Unknown engine" in result["content"]
+
+
+# ---------------------------------------------------------------------------
+# Integration: SubAgentManager with initial message (mocked engine)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestSubAgentManagerInitialMessage:
+    async def test_spawn_with_initial_message_calls_engine(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent with initial_message builds engine and sends message."""
+        create_session_called = False
+        send_message_calls: list[tuple[Any, ...]] = []
+
+        class FakeEngine:
+            async def create_session(self, session_id: uuid.UUID) -> None:
+                nonlocal create_session_called
+                create_session_called = True
+
+            async def send_message(self, session_id: uuid.UUID, message: str, **kwargs: Any) -> Any:
+                send_message_calls.append((session_id, message))
+                yield {
+                    "type": "message.created",
+                    "role": "assistant",
+                    "content": "Hello from child",
+                }
+
+        fake_engine = FakeEngine()
+
+        async def mock_builder(config: dict, engine_type: str) -> Any:
+            return fake_engine
+
+        manager = SubAgentManager(engine_builder=mock_builder)
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Test initial msg",
+            role="swe",
+            scope=[],
+            initial_message="Do something",
+        )
+
+        assert result["response"] == "Hello from child"
+        assert create_session_called
+        assert len(send_message_calls) == 1
+        assert send_message_calls[0][1] == "Do something"
+
+    async def test_spawn_without_initial_message_no_engine_built(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent without initial_message does not build engine."""
+        builder_called = False
+
+        async def mock_builder(config: dict, engine_type: str) -> Any:
+            nonlocal builder_called
+            builder_called = True
+            return AsyncMock()
+
+        manager = SubAgentManager(engine_builder=mock_builder)
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="No msg",
+            role="swe",
+            scope=[],
+        )
+
+        assert not builder_called
+        assert "response" not in result
+
+    async def test_spawn_with_initial_message_engine_crash(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent with initial_message and engine crash returns error."""
+
+        async def failing_builder(config: dict, engine_type: str) -> Any:
+            raise RuntimeError("Engine build failed")
+
+        manager = SubAgentManager(engine_builder=failing_builder)
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Crash test",
+            role="swe",
+            scope=[],
+            initial_message="Try this",
+        )
+
+        assert "error building engine" in result["response"]
+        # Child session should still have been created
+        child_id = uuid.UUID(result["child_session_id"])
+        child = await get_session(db_session, child_id)
+        assert child is not None
+
+    async def test_spawn_with_initial_message_send_crash(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent where send_message raises returns error in response."""
+        mock_engine = AsyncMock()
+        mock_engine.create_session = AsyncMock()
+        mock_engine.send_message = AsyncMock(side_effect=RuntimeError("LLM error"))
+
+        async def mock_builder(config: dict, engine_type: str) -> Any:
+            return mock_engine
+
+        manager = SubAgentManager(engine_builder=mock_builder)
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="Send crash",
+            role="swe",
+            scope=[],
+            initial_message="Trigger error",
+        )
+
+        assert "error executing initial message" in result["response"]
+
+    async def test_spawn_no_engine_builder_returns_message(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """spawn_subagent with initial_message but no engine_builder returns info message."""
+        manager = SubAgentManager()  # no engine_builder
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent_session.id,
+            mission="No builder",
+            role="swe",
+            scope=[],
+            initial_message="hello",
+        )
+
+        assert "engine_builder not configured" in result["response"]
+
+    async def test_spawn_inherits_project_root(self, db_session: AsyncSession, project: Project):
+        """Child session config inherits project_root from parent."""
+        parent = await create_session(
+            db_session,
+            project_id=project.id,
+            name="parent-with-root",
+            engine="native",
+            mode="execution",
+            config={"project_root": "/home/user/myproject"},
+        )
+        manager = SubAgentManager()
+        result = await manager.spawn_subagent(
+            db_session,
+            parent_session_id=parent.id,
+            mission="Inherit root",
+            role="swe",
+            scope=[],
+            engine="claude_code",
+        )
+        child_id = uuid.UUID(result["child_session_id"])
+        child = await get_session(db_session, child_id)
+        assert child is not None
+        assert child.config["project_root"] == "/home/user/myproject"
+
+
+# ---------------------------------------------------------------------------
+# Unit: VALID_ENGINE_TYPES constant
+# ---------------------------------------------------------------------------
+
+
+class TestValidEngineTypes:
+    def test_contains_expected_engines(self):
+        expected = {"native", "claude_code", "codex_cli", "copilot_cli", "gemini_cli", "codex"}
+        assert VALID_ENGINE_TYPES == expected
+
+
+# ---------------------------------------------------------------------------
+# Helper: async iterator for mock engine
+# ---------------------------------------------------------------------------
+
+
+async def _async_iter(items: list[Any]) -> Any:
+    """Create an async iterator from a list for mocking send_message."""
+    for item in items:
+        yield item

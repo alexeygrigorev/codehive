@@ -112,3 +112,78 @@ Additionally, spawning currently only creates a DB record -- it does not instant
 - The `_build_engine()` helper in `api/routes/sessions.py` handles all engine types. SubAgentManager should use the same factory or a shared version of it.
 - CLI engines (claude_code, codex_cli, etc.) need a `working_dir` from the project config. The child session should inherit the parent's project root.
 - The initial message execution should be synchronous from the orchestrator's perspective (the tool call blocks until the child's first turn completes). This is acceptable because the orchestrator is an LLM conversation loop that processes one tool call at a time.
+
+## Log
+
+### [SWE] 2026-03-19 07:06
+
+- Implemented engine selection and initial message execution for subsession spawning
+- Added `VALID_ENGINE_TYPES` constant to `spawn_subagent.py` with all 6 engine types
+- Updated `spawn_subagent` tool schema with optional `engine` and `initial_message` properties
+- Updated `SubAgentManager.spawn_subagent()` to accept `engine` param (defaults to parent's engine), validate it, and use it for child session creation
+- Added `InvalidEngineError` exception for unknown engine names
+- Added `engine_builder` callback to `SubAgentManager` for constructing child engines
+- Added `_run_initial_message()` method that builds the child engine, sends the initial message, and collects the response text
+- Child session inherits `project_root` from parent config for CLI engines
+- Updated `ZaiEngine._execute_tool_direct` to pass `engine` and `initial_message` to SubAgentManager, with error handling for `InvalidEngineError`
+- Added `_build_child_engine` static method to ZaiEngine that delegates to `_build_engine` factory
+- Files modified:
+  - `backend/codehive/engine/tools/spawn_subagent.py` -- added VALID_ENGINE_TYPES, engine and initial_message to schema
+  - `backend/codehive/core/subagent.py` -- engine selection, validation, initial message execution
+  - `backend/codehive/engine/zai_engine.py` -- engine_builder wiring, tool dispatch updates
+  - `backend/tests/test_subagent.py` -- 19 new tests (41 total in file)
+- Tests added: 19 new tests covering:
+  - Engine selection: inherit parent, claude_code, codex_cli, invalid engine, event includes engine (5)
+  - Tool schema: engine property, initial_message property (2)
+  - Tool dispatch: passes engine, passes initial_message, invalid engine error (3)
+  - Initial message integration: calls engine, no engine when no message, engine crash, send crash, no builder, inherits project_root (6)
+  - VALID_ENGINE_TYPES constant (1)
+  - Updated existing dispatch test for new params (1)
+- Build results: 41 tests pass in test_subagent.py, 2073 pass full suite (2 pre-existing failures in test_cli.py unrelated to this change), ruff clean, tsc clean, vitest 681 pass
+- Known limitations: none
+
+### [QA] 2026-03-19 07:12
+- Tests: 41 passed in test_subagent.py (19 new), 2073 passed full backend (2 pre-existing failures in test_cli.py, unrelated)
+- Ruff check: clean
+- Ruff format: clean (267 files already formatted)
+- tsc --noEmit: clean
+- vitest: 681 passed
+- Acceptance criteria:
+  - AC1 (tool schema engine param): PASS -- optional string property added, not in required
+  - AC2 (tool schema initial_message param): PASS -- optional string property added, not in required
+  - AC3 (SubAgentManager engine param): PASS -- child uses specified engine or inherits parent; verified in DB
+  - AC4 (initial_message triggers engine build + send_message): PASS -- _run_initial_message builds engine, sends message, collects response
+  - AC5 (returns child_session_id, status, response text): PASS -- return dict includes all three fields
+  - AC6 (invalid engine returns error, not crash): PASS -- InvalidEngineError caught in ZaiEngine dispatch, returned as is_error
+  - AC7 (child DB engine field set correctly): PASS -- tests read back from DB and assert engine value
+  - AC8 (existing behavior preserved): PASS -- test_spawn_without_engine_inherits_parent verifies inheritance
+  - AC9 (10+ new tests): PASS -- 19 new tests
+  - AC10 (ruff clean): PASS
+- Note: minor RuntimeWarning in test_spawn_with_initial_message_send_crash (unawaited coroutine from AsyncMock with side_effect) -- cosmetic, does not affect correctness
+- VERDICT: PASS
+
+### [PM] 2026-03-19 07:30
+- Reviewed diff: 6 files changed (905 insertions), 4 production files + 1 test file + lock/config
+- Independently ran `uv run pytest tests/test_subagent.py -v`: 41 passed, 0 failed (2.47s)
+- Independently ran `uv run ruff check`: all checks passed
+- Verified spawn_subagent tool schema: `engine` (optional string) and `initial_message` (optional string) present, not in `required`
+- Verified `VALID_ENGINE_TYPES` contains all 6 engines: native, claude_code, codex_cli, copilot_cli, gemini_cli, codex
+- Verified `SubAgentManager.spawn_subagent()` accepts `engine` param, defaults to parent engine when None
+- Verified `InvalidEngineError` raised for unknown engines, caught in ZaiEngine dispatch as `is_error` response
+- Verified `_run_initial_message()` builds child engine, sends message, collects response text
+- Verified child inherits `project_root` from parent config
+- Verified ZaiEngine wires `engine_builder` callback and passes `engine`/`initial_message` through dispatch
+- Acceptance criteria: all 10/10 met
+  - AC1: PASS -- engine in schema
+  - AC2: PASS -- initial_message in schema
+  - AC3: PASS -- engine param in SubAgentManager, child uses specified or inherits
+  - AC4: PASS -- initial_message triggers engine build + send_message
+  - AC5: PASS -- returns child_session_id, status, response, engine
+  - AC6: PASS -- invalid engine returns error dict, no crash
+  - AC7: PASS -- child DB engine field set correctly (verified in test assertions)
+  - AC8: PASS -- existing behavior preserved (test_spawn_without_engine_inherits_parent)
+  - AC9: PASS -- 19 new tests (well over 10+ threshold)
+  - AC10: PASS -- ruff clean
+- No scope dropped, no follow-up issues needed
+- Code quality: clean, follows existing patterns, proper error handling, good test coverage including edge cases (engine crash, send crash, no builder configured)
+- VERDICT: ACCEPT
