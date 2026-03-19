@@ -14,11 +14,19 @@ vi.mock("@/api/projects", () => ({
   createProject: vi.fn(),
 }));
 
+vi.mock("@/api/system", () => ({
+  fetchDefaultDirectory: vi.fn(),
+  fetchDirectories: vi.fn(),
+}));
+
 import { startFlow } from "@/api/projectFlow";
 import { createProject } from "@/api/projects";
+import { fetchDefaultDirectory, fetchDirectories } from "@/api/system";
 
 const mockStartFlow = vi.mocked(startFlow);
 const mockCreateProject = vi.mocked(createProject);
+const mockFetchDefaultDirectory = vi.mocked(fetchDefaultDirectory);
+const mockFetchDirectories = vi.mocked(fetchDirectories);
 
 function renderPage() {
   return render(
@@ -31,6 +39,14 @@ function renderPage() {
 describe("NewProjectPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchDefaultDirectory.mockResolvedValue({
+      default_directory: "/home/user/codehive/",
+    });
+    mockFetchDirectories.mockResolvedValue({
+      path: "/home/user/codehive",
+      parent: "/home/user",
+      directories: [],
+    });
   });
 
   it("renders four flow type cards with expected titles", () => {
@@ -41,87 +57,55 @@ describe("NewProjectPage", () => {
     expect(screen.getByText("From Repository")).toBeInTheDocument();
   });
 
-  it("clicking Brainstorm calls startFlow with flow_type brainstorm", async () => {
-    const user = userEvent.setup();
-    mockStartFlow.mockResolvedValue({
-      flow_id: "f1",
-      session_id: "s1",
-      first_questions: [
-        { id: "q1", text: "What is your goal?", category: "goals" },
-      ],
+  describe("Coming soon cards", () => {
+    it("all four flow cards display a 'Coming soon' badge", () => {
+      renderPage();
+      const badges = screen.getAllByText("Coming soon");
+      expect(badges).toHaveLength(4);
     });
 
-    renderPage();
-    await user.click(screen.getByText("Brainstorm"));
-
-    await waitFor(() => {
-      expect(mockStartFlow).toHaveBeenCalledWith(
-        expect.objectContaining({ flow_type: "brainstorm" }),
-      );
-    });
-  });
-
-  it("clicking Guided Interview calls startFlow with flow_type interview", async () => {
-    const user = userEvent.setup();
-    mockStartFlow.mockResolvedValue({
-      flow_id: "f1",
-      session_id: "s1",
-      first_questions: [
-        { id: "q1", text: "What is your goal?", category: "goals" },
-      ],
+    it("coming soon cards have opacity-50 and cursor-not-allowed classes", () => {
+      renderPage();
+      const card = screen.getByTestId("flow-card-brainstorm");
+      expect(card.className).toContain("opacity-50");
+      expect(card.className).toContain("cursor-not-allowed");
     });
 
-    renderPage();
-    await user.click(screen.getByText("Guided Interview"));
-
-    await waitFor(() => {
-      expect(mockStartFlow).toHaveBeenCalledWith(
-        expect.objectContaining({ flow_type: "interview" }),
-      );
-    });
-  });
-
-  it("shows loading indicator while startFlow is pending", async () => {
-    const user = userEvent.setup();
-    mockStartFlow.mockReturnValue(new Promise(() => {})); // never resolves
-
-    renderPage();
-    await user.click(screen.getByText("Brainstorm"));
-
-    expect(screen.getByText("Starting flow...")).toBeInTheDocument();
-  });
-
-  it("shows error message when startFlow rejects", async () => {
-    const user = userEvent.setup();
-    mockStartFlow.mockRejectedValue(new Error("Failed to start flow: 500"));
-
-    renderPage();
-    await user.click(screen.getByText("Brainstorm"));
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Failed to start flow: 500"),
-      ).toBeInTheDocument();
-    });
-  });
-
-  it("transitions to FlowChat after successful startFlow", async () => {
-    const user = userEvent.setup();
-    mockStartFlow.mockResolvedValue({
-      flow_id: "f1",
-      session_id: "s1",
-      first_questions: [
-        { id: "q1", text: "What is your goal?", category: "goals" },
-      ],
+    it("coming soon cards have aria-disabled attribute", () => {
+      renderPage();
+      const card = screen.getByTestId("flow-card-brainstorm");
+      expect(card).toHaveAttribute("aria-disabled", "true");
     });
 
-    renderPage();
-    await user.click(screen.getByText("Brainstorm"));
+    it("clicking a coming soon card does NOT call startFlow", async () => {
+      const user = userEvent.setup();
+      renderPage();
 
-    await waitFor(() => {
-      expect(screen.getByText("What is your goal?")).toBeInTheDocument();
+      await user.click(screen.getByText("Brainstorm"));
+      await user.click(screen.getByText("Guided Interview"));
+      await user.click(screen.getByText("From Notes"));
+      await user.click(screen.getByText("From Repository"));
+
+      expect(mockStartFlow).not.toHaveBeenCalled();
     });
-    expect(screen.getByText("Submit Answers")).toBeInTheDocument();
+
+    it("clicking a coming soon card does not show loading indicator", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Brainstorm"));
+
+      expect(screen.queryByText("Starting flow...")).not.toBeInTheDocument();
+    });
+
+    it("clicking a coming soon card does not show error message", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Brainstorm"));
+
+      expect(screen.queryByText(/Failed/)).not.toBeInTheDocument();
+    });
   });
 
   describe("Empty Project form", () => {
@@ -143,9 +127,12 @@ describe("NewProjectPage", () => {
 
       await user.click(screen.getByText("Empty Project"));
       const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
       await user.type(pathInput, "/home/user/git/myapp");
 
-      const nameInput = screen.getByLabelText(/Project Name/) as HTMLInputElement;
+      const nameInput = screen.getByLabelText(
+        /Project Name/,
+      ) as HTMLInputElement;
       expect(nameInput.value).toBe("myapp");
     });
 
@@ -154,9 +141,13 @@ describe("NewProjectPage", () => {
       renderPage();
 
       await user.click(screen.getByText("Empty Project"));
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
       await user.click(screen.getByText("Create Project"));
 
-      expect(screen.getByText("Directory path is required")).toBeInTheDocument();
+      expect(
+        screen.getByText("Directory path is required"),
+      ).toBeInTheDocument();
     });
 
     it("submitting with relative path shows 'Path must be absolute' error", async () => {
@@ -165,6 +156,7 @@ describe("NewProjectPage", () => {
 
       await user.click(screen.getByText("Empty Project"));
       const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
       await user.type(pathInput, "foo/bar");
       await user.click(screen.getByText("Create Project"));
 
@@ -173,7 +165,7 @@ describe("NewProjectPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("submitting with valid absolute path calls createProject with correct name and path", async () => {
+    it("submitting with valid absolute path calls createProject with correct name, path, and git_init", async () => {
       const user = userEvent.setup();
       mockCreateProject.mockResolvedValue({
         id: "p1",
@@ -188,6 +180,7 @@ describe("NewProjectPage", () => {
       renderPage();
       await user.click(screen.getByText("Empty Project"));
       const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
       await user.type(pathInput, "/home/user/git/myapp");
       await user.click(screen.getByText("Create Project"));
 
@@ -195,6 +188,7 @@ describe("NewProjectPage", () => {
         expect(mockCreateProject).toHaveBeenCalledWith({
           name: "myapp",
           path: "/home/user/git/myapp",
+          git_init: true,
         });
       });
     });
@@ -207,7 +201,9 @@ describe("NewProjectPage", () => {
       expect(screen.getByLabelText(/Directory Path/)).toBeInTheDocument();
 
       await user.click(screen.getByText("Cancel"));
-      expect(screen.queryByLabelText(/Directory Path/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/Directory Path/),
+      ).not.toBeInTheDocument();
     });
 
     it("user can manually override the auto-derived name and the override is preserved", async () => {
@@ -216,9 +212,12 @@ describe("NewProjectPage", () => {
 
       await user.click(screen.getByText("Empty Project"));
       const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
       await user.type(pathInput, "/home/user/git/myapp");
 
-      const nameInput = screen.getByLabelText(/Project Name/) as HTMLInputElement;
+      const nameInput = screen.getByLabelText(
+        /Project Name/,
+      ) as HTMLInputElement;
       expect(nameInput.value).toBe("myapp");
 
       await user.clear(nameInput);
@@ -240,6 +239,7 @@ describe("NewProjectPage", () => {
       renderPage();
       await user.click(screen.getByText("Empty Project"));
       const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
       await user.type(pathInput, "/home/user/git/myapp");
       await user.click(screen.getByText("Create Project"));
 
@@ -248,6 +248,246 @@ describe("NewProjectPage", () => {
           screen.getByText("Failed to create project: 500"),
         ).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("Default directory pre-fill", () => {
+    it("pre-fills the path field with the default directory when form opens", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        const pathInput = screen.getByLabelText(
+          /Directory Path/,
+        ) as HTMLInputElement;
+        expect(pathInput.value).toBe("/home/user/codehive/");
+      });
+    });
+
+    it("does not crash if fetchDefaultDirectory fails", async () => {
+      mockFetchDefaultDirectory.mockRejectedValue(new Error("network error"));
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+
+      // Path should be empty since fetch failed
+      const pathInput = screen.getByLabelText(
+        /Directory Path/,
+      ) as HTMLInputElement;
+      expect(pathInput.value).toBe("");
+    });
+  });
+
+  describe("Git init checkbox", () => {
+    it("git init checkbox is present and checked by default", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+
+      const checkbox = screen.getByTestId(
+        "git-init-checkbox",
+      ) as HTMLInputElement;
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it("git init checkbox can be unchecked by user", async () => {
+      const user = userEvent.setup();
+      mockCreateProject.mockResolvedValue({
+        id: "p1",
+        name: "myapp",
+        path: "/tmp/myapp",
+        description: null,
+        archetype: null,
+        knowledge: null,
+        created_at: "2026-03-18T00:00:00Z",
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      // Type the path first, then uncheck git init
+      // (typing in path resets gitInit to true via onChange)
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
+      await user.type(pathInput, "/tmp/myapp");
+
+      const checkbox = screen.getByTestId(
+        "git-init-checkbox",
+      ) as HTMLInputElement;
+      await user.click(checkbox);
+      expect(checkbox.checked).toBe(false);
+
+      // Submit and verify git_init is false
+      await user.click(screen.getByText("Create Project"));
+
+      await waitFor(() => {
+        expect(mockCreateProject).toHaveBeenCalledWith(
+          expect.objectContaining({ git_init: false }),
+        );
+      });
+    });
+
+    it("selecting a directory with has_git unchecks the checkbox and shows indicator", async () => {
+      const user = userEvent.setup();
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "myrepo",
+            path: "/home/user/codehive/myrepo",
+            has_git: true,
+          },
+        ],
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      // Wait for browse entries to load
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-myrepo"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("browse-entry-myrepo"));
+
+      const checkbox = screen.getByTestId(
+        "git-init-checkbox",
+      ) as HTMLInputElement;
+      expect(checkbox.checked).toBe(false);
+      expect(screen.getByText("(already a git repo)")).toBeInTheDocument();
+    });
+  });
+
+  describe("Directory browser", () => {
+    it("shows browse panel when form is opened", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+
+      expect(screen.getByTestId("browse-panel")).toBeInTheDocument();
+    });
+
+    it("browse panel lists subdirectories returned by API", async () => {
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "appA",
+            path: "/home/user/codehive/appA",
+            has_git: false,
+          },
+          {
+            name: "appB",
+            path: "/home/user/codehive/appB",
+            has_git: true,
+          },
+        ],
+      });
+
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("browse-entry-appA")).toBeInTheDocument();
+        expect(screen.getByTestId("browse-entry-appB")).toBeInTheDocument();
+      });
+
+      // appB should have a git badge
+      const appBButton = screen.getByTestId("browse-entry-appB");
+      expect(appBButton.textContent).toContain("git");
+    });
+
+    it("clicking a subdirectory updates the path field", async () => {
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "myproj",
+            path: "/home/user/codehive/myproj",
+            has_git: false,
+          },
+        ],
+      });
+
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-myproj"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("browse-entry-myproj"));
+
+      const pathInput = screen.getByLabelText(
+        /Directory Path/,
+      ) as HTMLInputElement;
+      expect(pathInput.value).toBe("/home/user/codehive/myproj");
+    });
+
+    it("parent (..) entry navigates to parent directory", async () => {
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [],
+      });
+
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("browse-parent")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("browse-parent"));
+
+      const pathInput = screen.getByLabelText(
+        /Directory Path/,
+      ) as HTMLInputElement;
+      expect(pathInput.value).toBe("/home/user");
+    });
+
+    it("shows error message when directory listing fails", async () => {
+      mockFetchDirectories.mockRejectedValue(
+        new Error("Directory not found"),
+      );
+
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Directory not found")).toBeInTheDocument();
+      });
+    });
+
+    it("browse panel can be toggled closed and open", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      expect(screen.getByTestId("browse-panel")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("browse-toggle"));
+      expect(screen.queryByTestId("browse-panel")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("browse-toggle"));
+      expect(screen.getByTestId("browse-panel")).toBeInTheDocument();
     });
   });
 });

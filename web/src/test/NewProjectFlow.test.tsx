@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,11 +10,18 @@ vi.mock("@/api/projectFlow", () => ({
   finalizeFlow: vi.fn(),
 }));
 
-import { startFlow, respondToFlow, finalizeFlow } from "@/api/projectFlow";
+vi.mock("@/api/projects", () => ({
+  createProject: vi.fn(),
+}));
+
+vi.mock("@/api/system", () => ({
+  fetchDefaultDirectory: vi.fn().mockResolvedValue({ default_directory: "" }),
+  fetchDirectories: vi.fn().mockResolvedValue({ directories: [], parent: null }),
+}));
+
+import { startFlow } from "@/api/projectFlow";
 
 const mockStartFlow = vi.mocked(startFlow);
-const mockRespondToFlow = vi.mocked(respondToFlow);
-const mockFinalizeFlow = vi.mocked(finalizeFlow);
 
 function renderPage() {
   return render(
@@ -24,138 +31,43 @@ function renderPage() {
   );
 }
 
-describe("NewProjectFlow integration", () => {
+describe("NewProjectFlow integration - coming soon cards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("full wizard flow: select -> chat -> review -> finalize", async () => {
+  it("all flow cards are marked as coming soon and do not trigger startFlow", async () => {
     const user = userEvent.setup();
-
-    // Step 1: startFlow returns questions
-    mockStartFlow.mockResolvedValue({
-      flow_id: "f1",
-      session_id: "s1",
-      first_questions: [
-        { id: "q1", text: "What are your goals?", category: "goals" },
-        { id: "q2", text: "What tech do you prefer?", category: "tech" },
-      ],
-    });
-
     renderPage();
 
-    // Select Guided Interview
-    await user.click(screen.getByText("Guided Interview"));
+    // All four flow cards should be visible with Coming soon badges
+    const flowTitles = ["Brainstorm", "Guided Interview", "From Notes", "From Repository"];
+    for (const title of flowTitles) {
+      const card = screen.getByText(title).closest("[data-testid]");
+      expect(card).toBeTruthy();
+      expect(card!.getAttribute("aria-disabled")).toBe("true");
+    }
 
-    await waitFor(() => {
-      expect(mockStartFlow).toHaveBeenCalledWith(
-        expect.objectContaining({ flow_type: "interview" }),
-      );
-    });
+    // Clicking any of them should not call startFlow
+    for (const title of flowTitles) {
+      await user.click(screen.getByText(title));
+    }
 
-    // Step 2: Answer questions
-    await waitFor(() => {
-      expect(screen.getByLabelText("What are your goals?")).toBeInTheDocument();
-    });
-
-    // Mock respond to return brief
-    const brief = {
-      name: "Interview Project",
-      description: "A project from interview",
-      tech_stack: ["Python", "FastAPI"],
-      architecture: "Microservices",
-      open_decisions: ["Cloud provider"],
-      suggested_sessions: [
-        {
-          name: "API Design",
-          mission: "Design REST endpoints",
-          mode: "planning",
-        },
-      ],
-    };
-    mockRespondToFlow.mockResolvedValue({
-      next_questions: null,
-      brief,
-    });
-
-    await user.type(
-      screen.getByLabelText("What are your goals?"),
-      "Build a platform",
-    );
-    await user.type(
-      screen.getByLabelText("What tech do you prefer?"),
-      "Python",
-    );
-    await user.click(screen.getByText("Submit Answers"));
-
-    await waitFor(() => {
-      expect(mockRespondToFlow).toHaveBeenCalledWith("f1", [
-        { question_id: "q1", answer: "Build a platform" },
-        { question_id: "q2", answer: "Python" },
-      ]);
-    });
-
-    // Step 3: Review brief
-    await waitFor(() => {
-      expect(screen.getByText("Review Project Brief")).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText("Project Name")).toHaveValue(
-      "Interview Project",
-    );
-    expect(screen.getByText("Python")).toBeInTheDocument();
-    expect(screen.getByText("FastAPI")).toBeInTheDocument();
-    expect(screen.getByText("Microservices")).toBeInTheDocument();
-    expect(screen.getByText("Cloud provider")).toBeInTheDocument();
-    expect(screen.getByText("API Design")).toBeInTheDocument();
-    expect(screen.getByText("Design REST endpoints")).toBeInTheDocument();
-
-    // Step 4: Finalize
-    mockFinalizeFlow.mockResolvedValue({
-      project_id: "proj-42",
-      sessions: [{ id: "s2", name: "API Design", mode: "planning" }],
-    });
-
-    await user.click(screen.getByText("Create Project"));
-
-    await waitFor(() => {
-      expect(mockFinalizeFlow).toHaveBeenCalledWith("f1");
-    });
+    expect(mockStartFlow).not.toHaveBeenCalled();
   });
 
-  it("handles next_questions round before brief", async () => {
-    const user = userEvent.setup();
-
-    mockStartFlow.mockResolvedValue({
-      flow_id: "f2",
-      session_id: "s2",
-      first_questions: [
-        { id: "q1", text: "Initial question?", category: "goals" },
-      ],
-    });
-
+  it("coming soon cards do not have role=button", () => {
     renderPage();
-    await user.click(screen.getByText("Brainstorm"));
+    const card = screen.getByTestId("flow-card-brainstorm");
+    expect(card).not.toHaveAttribute("role", "button");
+  });
 
-    await waitFor(() => {
-      expect(screen.getByLabelText("Initial question?")).toBeInTheDocument();
-    });
+  it("Empty Project card is not affected by coming soon changes", async () => {
+    const user = userEvent.setup();
+    renderPage();
 
-    // First respond returns more questions
-    mockRespondToFlow.mockResolvedValueOnce({
-      next_questions: [
-        { id: "q2", text: "Follow-up question?", category: "tech" },
-      ],
-      brief: null,
-    });
-
-    await user.type(screen.getByLabelText("Initial question?"), "My answer");
-    await user.click(screen.getByText("Submit Answers"));
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("Follow-up question?")).toBeInTheDocument();
-    });
-    expect(
-      screen.queryByLabelText("Initial question?"),
-    ).not.toBeInTheDocument();
+    // Empty Project button should still work
+    await user.click(screen.getByText("Empty Project"));
+    expect(screen.getByLabelText(/Directory Path/)).toBeInTheDocument();
   });
 });

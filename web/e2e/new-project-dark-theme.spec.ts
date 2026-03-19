@@ -18,12 +18,14 @@ test.describe("New Project page dark theme contrast", () => {
     expect(emptyClasses).toContain("dark:text-gray-100");
 
     // Verify all four flow-type card h3 titles have dark:text-gray-100
-    const flowTitles = ["Brainstorm", "Guided Interview", "From Notes", "From Repository"];
-    for (const title of flowTitles) {
-      const h3 = page
-        .locator("button")
-        .filter({ hasText: title })
-        .locator("h3");
+    const flowTestIds = [
+      "flow-card-brainstorm",
+      "flow-card-interview",
+      "flow-card-spec_from_notes",
+      "flow-card-start_from_repo",
+    ];
+    for (const testId of flowTestIds) {
+      const h3 = page.getByTestId(testId).locator("h3");
       await expect(h3).toBeVisible();
       const classes = await h3.getAttribute("class");
       expect(classes).toContain("dark:text-gray-100");
@@ -31,21 +33,6 @@ test.describe("New Project page dark theme contrast", () => {
 
     // Take screenshot of the page in dark mode
     await page.screenshot({ path: "/tmp/123-new-project-dark.png" });
-
-    // Click "From Notes" to reveal input section
-    await page
-      .locator("button")
-      .filter({ hasText: "From Notes" })
-      .click();
-
-    // Verify the label has dark:text-gray-200
-    const label = page.locator('label[for="initial-input"]');
-    await expect(label).toBeVisible();
-    const labelClasses = await label.getAttribute("class");
-    expect(labelClasses).toContain("dark:text-gray-200");
-
-    // Take screenshot of expanded state
-    await page.screenshot({ path: "/tmp/123-new-project-dark-expanded.png" });
   });
 
   test("E2E: light mode - no regression", async ({ page }) => {
@@ -60,7 +47,7 @@ test.describe("New Project page dark theme contrast", () => {
       page.locator("button").filter({ hasText: "Empty Project" }),
     ).toBeVisible();
     await expect(
-      page.locator("button").filter({ hasText: "Brainstorm" }),
+      page.getByTestId("flow-card-brainstorm"),
     ).toBeVisible();
 
     // Take screenshot for visual comparison
