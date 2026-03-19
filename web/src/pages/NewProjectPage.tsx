@@ -11,6 +11,12 @@ import {
   fetchDirectories,
   type DirectoryEntry,
 } from "@/api/system";
+import {
+  fetchGhStatus,
+  fetchGhRepos,
+  cloneRepo,
+  type RepoItem,
+} from "@/api/githubRepos";
 import FlowChat from "@/components/project-flow/FlowChat";
 import BriefReview from "@/components/project-flow/BriefReview";
 
@@ -45,11 +51,26 @@ const FLOW_TYPES = [
     type: "start_from_repo",
     title: "From Repository",
     description:
-      "Start from an existing repository URL to analyze and build a project around it.",
-    requiresInput: true,
-    comingSoon: true,
+      "Import a GitHub repository and create a project from it.",
+    requiresInput: false,
+    comingSoon: false,
   },
 ];
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const seconds = Math.floor((now - then) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
@@ -73,6 +94,22 @@ export default function NewProjectPage() {
   const [browseError, setBrowseError] = useState<string | null>(null);
   const [browseLoading, setBrowseLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // --- Repo picker state ---
+  const [showRepoPicker, setShowRepoPicker] = useState(false);
+  const [ghAvailable, setGhAvailable] = useState<boolean | null>(null);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [repos, setRepos] = useState<RepoItem[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [repoSearch, setRepoSearch] = useState("");
+  const [repoOwner, setRepoOwner] = useState("");
+  const [selectedRepo, setSelectedRepo] = useState<RepoItem | null>(null);
+  const [cloneDest, setCloneDest] = useState("");
+  const [cloneProjectName, setCloneProjectName] = useState("");
+  const [cloneLoading, setCloneLoading] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [defaultDir, setDefaultDir] = useState("");
+  const ownerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch default directory when form opens
   useEffect(() => {
@@ -137,6 +174,121 @@ export default function NewProjectPage() {
     };
   }, [directoryPath, showEmptyForm, browseOpen, loadDirectories]);
 
+  // --- Repo picker effects ---
+
+  // Check gh status and load repos when picker opens
+  useEffect(() => {
+    if (!showRepoPicker) return;
+    let cancelled = false;
+
+    async function init() {
+      setGhAvailable(null);
+      setGhError(null);
+      setRepos([]);
+      setSelectedRepo(null);
+      setCloneError(null);
+
+      try {
+        const status = await fetchGhStatus();
+        if (cancelled) return;
+        if (!status.available || !status.authenticated) {
+          setGhAvailable(false);
+          setGhError(
+            status.error || "GitHub CLI is not available or not authenticated.",
+          );
+          return;
+        }
+        setGhAvailable(true);
+      } catch {
+        if (cancelled) return;
+        setGhAvailable(false);
+        setGhError("Failed to check GitHub CLI status.");
+        return;
+      }
+
+      // Fetch default dir for clone destination
+      try {
+        const dirRes = await fetchDefaultDirectory();
+        if (!cancelled) setDefaultDir(dirRes.default_directory);
+      } catch {
+        // ignore
+      }
+
+      // Fetch repos
+      setReposLoading(true);
+      try {
+        const res = await fetchGhRepos();
+        if (!cancelled) setRepos(res.repos);
+      } catch {
+        if (!cancelled) setGhError("Failed to load repositories.");
+      } finally {
+        if (!cancelled) setReposLoading(false);
+      }
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, [showRepoPicker]);
+
+  // Owner change triggers re-fetch with debounce
+  function handleOwnerChange(value: string) {
+    setRepoOwner(value);
+    if (ownerDebounceRef.current) clearTimeout(ownerDebounceRef.current);
+    ownerDebounceRef.current = setTimeout(async () => {
+      setReposLoading(true);
+      setGhError(null);
+      try {
+        const res = await fetchGhRepos({
+          owner: value.trim() || undefined,
+        });
+        setRepos(res.repos);
+      } catch {
+        setGhError("Failed to load repositories.");
+      } finally {
+        setReposLoading(false);
+      }
+    }, 500);
+  }
+
+  // Select a repo
+  function handleSelectRepo(repo: RepoItem) {
+    setSelectedRepo(repo);
+    setCloneProjectName(repo.name);
+    const base = defaultDir.replace(/\/+$/, "");
+    setCloneDest(base ? `${base}/${repo.name}` : repo.name);
+    setCloneError(null);
+  }
+
+  // Clone & Create
+  async function handleClone() {
+    if (!selectedRepo) return;
+    setCloneLoading(true);
+    setCloneError(null);
+    try {
+      const result = await cloneRepo({
+        repo_url: selectedRepo.clone_url,
+        destination: cloneDest,
+        project_name: cloneProjectName || selectedRepo.name,
+      });
+      navigate(`/projects/${result.project_id}`);
+    } catch (err) {
+      setCloneError(
+        err instanceof Error ? err.message : "Clone failed",
+      );
+    } finally {
+      setCloneLoading(false);
+    }
+  }
+
+  // Filter repos by search term (client-side)
+  const filteredRepos = repoSearch
+    ? repos.filter((r) =>
+        r.name.toLowerCase().includes(repoSearch.toLowerCase()),
+      )
+    : repos;
+
   function handleSelectDirectory(entry: DirectoryEntry) {
     setDirectoryPath(entry.path);
     if (entry.has_git) {
@@ -192,6 +344,12 @@ export default function NewProjectPage() {
   }
 
   async function handleSelectFlow(flowType: string, requiresInput: boolean) {
+    if (flowType === "start_from_repo") {
+      setShowRepoPicker(!showRepoPicker);
+      setShowEmptyForm(false);
+      return;
+    }
+
     if (requiresInput && !initialInput.trim()) {
       setSelectedType(flowType);
       return;
@@ -253,7 +411,10 @@ export default function NewProjectPage() {
       </h1>
 
       <button
-        onClick={() => setShowEmptyForm(!showEmptyForm)}
+        onClick={() => {
+          setShowEmptyForm(!showEmptyForm);
+          setShowRepoPicker(false);
+        }}
         disabled={loading}
         className="w-full border-2 border-dashed dark:border-gray-600 rounded-lg p-4 text-left hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 mb-4"
       >
@@ -481,16 +642,196 @@ export default function NewProjectPage() {
         ))}
       </div>
 
-      {(selectedType === "spec_from_notes" ||
-        selectedType === "start_from_repo") && (
+      {/* Repo picker panel */}
+      {showRepoPicker && (
+        <div
+          className="mt-4 border dark:border-gray-600 rounded-lg p-4"
+          data-testid="repo-picker-panel"
+        >
+          {ghAvailable === null && (
+            <p
+              className="text-sm text-gray-500 dark:text-gray-400"
+              data-testid="repo-picker-checking"
+            >
+              Checking GitHub access...
+            </p>
+          )}
+
+          {ghAvailable === false && ghError && (
+            <div
+              className="text-sm text-red-600 dark:text-red-400"
+              data-testid="repo-picker-error"
+            >
+              {ghError}
+            </div>
+          )}
+
+          {ghAvailable === true && (
+            <>
+              {/* Search and owner fields */}
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  placeholder="Search repos..."
+                  value={repoSearch}
+                  onChange={(e) => setRepoSearch(e.target.value)}
+                  className="flex-1 border dark:border-gray-600 rounded p-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  data-testid="repo-search-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Owner / org"
+                  value={repoOwner}
+                  onChange={(e) => handleOwnerChange(e.target.value)}
+                  className="w-36 border dark:border-gray-600 rounded p-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  data-testid="repo-owner-input"
+                />
+              </div>
+
+              {/* Repo list */}
+              {reposLoading && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-2">
+                  Loading repositories...
+                </p>
+              )}
+
+              {!reposLoading && filteredRepos.length === 0 && (
+                <p
+                  className="text-sm text-gray-500 dark:text-gray-400 py-2"
+                  data-testid="repo-list-empty"
+                >
+                  No repositories found
+                </p>
+              )}
+
+              {!reposLoading && filteredRepos.length > 0 && (
+                <div
+                  className="border dark:border-gray-600 rounded max-h-64 overflow-y-auto bg-white dark:bg-gray-800"
+                  data-testid="repo-list"
+                >
+                  <ul className="divide-y dark:divide-gray-700">
+                    {filteredRepos.map((repo) => (
+                      <li key={repo.full_name}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectRepo(repo)}
+                          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                            selectedRepo?.full_name === repo.full_name
+                              ? "bg-blue-50 dark:bg-blue-900/40 border-l-2 border-blue-500"
+                              : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                          }`}
+                          data-testid={`repo-row-${repo.name}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium dark:text-gray-100">
+                              {repo.name}
+                            </span>
+                            {repo.language && (
+                              <span
+                                className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                                data-testid={`repo-lang-${repo.name}`}
+                              >
+                                {repo.language}
+                              </span>
+                            )}
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded ${
+                                repo.is_private
+                                  ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
+                                  : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                              }`}
+                              data-testid={`repo-visibility-${repo.name}`}
+                            >
+                              {repo.is_private ? "private" : "public"}
+                            </span>
+                            {repo.updated_at && (
+                              <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">
+                                {timeAgo(repo.updated_at)}
+                              </span>
+                            )}
+                          </div>
+                          {repo.description && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                              {repo.description}
+                            </p>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Clone form - shown when a repo is selected */}
+              {selectedRepo && (
+                <div
+                  className="mt-3 space-y-2 border-t dark:border-gray-600 pt-3"
+                  data-testid="clone-form"
+                >
+                  <div>
+                    <label
+                      htmlFor="clone-dest"
+                      className="block text-sm font-medium dark:text-gray-200 mb-1"
+                    >
+                      Clone to:
+                    </label>
+                    <input
+                      id="clone-dest"
+                      type="text"
+                      value={cloneDest}
+                      onChange={(e) => setCloneDest(e.target.value)}
+                      className="w-full border dark:border-gray-600 rounded p-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      data-testid="clone-dest-input"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="clone-name"
+                      className="block text-sm font-medium dark:text-gray-200 mb-1"
+                    >
+                      Project Name:
+                    </label>
+                    <input
+                      id="clone-name"
+                      type="text"
+                      value={cloneProjectName}
+                      onChange={(e) => setCloneProjectName(e.target.value)}
+                      className="w-full border dark:border-gray-600 rounded p-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      data-testid="clone-name-input"
+                    />
+                  </div>
+                  <button
+                    onClick={handleClone}
+                    disabled={cloneLoading || !cloneDest.trim()}
+                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+                    data-testid="clone-button"
+                  >
+                    {cloneLoading
+                      ? "Cloning repository..."
+                      : "Clone & Create Project"}
+                  </button>
+                  {cloneError && (
+                    <p
+                      className="text-sm text-red-600 dark:text-red-400 mt-1"
+                      data-testid="clone-error"
+                    >
+                      {cloneError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {selectedType === "spec_from_notes" && (
         <div className="mt-4 space-y-2">
           <label
             htmlFor="initial-input"
             className="block font-medium dark:text-gray-200"
           >
-            {selectedType === "spec_from_notes"
-              ? "Paste your notes"
-              : "Repository URL"}
+            Paste your notes
           </label>
           <textarea
             id="initial-input"
@@ -498,11 +839,7 @@ export default function NewProjectPage() {
             rows={4}
             value={initialInput}
             onChange={(e) => setInitialInput(e.target.value)}
-            placeholder={
-              selectedType === "spec_from_notes"
-                ? "Paste your notes, ideas, or documentation here..."
-                : "https://github.com/user/repo"
-            }
+            placeholder="Paste your notes, ideas, or documentation here..."
           />
           <button
             onClick={() => handleSelectFlow(selectedType, true)}

@@ -19,6 +19,12 @@ vi.mock("@/api/system", () => ({
   fetchDirectories: vi.fn(),
 }));
 
+vi.mock("@/api/githubRepos", () => ({
+  fetchGhStatus: vi.fn(),
+  fetchGhRepos: vi.fn(),
+  cloneRepo: vi.fn(),
+}));
+
 import { startFlow } from "@/api/projectFlow";
 import { createProject } from "@/api/projects";
 import { fetchDefaultDirectory, fetchDirectories } from "@/api/system";
@@ -58,10 +64,10 @@ describe("NewProjectPage", () => {
   });
 
   describe("Coming soon cards", () => {
-    it("all four flow cards display a 'Coming soon' badge", () => {
+    it("three flow cards display a 'Coming soon' badge (From Repository is enabled)", () => {
       renderPage();
       const badges = screen.getAllByText("Coming soon");
-      expect(badges).toHaveLength(4);
+      expect(badges).toHaveLength(3);
     });
 
     it("coming soon cards have opacity-50 and cursor-not-allowed classes", () => {
@@ -84,6 +90,14 @@ describe("NewProjectPage", () => {
       await user.click(screen.getByText("Brainstorm"));
       await user.click(screen.getByText("Guided Interview"));
       await user.click(screen.getByText("From Notes"));
+
+      expect(mockStartFlow).not.toHaveBeenCalled();
+    });
+
+    it("clicking From Repository does NOT call startFlow (opens repo picker instead)", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
       await user.click(screen.getByText("From Repository"));
 
       expect(mockStartFlow).not.toHaveBeenCalled();

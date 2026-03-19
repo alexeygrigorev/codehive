@@ -20,6 +20,7 @@ from codehive.api.routes.auth import auth_router
 from codehive.api.routes.checkpoints import checkpoints_router, session_checkpoints_router
 from codehive.api.routes.events import router as events_router
 from codehive.api.routes.github import github_router
+from codehive.api.routes.github_repos import github_repos_router
 from codehive.api.routes.issues import issues_router, project_issues_router
 from codehive.api.routes.knowledge import router as knowledge_router
 from codehive.api.routes.logs import logs_router
@@ -143,6 +144,7 @@ def create_app() -> FastAPI:
     app.include_router(archetypes_router, dependencies=_auth)
     app.include_router(knowledge_router, dependencies=_auth)
     app.include_router(github_router, dependencies=_auth)
+    app.include_router(github_repos_router, dependencies=_auth)
     app.include_router(remote_router, dependencies=_auth)
     app.include_router(webhooks_router, dependencies=_auth)
     app.include_router(replay_router, dependencies=_auth)
