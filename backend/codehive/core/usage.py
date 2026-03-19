@@ -92,6 +92,58 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return round(cost, 6)
 
 
+async def persist_usage_event(
+    db: AsyncSession,
+    session_id: uuid.UUID | None,
+    event: dict,
+) -> None:
+    """Inspect an engine event and persist rate-limit / model-usage snapshots.
+
+    Handles two event types:
+
+    * ``rate_limit.updated`` -- writes a single :class:`RateLimitSnapshot` row.
+    * ``usage.model_breakdown`` -- writes one :class:`ModelUsageSnapshot` row
+      per model entry in ``event["models"]``.
+
+    For any other event type the function is a silent no-op so callers can
+    safely pass every event through without filtering.
+    """
+    from codehive.db.models import ModelUsageSnapshot, RateLimitSnapshot
+
+    event_type = event.get("type")
+
+    if event_type == "rate_limit.updated":
+        snap = RateLimitSnapshot(
+            session_id=session_id,
+            rate_limit_type=event.get("rate_limit_type", "unknown"),
+            utilization=float(event.get("utilization", 0)),
+            resets_at=int(event.get("resets_at", 0)),
+            is_using_overage=bool(event.get("is_using_overage", False)),
+            surpassed_threshold=event.get("surpassed_threshold"),
+        )
+        db.add(snap)
+        await db.flush()
+        return
+
+    if event_type == "usage.model_breakdown":
+        models = event.get("models", [])
+        for m in models:
+            snap = ModelUsageSnapshot(
+                session_id=session_id,
+                model=m.get("model", "unknown"),
+                input_tokens=int(m.get("input_tokens", 0)),
+                output_tokens=int(m.get("output_tokens", 0)),
+                cache_read_tokens=int(m.get("cache_read_tokens", 0)),
+                cache_creation_tokens=int(m.get("cache_creation_tokens", 0)),
+                cost_usd=float(m.get("cost_usd", 0)),
+                context_window=m.get("context_window"),
+            )
+            db.add(snap)
+        if models:
+            await db.flush()
+        return
+
+
 async def get_context_usage(
     db: AsyncSession,
     session_id: uuid.UUID,

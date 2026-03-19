@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
+from codehive.core.usage import persist_usage_event
 from codehive.api.schemas.diff import DiffFileEntry, SessionDiffsResponse
 from codehive.api.schemas.session import (
     MessageSend,
@@ -467,6 +468,7 @@ async def send_message_endpoint(
 
         events: list[dict[str, Any]] = []
         async for event in engine.send_message(session_id, body.content, db=db):
+            await persist_usage_event(db, session_id, event)
             events.append(event)
 
         # Engine finished a turn -- mark as waiting_input
@@ -520,6 +522,7 @@ async def send_message_stream_endpoint(
                 await engine.create_session(session_id)
 
             async for event in engine.send_message(session_id, body.content, db=db):
+                await persist_usage_event(db, session_id, event)
                 yield f"data: {json.dumps(event)}\n\n"
 
             # Engine finished a turn -- mark as waiting_input

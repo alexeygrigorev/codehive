@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
+from codehive.core.usage import persist_usage_event
 from codehive.api.schemas.session import MessageSend
 from codehive.core.session import (
     SessionNotFoundError,
@@ -62,8 +63,8 @@ async def _run_engine_background(
     """Run the engine in the background, updating session status on completion."""
     try:
         async with db_factory() as db:
-            async for _event in engine.send_message(session_id, content, db=db):
-                pass  # events are persisted by the engine / event bus
+            async for event in engine.send_message(session_id, content, db=db):
+                await persist_usage_event(db, session_id, event)
 
             # Engine finished -- mark as waiting_input
             await update_session(db, session_id, status="waiting_input")
