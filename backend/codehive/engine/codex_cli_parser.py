@@ -52,6 +52,75 @@ class CodexCLIParser:
         # and skip unknown ones gracefully.
         event_type = data.get("type", "")
 
+        # --- Item completed (real Codex CLI ``exec --json`` format) ---
+        if event_type == "item.completed":
+            item = data.get("item", {})
+            item_type = item.get("type", "")
+            if item_type == "agent_message":
+                text = item.get("text", "")
+                if text:
+                    return [
+                        {
+                            "type": "message.created",
+                            "role": "assistant",
+                            "content": text,
+                            "session_id": sid,
+                        }
+                    ]
+            elif item_type == "error":
+                error_msg = item.get("message", str(item))
+                return [
+                    {
+                        "type": "session.error",
+                        "error": error_msg,
+                        "session_id": sid,
+                    }
+                ]
+            # Other item types (e.g. tool calls) -- skip for now
+            return []
+
+        # --- Thread / turn lifecycle events ---
+        if event_type == "thread.started":
+            return [
+                {
+                    "type": "session.started",
+                    "thread_id": data.get("thread_id", ""),
+                    "session_id": sid,
+                }
+            ]
+
+        if event_type == "turn.started":
+            return [
+                {
+                    "type": "turn.started",
+                    "session_id": sid,
+                }
+            ]
+
+        if event_type == "turn.completed":
+            return [
+                {
+                    "type": "turn.completed",
+                    "usage": data.get("usage", {}),
+                    "session_id": sid,
+                }
+            ]
+
+        if event_type == "turn.failed":
+            error_info = data.get("error", {})
+            error_msg = (
+                error_info.get("message", str(error_info))
+                if isinstance(error_info, dict)
+                else str(error_info)
+            )
+            return [
+                {
+                    "type": "session.error",
+                    "error": error_msg,
+                    "session_id": sid,
+                }
+            ]
+
         # --- Agent / assistant text message ---
         if event_type in ("message", "assistant", "response"):
             content = _extract_text(data)

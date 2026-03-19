@@ -33,7 +33,7 @@ class CodexCLIProcess:
         *,
         cli_path: str = "codex",
         working_dir: str | None = None,
-        model: str = "codex-mini-latest",
+        model: str | None = None,
         extra_flags: list[str] | None = None,
     ) -> None:
         self.session_id = session_id
@@ -52,6 +52,7 @@ class CodexCLIProcess:
             "exec",
             "--json",
             "--full-auto",
+            "--skip-git-repo-check",
         ]
         if self.model:
             cmd.extend(["--model", self.model])
