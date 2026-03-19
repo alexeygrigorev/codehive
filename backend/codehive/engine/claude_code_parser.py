@@ -211,8 +211,24 @@ def _extract_text_content(data: dict) -> str | None:
 
     The message may have content as a plain string, or as a list of content
     blocks (each with a ``type`` and ``text`` field).
+
+    Real Claude CLI formats handled:
+
+    - ``{"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}]}}``
+    - ``{"type": "result", "result": "final text", ...}``
+    - ``{"content": "plain string"}``
+    - ``{"content": [{"type": "text", "text": "..."}]}``
     """
+    # First, check for a top-level "result" string (used by result events)
+    result_field = data.get("result")
+    if isinstance(result_field, str) and result_field:
+        return result_field
+
     content = data.get("content", data.get("message"))
+
+    # If "message" is a nested dict (real assistant event format), look inside it
+    if isinstance(content, dict):
+        content = content.get("content")
 
     if isinstance(content, str):
         return content
