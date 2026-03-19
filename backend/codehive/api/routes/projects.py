@@ -15,6 +15,7 @@ from codehive.core.project import (
     ProjectNotFoundError,
     create_project,
     delete_project,
+    ensure_directory_with_git,
     get_or_create_project_by_path,
     get_project,
     get_project_by_path,
@@ -30,6 +31,10 @@ async def create_project_endpoint(
     body: ProjectCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ProjectRead:
+    # Handle directory creation and optional git init
+    if body.path:
+        ensure_directory_with_git(body.path, git_init=body.git_init)
+
     try:
         project = await create_project(
             db,

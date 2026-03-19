@@ -1,6 +1,7 @@
 """Project business logic (DB queries)."""
 
 import os
+import subprocess
 import uuid
 from datetime import datetime, timezone
 
@@ -105,6 +106,19 @@ async def delete_project(session: AsyncSession, project_id: uuid.UUID) -> None:
 
     await session.delete(project)
     await session.commit()
+
+
+def ensure_directory_with_git(path: str, *, git_init: bool = False) -> None:
+    """Create the directory if needed, and optionally run ``git init``.
+
+    * Always creates the directory (``os.makedirs`` with ``exist_ok=True``).
+    * When *git_init* is ``True`` and ``.git/`` does not already exist, runs
+      ``git init`` inside the directory.
+    """
+    resolved = os.path.normpath(os.path.expanduser(path))
+    os.makedirs(resolved, exist_ok=True)
+    if git_init and not os.path.isdir(os.path.join(resolved, ".git")):
+        subprocess.run(["git", "init"], cwd=resolved, check=True, capture_output=True)
 
 
 def normalize_path(path: str) -> str:

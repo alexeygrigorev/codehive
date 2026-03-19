@@ -1,12 +1,15 @@
-"""System endpoints: extended health check and maintenance mode."""
+"""System endpoints: extended health check, maintenance mode, directory browsing."""
 
-from fastapi import APIRouter, Depends, Request
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.__version__ import __version__
 from codehive.api.deps import get_db
+from codehive.config import Settings
 from codehive.db.models import Session as SessionModel
 
 system_router = APIRouter(prefix="/api/system", tags=["system"])
@@ -90,3 +93,96 @@ async def set_maintenance(
     """Toggle maintenance mode."""
     request.app.state.maintenance = body.enabled
     return MaintenanceResponse(maintenance=body.enabled)
+
+
+# ---------------------------------------------------------------------------
+# Default directory & directory browser
+# ---------------------------------------------------------------------------
+
+
+class DefaultDirectoryResponse(BaseModel):
+    default_directory: str
+
+
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    has_git: bool
+
+
+class DirectoryListResponse(BaseModel):
+    path: str
+    parent: str | None
+    directories: list[DirectoryEntry]
+
+
+def _resolve_projects_dir() -> str:
+    """Return the resolved absolute projects directory from settings."""
+    settings = Settings()
+    return os.path.normpath(os.path.expanduser(settings.projects_dir))
+
+
+def _is_within_home(path: str) -> bool:
+    """Check whether *path* is within the user's home directory."""
+    home = os.path.expanduser("~")
+    # Normalize to avoid traversal tricks
+    normalized = os.path.normpath(os.path.realpath(path))
+    return normalized == home or normalized.startswith(home + os.sep)
+
+
+@system_router.get("/default-directory", response_model=DefaultDirectoryResponse)
+async def default_directory() -> DefaultDirectoryResponse:
+    """Return the configured default base directory for new projects."""
+    resolved = _resolve_projects_dir()
+    # Ensure trailing slash so the user can just append a project name
+    return DefaultDirectoryResponse(default_directory=resolved + "/")
+
+
+@system_router.get("/directories", response_model=DirectoryListResponse)
+async def list_directories(
+    path: str = Query(..., description="Absolute directory path to list"),
+) -> DirectoryListResponse:
+    """List subdirectories at the given path.
+
+    Security: the path must be within the user's home directory.
+    Hidden directories (starting with ``"."``) are excluded from the listing.
+    """
+    normalized = os.path.normpath(os.path.expanduser(path))
+
+    if not _is_within_home(normalized):
+        raise HTTPException(status_code=403, detail="Path is outside the home directory")
+
+    if not os.path.isdir(normalized):
+        raise HTTPException(status_code=404, detail="Directory not found")
+
+    entries: list[DirectoryEntry] = []
+    try:
+        with os.scandir(normalized) as it:
+            for entry in sorted(it, key=lambda e: e.name.lower()):
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name.startswith("."):
+                    continue
+                # Check symlink doesn't escape home
+                entry_real = os.path.realpath(entry.path)
+                if not _is_within_home(entry_real):
+                    continue
+                has_git = os.path.isdir(os.path.join(entry.path, ".git"))
+                entries.append(
+                    DirectoryEntry(
+                        name=entry.name,
+                        path=os.path.normpath(entry.path),
+                        has_git=has_git,
+                    )
+                )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    parent = os.path.dirname(normalized)
+    parent_val: str | None = parent if _is_within_home(parent) else None
+
+    return DirectoryListResponse(
+        path=normalized,
+        parent=parent_val,
+        directories=entries,
+    )

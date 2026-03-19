@@ -75,6 +75,8 @@ class Settings(BaseSettings):
         "question.created",
     ]
 
+    projects_dir: str = "~/codehive"
+
     backup_dir: str = "./backups"
     backup_retention: int = 7
 

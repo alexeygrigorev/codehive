@@ -22,6 +22,7 @@ export async function createProject(body: {
   name: string;
   path?: string;
   description?: string;
+  git_init?: boolean;
 }): Promise<ProjectRead> {
   const response = await apiClient.post("/api/projects", body);
   if (!response.ok) {

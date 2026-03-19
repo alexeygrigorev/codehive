@@ -13,6 +13,7 @@ class ProjectCreate(BaseModel):
     path: str | None = None
     description: str | None = None
     archetype: str | None = None
+    git_init: bool = False
 
 
 class ProjectUpdate(BaseModel):
