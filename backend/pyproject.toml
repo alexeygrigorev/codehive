@@ -58,6 +58,7 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "pytest-cov",
     "pytest-textual-snapshot>=1.0.0",
+    "pytest-timeout>=2.4.0",
     "pyyaml>=6.0.3",
     "ruff",
     "textual-dev>=1.8.0",

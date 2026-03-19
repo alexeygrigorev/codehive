@@ -173,3 +173,33 @@ class TestClaudeIntegration:
 - Copilot captures session ID from the `result` event (not `init`), which may not always be present for simple prompts. Resume test is optional for copilot -- only add if the session ID capture works reliably.
 - The `xfail` approach (not `skip`) is intentional: missing CLIs show as expected failures in the report, making it visible which engines were not tested. Tests that were expected to fail but actually passed will show as `XPASS`, alerting that a CLI became available.
 - Timeout of 120 seconds per test is generous but necessary -- LLM calls can be slow.
+
+## Log
+
+### [SWE] 2026-03-19 14:30
+- Created integration test directory `backend/tests_integration/` with all required files
+- Added `pytest-timeout` dev dependency
+- Files created:
+  - `backend/tests_integration/__init__.py`
+  - `backend/tests_integration/conftest.py` -- `require_cli()`, `tmp_workdir`, `session_id` fixtures, `collect_events()` helper
+  - `backend/tests_integration/test_claude_integration.py` -- 4 tests (basic_chat, event_types, session_resume, error_handling)
+  - `backend/tests_integration/test_codex_integration.py` -- 3 tests (basic_chat, event_types, error_handling)
+  - `backend/tests_integration/test_copilot_integration.py` -- 3 tests (basic_chat, event_types, error_handling)
+  - `backend/tests_integration/test_gemini_integration.py` -- 4 tests (basic_chat, event_types, session_resume, error_handling)
+- Tests added: 14 integration tests across 4 files
+- Build results: `uv run pytest tests_integration/ --collect-only` collects all 14 tests
+- Ruff: clean (`ruff check` and `ruff format --check` both pass)
+- Unit tests: no regressions (2088 pass, 9 pre-existing failures unrelated to this change)
+
+**Integration test results (all 4 CLIs installed on this machine):**
+- Copilot: 3/3 PASS -- parser handles real output correctly
+- Gemini: 4/4 PASS -- parser handles real output correctly, session resume works
+- Claude: 1/4 PASS (error_handling), 3/4 FAIL -- **parser bug discovered**: `ClaudeCodeParser` does not extract text from the real `assistant` event format (nested `message.content` blocks) or the `result` event's `result` field. Real output only produces `session.started`, `rate_limit.updated`, `usage.model_breakdown` -- no content events.
+- Codex: 1/3 PASS (error_handling), 2/3 FAIL -- **parser bug discovered**: `CodexCLIParser` does not handle `item.completed` event type (real codex outputs `thread.started`, `turn.started`, `item.completed`, `turn.completed`). Additionally, `CodexCLIProcess` passes working_dir via `-C` flag but stdout appears empty when piped.
+
+**Known parser gaps revealed by integration tests:**
+1. `ClaudeCodeParser._extract_text_content()` gets `data.get("message")` which returns the full message dict (not a string/list), so it returns None for `assistant` events. The real format nests content under `data["message"]["content"]`.
+2. `ClaudeCodeParser` result handler: real `result` events have `"result": "hello world"` as a top-level string field, but parser only checks `content`/`message` via `_extract_text_content()`.
+3. `CodexCLIParser` does not recognize `item.completed`, `thread.started`, `turn.started`, or `turn.completed` event types from real `codex exec --json` output.
+
+These are legitimate parser bugs that should be fixed in separate issues. The integration tests correctly expose them.
