@@ -151,12 +151,19 @@ async def _collect_events(aiter: Any) -> list[dict]:
 
 
 class TestOrchestratorToolFiltering:
-    def test_filter_returns_exactly_four_tools(self):
-        """filter_tools(TOOL_DEFINITIONS) returns exactly 4 allowed tools."""
+    def test_filter_returns_exactly_six_tools(self):
+        """filter_tools(TOOL_DEFINITIONS) returns exactly 6 allowed tools."""
         filtered = filter_tools(TOOL_DEFINITIONS)
         names = {t["name"] for t in filtered}
-        assert names == {"spawn_subagent", "read_file", "search_files", "run_shell"}
-        assert len(filtered) == 4
+        assert names == {
+            "spawn_subagent",
+            "read_file",
+            "search_files",
+            "run_shell",
+            "get_subsession_result",
+            "list_subsessions",
+        }
+        assert len(filtered) == 6
 
     def test_edit_file_not_in_filtered(self):
         """edit_file is NOT in the filtered list."""
@@ -301,12 +308,19 @@ class TestZaiEngineOrchestratorMode:
             engine.send_message(session_id, "Plan the work", mode="orchestrator")
         )
 
-        # Verify API was called with filtered tools (4 tools) and system prompt
+        # Verify API was called with filtered tools (6 tools) and system prompt
         call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
-        assert tool_names == {"spawn_subagent", "read_file", "search_files", "run_shell"}
-        assert len(tools_passed) == 4
+        assert tool_names == {
+            "spawn_subagent",
+            "read_file",
+            "search_files",
+            "run_shell",
+            "get_subsession_result",
+            "list_subsessions",
+        }
+        assert len(tools_passed) == 6
 
         # System prompt included
         assert "system" in call_kwargs.kwargs
@@ -382,10 +396,10 @@ class TestZaiEngineOrchestratorMode:
         call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
-        # Full set: 8 tools (including query_agent and send_to_agent)
+        # Full set: 10 tools (including query_agent, send_to_agent, get_subsession_result, list_subsessions)
         assert "edit_file" in tool_names
         assert "git_commit" in tool_names
-        assert len(tools_passed) == 8
+        assert len(tools_passed) == 10
 
         # No system prompt
         assert "system" not in call_kwargs.kwargs

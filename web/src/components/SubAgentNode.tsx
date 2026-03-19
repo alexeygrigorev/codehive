@@ -11,6 +11,14 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "bg-red-500",
 };
 
+const ENGINE_BADGE_COLORS: Record<string, string> = {
+  claude_code:
+    "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  native: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  gemini_cli:
+    "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+};
+
 interface SubAgentNodeProps {
   session: SessionRead;
   children?: SessionRead[];
@@ -53,6 +61,13 @@ export default function SubAgentNode({
         >
           {session.name}
         </Link>
+        {session.engine && (
+          <span
+            className={`engine-badge inline-block rounded px-1.5 py-0.5 text-xs font-medium ${ENGINE_BADGE_COLORS[session.engine] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"}`}
+          >
+            {session.engine}
+          </span>
+        )}
         {messageCount !== undefined && messageCount > 0 && (
           <span className="message-count-badge inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-xs text-white">
             {messageCount}

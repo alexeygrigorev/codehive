@@ -29,6 +29,8 @@ ORCHESTRATOR_ALLOWED_TOOLS: set[str] = {
     "read_file",
     "search_files",
     "run_shell",
+    "get_subsession_result",
+    "list_subsessions",
 }
 
 

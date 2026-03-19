@@ -45,6 +45,8 @@ from codehive.engine.orchestrator import (
     ORCHESTRATOR_SYSTEM_PROMPT,
     filter_tools,
 )
+from codehive.engine.tools.get_subsession_result import GET_SUBSESSION_RESULT_TOOL
+from codehive.engine.tools.list_subsessions import LIST_SUBSESSIONS_TOOL
 from codehive.engine.tools.query_agent import QUERY_AGENT_TOOL
 from codehive.engine.tools.send_to_agent import SEND_TO_AGENT_TOOL
 from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
@@ -129,6 +131,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     SPAWN_SUBAGENT_TOOL,
     QUERY_AGENT_TOOL,
     SEND_TO_AGENT_TOOL,
+    GET_SUBSESSION_RESULT_TOOL,
+    LIST_SUBSESSIONS_TOOL,
 ]
 
 # Default model for the native engine
@@ -927,6 +931,38 @@ class ZaiEngine:
                     target_session_id=target_id,
                     message=tool_input["message"],
                 )
+                return {"content": json.dumps(result)}
+
+            elif tool_name == "get_subsession_result":
+                if session_id is None or db is None:
+                    return {
+                        "content": "get_subsession_result requires an active session with DB access",
+                        "is_error": True,
+                    }
+                try:
+                    child_id = uuid.UUID(tool_input["session_id"])
+                    result = await self._subagent_manager.get_result(
+                        db,
+                        child_session_id=child_id,
+                        parent_session_id=session_id,
+                    )
+                except Exception as exc:
+                    return {"content": str(exc), "is_error": True}
+                return {"content": json.dumps(result)}
+
+            elif tool_name == "list_subsessions":
+                if session_id is None or db is None:
+                    return {
+                        "content": "list_subsessions requires an active session with DB access",
+                        "is_error": True,
+                    }
+                try:
+                    result = await self._subagent_manager.list_subsessions(
+                        db,
+                        parent_session_id=session_id,
+                    )
+                except Exception as exc:
+                    return {"content": str(exc), "is_error": True}
                 return {"content": json.dumps(result)}
 
             else:

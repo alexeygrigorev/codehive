@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchSubAgents } from "@/api/subagents";
 import type { SessionRead } from "@/api/sessions";
+import { useWebSocketSafe } from "@/context/WebSocketContext";
+import type { EventCallback } from "@/api/websocket";
 import AggregatedProgress from "@/components/AggregatedProgress";
 import SubAgentTree from "@/components/SubAgentTree";
 
@@ -12,6 +14,16 @@ export default function SubAgentPanel({ sessionId }: SubAgentPanelProps) {
   const [subAgents, setSubAgents] = useState<SessionRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const ws = useWebSocketSafe();
+
+  const reload = useCallback(async () => {
+    try {
+      const data = await fetchSubAgents(sessionId);
+      setSubAgents(data);
+    } catch {
+      // Silently ignore reload failures -- initial load handles errors
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +56,25 @@ export default function SubAgentPanel({ sessionId }: SubAgentPanelProps) {
       cancelled = true;
     };
   }, [sessionId]);
+
+  // Listen for subagent.spawned events to auto-refresh the list
+  useEffect(() => {
+    if (!ws) return;
+
+    const handleEvent: EventCallback = (event) => {
+      if (
+        event.type === "subagent.spawned" ||
+        event.type === "subagent.report"
+      ) {
+        reload();
+      }
+    };
+
+    ws.onEvent(handleEvent);
+    return () => {
+      ws.removeListener(handleEvent);
+    };
+  }, [ws, reload]);
 
   if (loading) {
     return <p className="text-gray-500 dark:text-gray-400">Loading sub-agents...</p>;

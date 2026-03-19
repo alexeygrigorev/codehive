@@ -13,6 +13,7 @@ from codehive.core.session import (
     SessionNotFoundError,
     create_session,
     get_session,
+    list_child_sessions,
 )
 from codehive.engine.tools.spawn_subagent import VALID_ENGINE_TYPES
 
@@ -271,3 +272,110 @@ class SubAgentManager:
             )
 
         return validated
+
+    async def get_result(
+        self,
+        db: AsyncSession,
+        *,
+        child_session_id: uuid.UUID,
+        parent_session_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Get structured result for a child subsession.
+
+        For completed/failed/blocked sessions, synthesises a report from
+        the last ``subagent.report`` event or the last assistant message.
+        For in-progress sessions, returns status with event count.
+
+        Raises SessionNotFoundError if the child does not exist.
+        Raises ValueError if the child is not owned by the parent.
+        """
+        child = await get_session(db, child_session_id)
+        if child is None:
+            raise SessionNotFoundError(f"Session {child_session_id} not found")
+
+        if child.parent_session_id != parent_session_id:
+            raise ValueError(f"Session {child_session_id} is not a child of the current session")
+
+        status = child.status
+
+        # For terminal statuses, try to find a stored report event
+        if status in _VALID_STATUSES and self._event_bus is not None:
+            report_events = await self._event_bus.get_events(
+                db,
+                child_session_id,
+                event_type="subagent.report",
+                limit=1,
+            )
+            if report_events:
+                return report_events[0].data
+
+        # For terminal statuses without a report event, synthesise from last assistant message
+        if status in _VALID_STATUSES and self._event_bus is not None:
+            msg_events = await self._event_bus.get_events(
+                db,
+                child_session_id,
+                event_type="message.created",
+                limit=50,
+            )
+            # Find the last assistant message
+            summary = None
+            for evt in reversed(msg_events):
+                if evt.data.get("role") == "assistant":
+                    content = evt.data.get("content", "")
+                    summary = content[:500] if content else None
+                    break
+
+            return {
+                "status": status,
+                "summary": summary,
+                "files_changed": [],
+                "tests": {"added": 0, "passing": 0},
+                "warnings": [],
+            }
+
+        # For terminal statuses with no event bus
+        if status in _VALID_STATUSES:
+            return {
+                "status": status,
+                "summary": None,
+                "files_changed": [],
+                "tests": {"added": 0, "passing": 0},
+                "warnings": [],
+            }
+
+        # In-progress: return status with event count
+        event_count = 0
+        if self._event_bus is not None:
+            all_events = await self._event_bus.get_events(
+                db,
+                child_session_id,
+                limit=1000,
+            )
+            event_count = len(all_events)
+
+        return {
+            "status": status,
+            "summary": None,
+            "progress": f"{event_count} events recorded",
+        }
+
+    async def list_subsessions(
+        self,
+        db: AsyncSession,
+        parent_session_id: uuid.UUID,
+    ) -> list[dict[str, Any]]:
+        """List all child sessions of the given parent.
+
+        Returns a list of dicts with id, name, engine, and status.
+        Raises SessionNotFoundError if the parent does not exist.
+        """
+        children = await list_child_sessions(db, parent_session_id)
+        return [
+            {
+                "id": str(child.id),
+                "name": child.name,
+                "engine": child.engine,
+                "status": child.status,
+            }
+            for child in children
+        ]

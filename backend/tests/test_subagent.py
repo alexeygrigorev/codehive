@@ -28,6 +28,7 @@ from codehive.core.subagent import InvalidEngineError, InvalidReportError, SubAg
 from codehive.db.models import Base, Project
 from codehive.db.models import Session as SessionModel
 from codehive.engine.tools.spawn_subagent import VALID_ENGINE_TYPES
+from codehive.engine.orchestrator import ORCHESTRATOR_ALLOWED_TOOLS
 from codehive.engine.zai_engine import ZaiEngine, TOOL_DEFINITIONS
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -964,3 +965,354 @@ async def _async_iter(items: list[Any]) -> Any:
     """Create an async iterator from a list for mocking send_message."""
     for item in items:
         yield item
+
+
+# ---------------------------------------------------------------------------
+# Unit: get_subsession_result -- completed with report
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestGetSubsessionResult:
+    async def test_completed_with_report(
+        self, db_session: AsyncSession, project: Project, parent_session: SessionModel
+    ):
+        """Completed subsession with a stored report returns full structured report."""
+        bus = _make_event_bus_mock()
+
+        # Make get_events return a fake report event
+        fake_report_data = {
+            "status": "completed",
+            "summary": "Added health check endpoint",
+            "files_changed": ["api/health.py"],
+            "tests": {"added": 2, "passing": 2},
+            "warnings": [],
+        }
+
+        class FakeEvent:
+            def __init__(self, data: dict):
+                self.data = data
+
+        bus.get_events = AsyncMock(return_value=[FakeEvent(fake_report_data)])
+
+        manager = SubAgentManager(event_bus=bus)
+        child = await create_session(
+            db_session,
+            project_id=project.id,
+            name="child-completed",
+            engine="native",
+            mode="execution",
+            parent_session_id=parent_session.id,
+        )
+        # Set child status to completed
+        child.status = "completed"
+        await db_session.commit()
+
+        result = await manager.get_result(
+            db_session,
+            child_session_id=child.id,
+            parent_session_id=parent_session.id,
+        )
+        assert result["status"] == "completed"
+        assert result["summary"] == "Added health check endpoint"
+        assert result["files_changed"] == ["api/health.py"]
+        assert result["tests"] == {"added": 2, "passing": 2}
+
+    async def test_running_subsession(
+        self, db_session: AsyncSession, project: Project, parent_session: SessionModel
+    ):
+        """Running subsession returns status with event count."""
+        bus = _make_event_bus_mock()
+        bus.get_events = AsyncMock(return_value=[object(), object(), object()])
+
+        manager = SubAgentManager(event_bus=bus)
+        child = await create_session(
+            db_session,
+            project_id=project.id,
+            name="child-running",
+            engine="native",
+            mode="execution",
+            parent_session_id=parent_session.id,
+        )
+        child.status = "executing"
+        await db_session.commit()
+
+        result = await manager.get_result(
+            db_session,
+            child_session_id=child.id,
+            parent_session_id=parent_session.id,
+        )
+        assert result["status"] == "executing"
+        assert result["summary"] is None
+        assert "3 events" in result["progress"]
+
+    async def test_failed_subsession_with_last_message(
+        self, db_session: AsyncSession, project: Project, parent_session: SessionModel
+    ):
+        """Failed subsession without report uses last assistant message as summary."""
+        bus = _make_event_bus_mock()
+
+        class FakeEvent:
+            def __init__(self, data: dict):
+                self.data = data
+
+        # First call for report events returns empty, second for messages
+        bus.get_events = AsyncMock(
+            side_effect=[
+                [],  # no subagent.report events
+                [
+                    FakeEvent({"role": "user", "content": "do something"}),
+                    FakeEvent({"role": "assistant", "content": "Error occurred in tests"}),
+                ],
+            ]
+        )
+
+        manager = SubAgentManager(event_bus=bus)
+        child = await create_session(
+            db_session,
+            project_id=project.id,
+            name="child-failed",
+            engine="native",
+            mode="execution",
+            parent_session_id=parent_session.id,
+        )
+        child.status = "failed"
+        await db_session.commit()
+
+        result = await manager.get_result(
+            db_session,
+            child_session_id=child.id,
+            parent_session_id=parent_session.id,
+        )
+        assert result["status"] == "failed"
+        assert result["summary"] == "Error occurred in tests"
+
+    async def test_not_child_of_caller(
+        self, db_session: AsyncSession, project: Project, parent_session: SessionModel
+    ):
+        """Session not a child of caller returns error."""
+        manager = SubAgentManager()
+        # Create an unrelated session (no parent)
+        other = await create_session(
+            db_session,
+            project_id=project.id,
+            name="other-session",
+            engine="native",
+            mode="execution",
+        )
+        with pytest.raises(ValueError, match="is not a child of the current session"):
+            await manager.get_result(
+                db_session,
+                child_session_id=other.id,
+                parent_session_id=parent_session.id,
+            )
+
+    async def test_nonexistent_session(
+        self, db_session: AsyncSession, parent_session: SessionModel
+    ):
+        """Nonexistent session ID raises SessionNotFoundError."""
+        manager = SubAgentManager()
+        with pytest.raises(SessionNotFoundError):
+            await manager.get_result(
+                db_session,
+                child_session_id=uuid.uuid4(),
+                parent_session_id=parent_session.id,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Unit: list_subsessions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestListSubsessions:
+    async def test_list_with_three_children(
+        self, db_session: AsyncSession, project: Project, parent_session: SessionModel
+    ):
+        """Session with 3 children returns list of 3 with correct fields."""
+        for i, eng in enumerate(["native", "claude_code", "codex_cli"]):
+            await create_session(
+                db_session,
+                project_id=project.id,
+                name=f"child-{i}",
+                engine=eng,
+                mode="execution",
+                parent_session_id=parent_session.id,
+            )
+
+        manager = SubAgentManager()
+        result = await manager.list_subsessions(db_session, parent_session.id)
+        assert len(result) == 3
+        engines = {r["engine"] for r in result}
+        assert engines == {"native", "claude_code", "codex_cli"}
+        for item in result:
+            assert "id" in item
+            assert "name" in item
+            assert "engine" in item
+            assert "status" in item
+
+    async def test_list_empty(self, db_session: AsyncSession, parent_session: SessionModel):
+        """Session with 0 children returns empty list."""
+        manager = SubAgentManager()
+        result = await manager.list_subsessions(db_session, parent_session.id)
+        assert result == []
+
+    async def test_list_correct_engines(
+        self, db_session: AsyncSession, project: Project, parent_session: SessionModel
+    ):
+        """Returns correct engine field per child."""
+        await create_session(
+            db_session,
+            project_id=project.id,
+            name="child-native",
+            engine="native",
+            mode="execution",
+            parent_session_id=parent_session.id,
+        )
+        await create_session(
+            db_session,
+            project_id=project.id,
+            name="child-claude",
+            engine="claude_code",
+            mode="execution",
+            parent_session_id=parent_session.id,
+        )
+
+        manager = SubAgentManager()
+        result = await manager.list_subsessions(db_session, parent_session.id)
+        by_name = {r["name"]: r for r in result}
+        assert by_name["child-native"]["engine"] == "native"
+        assert by_name["child-claude"]["engine"] == "claude_code"
+
+
+# ---------------------------------------------------------------------------
+# Unit: tool schemas
+# ---------------------------------------------------------------------------
+
+
+class TestGetSubsessionResultToolSchema:
+    def test_tool_present_in_definitions(self):
+        names = [t["name"] for t in TOOL_DEFINITIONS]
+        assert "get_subsession_result" in names
+
+    def test_tool_schema_structure(self):
+        tool = next(t for t in TOOL_DEFINITIONS if t["name"] == "get_subsession_result")
+        schema = tool["input_schema"]
+        assert schema["type"] == "object"
+        assert "session_id" in schema["properties"]
+        assert schema["properties"]["session_id"]["type"] == "string"
+        assert "session_id" in schema["required"]
+
+
+class TestListSubsessionsToolSchema:
+    def test_tool_present_in_definitions(self):
+        names = [t["name"] for t in TOOL_DEFINITIONS]
+        assert "list_subsessions" in names
+
+    def test_tool_schema_structure(self):
+        tool = next(t for t in TOOL_DEFINITIONS if t["name"] == "list_subsessions")
+        schema = tool["input_schema"]
+        assert schema["type"] == "object"
+
+
+# ---------------------------------------------------------------------------
+# Integration: tool dispatch in ZaiEngine
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestGetSubsessionResultToolDispatch:
+    async def test_dispatch_calls_get_result(self, tmp_path: Path):
+        """_execute_tool_direct('get_subsession_result', ...) calls get_result."""
+        client_mock = AsyncMock()
+        event_bus = AsyncMock()
+        engine = ZaiEngine(
+            client=client_mock,
+            event_bus=event_bus,
+            file_ops=FileOps(tmp_path),
+            shell_runner=ShellRunner(),
+            git_ops=GitOps(tmp_path),
+            diff_service=DiffService(),
+        )
+
+        mock_result = {
+            "status": "completed",
+            "summary": "Done",
+            "files_changed": ["a.py"],
+            "tests": {"added": 1, "passing": 1},
+            "warnings": [],
+        }
+        engine._subagent_manager = AsyncMock()
+        engine._subagent_manager.get_result = AsyncMock(return_value=mock_result)
+
+        db_mock = AsyncMock()
+        session_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+
+        result = await engine._execute_tool_direct(
+            "get_subsession_result",
+            {"session_id": str(child_id)},
+            session_id=session_id,
+            db=db_mock,
+        )
+
+        engine._subagent_manager.get_result.assert_called_once_with(
+            db_mock,
+            child_session_id=child_id,
+            parent_session_id=session_id,
+        )
+        assert not result.get("is_error", False)
+        assert "completed" in result["content"]
+
+
+@pytest.mark.asyncio
+class TestListSubsessionsToolDispatch:
+    async def test_dispatch_calls_list_subsessions(self, tmp_path: Path):
+        """_execute_tool_direct('list_subsessions', ...) calls list_subsessions."""
+        client_mock = AsyncMock()
+        event_bus = AsyncMock()
+        engine = ZaiEngine(
+            client=client_mock,
+            event_bus=event_bus,
+            file_ops=FileOps(tmp_path),
+            shell_runner=ShellRunner(),
+            git_ops=GitOps(tmp_path),
+            diff_service=DiffService(),
+        )
+
+        mock_result = [
+            {"id": str(uuid.uuid4()), "name": "child-1", "engine": "native", "status": "idle"},
+        ]
+        engine._subagent_manager = AsyncMock()
+        engine._subagent_manager.list_subsessions = AsyncMock(return_value=mock_result)
+
+        db_mock = AsyncMock()
+        session_id = uuid.uuid4()
+
+        result = await engine._execute_tool_direct(
+            "list_subsessions",
+            {},
+            session_id=session_id,
+            db=db_mock,
+        )
+
+        engine._subagent_manager.list_subsessions.assert_called_once_with(
+            db_mock,
+            parent_session_id=session_id,
+        )
+        assert not result.get("is_error", False)
+        assert "child-1" in result["content"]
+
+
+# ---------------------------------------------------------------------------
+# Integration: ORCHESTRATOR_ALLOWED_TOOLS
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorAllowedTools:
+    def test_get_subsession_result_in_allowed(self):
+        assert "get_subsession_result" in ORCHESTRATOR_ALLOWED_TOOLS
+
+    def test_list_subsessions_in_allowed(self):
+        assert "list_subsessions" in ORCHESTRATOR_ALLOWED_TOOLS

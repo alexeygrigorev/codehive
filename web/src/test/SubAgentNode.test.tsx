@@ -130,4 +130,66 @@ describe("SubAgentNode", () => {
     const link = screen.getByRole("link", { name: "Test Agent" });
     expect(link).toHaveAttribute("href", "/sessions/sub-3");
   });
+
+  it("renders an engine badge showing the engine type", () => {
+    const session = makeSession("sub-7", "SWE Agent", "executing", "s1");
+    render(
+      <MemoryRouter>
+        <ul>
+          <SubAgentNode
+            session={session}
+            allSessions={[session]}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    const badge = document.querySelector(".engine-badge");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toBe("claude");
+  });
+
+  it("renders correct engine badge for claude_code engine", () => {
+    const session = {
+      ...makeSession("sub-8", "CC Agent", "idle", "s1"),
+      engine: "claude_code",
+    };
+    render(
+      <MemoryRouter>
+        <ul>
+          <SubAgentNode
+            session={session}
+            allSessions={[session]}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    const badge = document.querySelector(".engine-badge");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toBe("claude_code");
+    expect(badge!.className).toContain("bg-orange-100");
+  });
+
+  it("renders correct engine badge for native engine", () => {
+    const session = {
+      ...makeSession("sub-9", "Native Agent", "idle", "s1"),
+      engine: "native",
+    };
+    render(
+      <MemoryRouter>
+        <ul>
+          <SubAgentNode
+            session={session}
+            allSessions={[session]}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    const badge = document.querySelector(".engine-badge");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toBe("native");
+    expect(badge!.className).toContain("bg-green-100");
+  });
 });

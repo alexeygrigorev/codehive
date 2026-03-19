@@ -6,6 +6,7 @@ import { useWebSocket } from "@/context/WebSocketContext";
 import { approveAction, rejectAction } from "@/api/approvals";
 import MessageBubble from "./MessageBubble";
 import ToolCallResult from "./ToolCallResult";
+import SubAgentEventCard from "./SubAgentEventCard";
 import ApprovalPrompt from "./ApprovalPrompt";
 import type { ApprovalStatus } from "./ApprovalPrompt";
 import ThinkingIndicator from "./ThinkingIndicator";
@@ -15,7 +16,7 @@ import { sendMessage } from "@/api/messages";
 
 interface ChatItem {
   id: string;
-  kind: "message" | "tool_call" | "approval";
+  kind: "message" | "tool_call" | "approval" | "subagent_event";
   event: SessionEvent;
   finishEvent?: SessionEvent;
 }
@@ -33,6 +34,8 @@ const CHAT_EVENT_TYPES = [
   "tool.call.finished",
   "approval.required",
   "context.compacted",
+  "subagent.spawned",
+  "subagent.report",
   "error",
 ];
 
@@ -134,6 +137,11 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
         });
       } else if (event.type === "approval.required") {
         items.push({ id: event.id, kind: "approval", event });
+      } else if (
+        event.type === "subagent.spawned" ||
+        event.type === "subagent.report"
+      ) {
+        items.push({ id: event.id, kind: "subagent_event", event });
       } else if (event.type === "context.compacted") {
         const mc = event.data.messages_compacted ?? 0;
         const mp = event.data.messages_preserved ?? 0;
@@ -297,6 +305,24 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
                 key={item.id}
                 role={item.event.data.role as string}
                 content={item.event.data.content as string}
+              />
+            );
+          }
+          if (item.kind === "subagent_event") {
+            const d = item.event.data;
+            return (
+              <SubAgentEventCard
+                key={item.id}
+                eventType={
+                  item.event.type as "subagent.spawned" | "subagent.report"
+                }
+                childName={d.child_name as string | undefined}
+                childSessionId={d.child_session_id as string | undefined}
+                engine={d.engine as string | undefined}
+                mission={d.mission as string | undefined}
+                status={d.status as string | undefined}
+                summary={d.summary as string | undefined}
+                filesChanged={d.files_changed as number | undefined}
               />
             );
           }
