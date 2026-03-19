@@ -328,6 +328,22 @@ async def _build_engine(session_config: dict, engine_type: str = "native") -> An
             working_dir=str(project_root),
         )
 
+    if engine_type == "copilot_cli":
+        from codehive.engine.copilot_cli_engine import CopilotCLIEngine
+
+        return CopilotCLIEngine(
+            diff_service=diff_service,
+            working_dir=str(project_root),
+        )
+
+    if engine_type == "gemini_cli":
+        from codehive.engine.gemini_cli_engine import GeminiCLIEngine
+
+        return GeminiCLIEngine(
+            diff_service=diff_service,
+            working_dir=str(project_root),
+        )
+
     if engine_type == "codex":
         from openai import AsyncOpenAI
 

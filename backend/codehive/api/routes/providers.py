@@ -47,6 +47,12 @@ async def list_providers() -> list[ProviderInfo]:
     # Codex: CLI-based provider
     codex_available, codex_reason = _check_cli_available("codex")
 
+    # Copilot: CLI-based provider
+    copilot_available, copilot_reason = _check_cli_available("copilot")
+
+    # Gemini: CLI-based provider
+    gemini_available, gemini_reason = _check_cli_available("gemini")
+
     # OpenAI API: key-based provider
     openai_key = (
         settings.openai_api_key
@@ -91,5 +97,19 @@ async def list_providers() -> list[ProviderInfo]:
             available=zai_available,
             reason=zai_reason,
             default_model="glm-4.7",
+        ),
+        ProviderInfo(
+            name="copilot",
+            type="cli",
+            available=copilot_available,
+            reason=copilot_reason,
+            default_model="default",
+        ),
+        ProviderInfo(
+            name="gemini",
+            type="cli",
+            available=gemini_available,
+            reason=gemini_reason,
+            default_model="auto-gemini-3",
         ),
     ]

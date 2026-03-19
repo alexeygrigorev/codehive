@@ -22,20 +22,22 @@ class TestProvidersEndpoint:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_list_providers_returns_all_four(self):
-        """Endpoint returns claude, codex, openai, and zai providers."""
+    async def test_list_providers_returns_all_six(self):
+        """Endpoint returns claude, codex, openai, zai, copilot, and gemini providers."""
         from codehive.api.routes.providers import list_providers
 
         with patch("codehive.api.routes.providers.shutil") as mock_shutil:
             mock_shutil.which.return_value = None
             result = await list_providers()
 
-        assert len(result) == 4
+        assert len(result) == 6
         names = [p.name for p in result]
         assert "claude" in names
         assert "codex" in names
         assert "openai" in names
         assert "zai" in names
+        assert "copilot" in names
+        assert "gemini" in names
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
@@ -234,7 +236,7 @@ class TestFullProviderList:
             mock_shutil.which.side_effect = mock_which
             result = await list_providers()
 
-        assert len(result) == 4
+        assert len(result) == 6
 
         claude = next(p for p in result if p.name == "claude")
         assert claude.available is True
