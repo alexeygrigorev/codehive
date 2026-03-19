@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
 from codehive.core.usage import estimate_cost, get_context_usage
+from codehive.db.models import ModelUsageSnapshot, RateLimitSnapshot
 from codehive.db.models import Session as SessionModel
 from codehive.db.models import UsageRecord
 
@@ -168,3 +169,95 @@ async def get_session_usage(
     rows = result.scalars().all()
     records = [_record_to_read(r) for r in rows]
     return _compute_summary(records)
+
+
+# ---------------------------------------------------------------------------
+# Plan limits & per-model breakdown
+# ---------------------------------------------------------------------------
+
+
+class RateLimitRead(BaseModel):
+    rate_limit_type: str
+    utilization: float
+    resets_at: int
+    is_using_overage: bool
+    surpassed_threshold: float | None = None
+    captured_at: str
+
+
+class ModelUsageRead(BaseModel):
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    cost_usd: float
+    context_window: int | None = None
+    captured_at: str
+
+
+class UsageLimitsResponse(BaseModel):
+    rate_limits: list[RateLimitRead]
+    model_usage: list[ModelUsageRead]
+
+
+@usage_router.get("/limits", response_model=UsageLimitsResponse)
+async def get_usage_limits(
+    db: AsyncSession = Depends(get_db),
+) -> UsageLimitsResponse:
+    """Return latest rate limit snapshots and per-model usage breakdown."""
+    # Get the latest snapshot per rate_limit_type using a subquery
+    from sqlalchemy import func
+
+    # Latest rate limit per type
+    subq = (
+        select(
+            RateLimitSnapshot.rate_limit_type,
+            func.max(RateLimitSnapshot.captured_at).label("max_captured"),
+        )
+        .group_by(RateLimitSnapshot.rate_limit_type)
+        .subquery()
+    )
+    rl_query = select(RateLimitSnapshot).join(
+        subq,
+        (RateLimitSnapshot.rate_limit_type == subq.c.rate_limit_type)
+        & (RateLimitSnapshot.captured_at == subq.c.max_captured),
+    )
+    rl_result = await db.execute(rl_query)
+    rl_rows = rl_result.scalars().all()
+
+    rate_limits = [
+        RateLimitRead(
+            rate_limit_type=r.rate_limit_type,
+            utilization=r.utilization,
+            resets_at=r.resets_at,
+            is_using_overage=r.is_using_overage,
+            surpassed_threshold=r.surpassed_threshold,
+            captured_at=r.captured_at.isoformat() if r.captured_at else "",
+        )
+        for r in rl_rows
+    ]
+
+    # Get per-model usage from the most recent batch (same captured_at)
+    latest_mu = (select(func.max(ModelUsageSnapshot.captured_at).label("max_captured"))).subquery()
+    mu_query = select(ModelUsageSnapshot).where(
+        ModelUsageSnapshot.captured_at == select(latest_mu.c.max_captured).scalar_subquery()
+    )
+    mu_result = await db.execute(mu_query)
+    mu_rows = mu_result.scalars().all()
+
+    model_usage = [
+        ModelUsageRead(
+            model=m.model,
+            input_tokens=m.input_tokens,
+            output_tokens=m.output_tokens,
+            cache_read_tokens=m.cache_read_tokens,
+            cache_creation_tokens=m.cache_creation_tokens,
+            cost_usd=m.cost_usd,
+            context_window=m.context_window,
+            captured_at=m.captured_at.isoformat() if m.captured_at else "",
+        )
+        for m in mu_rows
+    ]
+
+    return UsageLimitsResponse(rate_limits=rate_limits, model_usage=model_usage)

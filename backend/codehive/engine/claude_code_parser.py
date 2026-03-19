@@ -139,19 +139,67 @@ class ClaudeCodeParser:
                 }
             ]
 
+        # --- Rate limit event (plan usage data) ---
+        if msg_type == "rate_limit_event":
+            info = data.get("rate_limit_info", {})
+            if isinstance(info, dict) and "utilization" in info:
+                return [
+                    {
+                        "type": "rate_limit.updated",
+                        "session_id": sid,
+                        "rate_limit_type": info.get("rateLimitType", "unknown"),
+                        "utilization": float(info.get("utilization", 0)),
+                        "resets_at": info.get("resetsAt", 0),
+                        "is_using_overage": bool(info.get("isUsingOverage", False)),
+                        "surpassed_threshold": info.get("surpassedThreshold"),
+                    }
+                ]
+            return []
+
         # --- Result message (final response) ---
         if msg_type == "result":
+            result_events: list[dict] = []
             content = _extract_text_content(data)
             if content is not None:
-                return [
+                result_events.append(
                     {
                         "type": "message.created",
                         "role": "assistant",
                         "content": content,
                         "session_id": sid,
                     }
-                ]
-            return []
+                )
+
+            # Extract per-model usage breakdown if present
+            model_usage = data.get("modelUsage")
+            if isinstance(model_usage, dict) and model_usage:
+                models = []
+                for model_name, usage_data in model_usage.items():
+                    if isinstance(usage_data, dict):
+                        models.append(
+                            {
+                                "model": model_name,
+                                "input_tokens": usage_data.get("inputTokens", 0),
+                                "output_tokens": usage_data.get("outputTokens", 0),
+                                "cache_read_tokens": usage_data.get("cacheReadInputTokens", 0),
+                                "cache_creation_tokens": usage_data.get(
+                                    "cacheCreationInputTokens", 0
+                                ),
+                                "cost_usd": usage_data.get("costUSD", 0),
+                                "context_window": usage_data.get("contextWindow"),
+                            }
+                        )
+                if models:
+                    result_events.append(
+                        {
+                            "type": "usage.model_breakdown",
+                            "session_id": sid,
+                            "models": models,
+                            "total_cost_usd": data.get("total_cost_usd", 0),
+                        }
+                    )
+
+            return result_events
 
         # Unrecognised type -- skip silently
         logger.debug("Skipping unrecognised Claude Code message type: %s", msg_type)

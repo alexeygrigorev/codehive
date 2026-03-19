@@ -79,3 +79,36 @@ export async function fetchSessionContext(sessionId: string): Promise<ContextUsa
   }
   return response.json() as Promise<ContextUsage>;
 }
+
+export interface RateLimitRead {
+  rate_limit_type: string;
+  utilization: number;
+  resets_at: number;
+  is_using_overage: boolean;
+  surpassed_threshold: number | null;
+  captured_at: string;
+}
+
+export interface ModelUsageRead {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  cost_usd: number;
+  context_window: number | null;
+  captured_at: string;
+}
+
+export interface UsageLimitsResponse {
+  rate_limits: RateLimitRead[];
+  model_usage: ModelUsageRead[];
+}
+
+export async function fetchUsageLimits(): Promise<UsageLimitsResponse> {
+  const response = await apiClient.get("/api/usage/limits");
+  if (!response.ok) {
+    throw new Error(`Failed to fetch usage limits: ${response.status}`);
+  }
+  return response.json() as Promise<UsageLimitsResponse>;
+}

@@ -1,10 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   fetchUsage,
+  fetchUsageLimits,
   type UsageResponse,
   type UsageRecordRead,
   type UsageSummary,
   type UsageParams,
+  type UsageLimitsResponse,
+  type RateLimitRead,
+  type ModelUsageRead,
 } from "@/api/usage";
 
 type TimeRange = "today" | "this_week" | "this_month" | "last_30_days" | "all_time";
@@ -45,9 +49,159 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
+function formatResetTime(resetsAt: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = resetsAt - now;
+  if (diff <= 0) return "resetting soon";
+
+  const hours = Math.floor(diff / 3600);
+  const minutes = Math.floor((diff % 3600) / 60);
+
+  if (hours > 24) {
+    const resetDate = new Date(resetsAt * 1000);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const dayName = days[resetDate.getDay()];
+    const timeStr = resetDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `resets ${dayName} ${timeStr}`;
+  }
+
+  if (hours > 0) return `resets in ${hours}h ${minutes}m`;
+  return `resets in ${minutes}m`;
+}
+
+function rateLimitLabel(type: string): string {
+  switch (type) {
+    case "seven_day":
+      return "Weekly";
+    case "hourly":
+      return "Session";
+    case "daily":
+      return "Daily";
+    default:
+      return type;
+  }
+}
+
+function progressBarColor(utilization: number): string {
+  if (utilization > 0.95) return "bg-red-500";
+  if (utilization > 0.8) return "bg-amber-500";
+  return "bg-green-500";
+}
+
+function PlanLimitsSection({ limits }: { limits: UsageLimitsResponse | null }) {
+  if (!limits) return null;
+
+  const hasData = limits.rate_limits.length > 0 || limits.model_usage.length > 0;
+
+  return (
+    <div className="mb-8" data-testid="plan-limits-section">
+      <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Plan Limits</h2>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-5">
+        <h3 className="text-base font-medium mb-4 dark:text-gray-200">Claude Code Plan</h3>
+
+        {!hasData && (
+          <p className="text-gray-500 dark:text-gray-400" data-testid="plan-limits-empty">
+            No plan usage data yet. Run a Claude Code session to see limits.
+          </p>
+        )}
+
+        {limits.rate_limits.length > 0 && (
+          <div className="space-y-4 mb-6">
+            {limits.rate_limits.map((rl: RateLimitRead) => (
+              <RateLimitBar key={rl.rate_limit_type} rateLimit={rl} />
+            ))}
+          </div>
+        )}
+
+        {limits.model_usage.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+              Per-Model Costs
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="model-usage-table">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700 text-left">
+                    <th className="px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">
+                      Model
+                    </th>
+                    <th className="px-3 py-2 text-gray-500 dark:text-gray-400 font-medium text-right">
+                      Input
+                    </th>
+                    <th className="px-3 py-2 text-gray-500 dark:text-gray-400 font-medium text-right">
+                      Output
+                    </th>
+                    <th className="px-3 py-2 text-gray-500 dark:text-gray-400 font-medium text-right">
+                      Cost
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {limits.model_usage.map((m: ModelUsageRead) => (
+                    <tr
+                      key={m.model}
+                      className="border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <td className="px-3 py-2 dark:text-gray-300 font-mono text-xs">
+                        {m.model}
+                      </td>
+                      <td className="px-3 py-2 dark:text-gray-300 text-right">
+                        {formatTokens(m.input_tokens)}
+                      </td>
+                      <td className="px-3 py-2 dark:text-gray-300 text-right">
+                        {formatTokens(m.output_tokens)}
+                      </td>
+                      <td className="px-3 py-2 dark:text-gray-300 text-right">
+                        {formatCost(m.cost_usd)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RateLimitBar({ rateLimit }: { rateLimit: RateLimitRead }) {
+  const pct = Math.round(rateLimit.utilization * 100);
+  const color = progressBarColor(rateLimit.utilization);
+  const label = rateLimitLabel(rateLimit.rate_limit_type);
+  const resetText = formatResetTime(rateLimit.resets_at);
+
+  return (
+    <div data-testid={`rate-limit-${rateLimit.rate_limit_type}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-medium dark:text-gray-200">
+          {label}
+          {rateLimit.is_using_overage && (
+            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-semibold">
+              Overage
+            </span>
+          )}
+        </span>
+        <span className="text-sm dark:text-gray-300">{pct}% used</span>
+      </div>
+      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+        <div
+          className={`${color} h-2.5 rounded-full transition-all`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+          data-testid={`rate-limit-bar-${rateLimit.rate_limit_type}`}
+        />
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{resetText}</p>
+    </div>
+  );
+}
+
 export default function UsagePage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("this_month");
   const [data, setData] = useState<UsageResponse | null>(null);
+  const [limits, setLimits] = useState<UsageLimitsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,8 +211,12 @@ export default function UsagePage() {
     try {
       const dateRange = getDateRange(timeRange);
       const params: UsageParams = { ...dateRange };
-      const result = await fetchUsage(params);
+      const [result, limitsResult] = await Promise.all([
+        fetchUsage(params),
+        fetchUsageLimits(),
+      ]);
       setData(result);
+      setLimits(limitsResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load usage data");
     } finally {
@@ -69,6 +227,19 @@ export default function UsagePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Auto-refresh limits every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const limitsResult = await fetchUsageLimits();
+        setLimits(limitsResult);
+      } catch {
+        // Silently ignore refresh errors
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const summary: UsageSummary = data?.summary ?? {
     total_requests: 0,
@@ -98,6 +269,9 @@ export default function UsagePage() {
       </div>
 
       {error && <p className="text-red-600 mb-4">{error}</p>}
+
+      {/* Plan Limits Section */}
+      <PlanLimitsSection limits={limits} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8" data-testid="summary-cards">

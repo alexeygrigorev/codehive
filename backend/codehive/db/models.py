@@ -11,7 +11,7 @@ All column types are portable across PostgreSQL and SQLite:
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, Unicode, text
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text, Unicode, text
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -307,6 +307,52 @@ class UsageRecord(Base):
     )
 
     session: Mapped["Session"] = relationship(back_populates="usage_records")
+
+
+class RateLimitSnapshot(Base):
+    __tablename__ = "rate_limit_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        PortableUUID, ForeignKey("sessions.id"), nullable=True
+    )
+    rate_limit_type: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    utilization: Mapped[float] = mapped_column(Float, nullable=False)
+    resets_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_using_overage: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    surpassed_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+
+
+class ModelUsageSnapshot(Base):
+    __tablename__ = "model_usage_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        PortableUUID, ForeignKey("sessions.id"), nullable=True
+    )
+    model: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    cache_read_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    cache_creation_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0"))
+    context_window: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
 
 
 class DeviceToken(Base):
