@@ -204,6 +204,18 @@ export default function Sidebar() {
         >
           {collapsed ? "U" : "Usage"}
         </NavLink>
+        <NavLink
+          to="/pipeline"
+          className={({ isActive }) =>
+            `block px-4 py-2 text-sm ${
+              isActive
+                ? "bg-gray-800 text-white font-medium"
+                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+            }`
+          }
+        >
+          {collapsed ? "P" : "Pipeline"}
+        </NavLink>
       </nav>
 
       {!collapsed && (
