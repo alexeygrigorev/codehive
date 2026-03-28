@@ -32,7 +32,7 @@ describe("ReplayStep", () => {
     const toolCall = document.querySelector(".tool-call-result");
     expect(toolCall).toBeTruthy();
     expect(screen.getByText("edit_file")).toBeInTheDocument();
-    expect(screen.getByText("Running...")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
   it("renders a tool_call_finish step using ToolCallResult", () => {

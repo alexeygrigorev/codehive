@@ -107,7 +107,7 @@ describe("ChatPanel", () => {
     ]);
     render(<ChatPanel sessionId="s1" />);
     expect(screen.getByText("read_file")).toBeInTheDocument();
-    expect(screen.getByText("Running...")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
   it("updates ToolCallResult when matching tool.call.finished arrives", () => {
@@ -124,8 +124,10 @@ describe("ChatPanel", () => {
       }),
     ]);
     render(<ChatPanel sessionId="s1" />);
-    expect(screen.getByText("file contents")).toBeInTheDocument();
-    expect(screen.queryByText("Running...")).not.toBeInTheDocument();
+    // Result is inside a collapsed <details>, so check it exists in the DOM
+    const details = document.querySelector("details");
+    expect(details).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("has a scrollable container", () => {

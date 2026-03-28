@@ -351,8 +351,17 @@ export default function ChatPanel({ sessionId, sessionName, onFirstMessage }: Ch
             <ToolCallResult
               key={item.id}
               toolName={(startData.tool_name as string) ?? "unknown"}
-              input={startData.input as string | undefined}
-              output={finishData?.output as string | undefined}
+              input={
+                (startData.tool_input ?? startData.input) as
+                  | Record<string, unknown>
+                  | string
+                  | undefined
+              }
+              output={
+                ((finishData?.result ?? finishData?.output) as
+                  | string
+                  | undefined) ?? undefined
+              }
               isError={finishData?.is_error === true}
               finished={!!item.finishEvent}
             />
