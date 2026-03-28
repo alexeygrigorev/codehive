@@ -61,9 +61,12 @@ def create_app() -> FastAPI:
         # Auto-create tables for SQLite (no Alembic needed for dev)
         settings = Settings()
         if settings.database_url.startswith("sqlite"):
+            from codehive.db.sync_columns import sync_sqlite_columns
+
             engine = create_async_engine_from_settings(settings.database_url)
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                await conn.run_sync(sync_sqlite_columns)
             await engine.dispose()
 
         session_maker = async_session_factory()
