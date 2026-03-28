@@ -477,6 +477,8 @@ class OrchestratorService:
                 name=f"{role}-{step}-{task_id}",
                 engine=self.config["engine"],
                 mode=mode,
+                task_id=task_id,
+                pipeline_step=step,
             )
             self.state.active_sessions.append(child_session.id)
 

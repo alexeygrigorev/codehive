@@ -11,6 +11,8 @@ from codehive.core.modes import VALID_MODES
 # Modes that are valid for session creation (agent modes + orchestrator)
 _VALID_SESSION_MODES = VALID_MODES | {"orchestrator"}
 
+VALID_PIPELINE_STEPS = {"grooming", "implementing", "testing", "accepting"}
+
 
 class QueueEmptyAction(str, Enum):
     """What to do when the task queue empties."""
@@ -44,7 +46,19 @@ class SessionCreate(BaseModel):
     role: str | None = Field(default=None, max_length=50)
     issue_id: uuid.UUID | None = None
     parent_session_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
+    pipeline_step: str | None = None
     config: dict = Field(default_factory=dict)
+
+    @field_validator("pipeline_step")
+    @classmethod
+    def pipeline_step_must_be_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_PIPELINE_STEPS:
+            raise ValueError(
+                f"Invalid pipeline_step '{v}'. "
+                f"Must be one of: {', '.join(sorted(VALID_PIPELINE_STEPS))}"
+            )
+        return v
 
     @field_validator("mode")
     @classmethod
@@ -100,6 +114,8 @@ class SessionRead(BaseModel):
     project_id: uuid.UUID
     issue_id: uuid.UUID | None
     parent_session_id: uuid.UUID | None
+    task_id: uuid.UUID | None
+    pipeline_step: str | None
     name: str
     role: str | None
     engine: str

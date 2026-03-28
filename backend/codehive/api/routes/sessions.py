@@ -21,6 +21,7 @@ from codehive.api.schemas.session import (
 )
 from codehive.execution.diff import DiffService
 from codehive.core.session import (
+    InvalidPipelineStepError,
     InvalidRoleError,
     InvalidStatusTransitionError,
     IssueNotFoundError,
@@ -28,11 +29,13 @@ from codehive.core.session import (
     ProjectNotFoundError,
     SessionHasDependentsError,
     SessionNotFoundError,
+    TaskNotFoundError,
     create_session,
     delete_session,
     get_session,
     list_child_sessions,
     list_sessions,
+    list_sessions_by_task,
     pause_session,
     resume_interrupted_session,
     resume_session,
@@ -73,16 +76,22 @@ async def create_session_endpoint(
             role=body.role,
             issue_id=body.issue_id,
             parent_session_id=body.parent_session_id,
+            task_id=body.task_id,
+            pipeline_step=body.pipeline_step,
             config=body.config,
         )
     except InvalidRoleError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except InvalidPipelineStepError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     except ProjectNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     except IssueNotFoundError:
         raise HTTPException(status_code=404, detail="Issue not found")
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Parent session not found")
+    except TaskNotFoundError:
+        raise HTTPException(status_code=404, detail="Task not found")
     return SessionRead.model_validate(session)
 
 
@@ -95,6 +104,16 @@ async def list_sessions_endpoint(
         sessions = await list_sessions(db, project_id)
     except ProjectNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
+    return [SessionRead.model_validate(s) for s in sessions]
+
+
+@sessions_router.get("", response_model=list[SessionRead])
+async def list_sessions_by_task_endpoint(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[SessionRead]:
+    """Return all sessions bound to a given task_id."""
+    sessions = await list_sessions_by_task(db, task_id)
     return [SessionRead.model_validate(s) for s in sessions]
 
 

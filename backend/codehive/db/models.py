@@ -166,7 +166,17 @@ class Session(Base):
         remote_side=[id], back_populates="child_sessions"
     )
     child_sessions: Mapped[list["Session"]] = relationship(back_populates="parent_session")
-    tasks: Mapped[list["Task"]] = relationship(back_populates="session")
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        PortableUUID, ForeignKey("tasks.id", use_alter=True), nullable=True
+    )
+    pipeline_step: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+
+    bound_task: Mapped["Task | None"] = relationship(
+        foreign_keys="Session.task_id", back_populates="agent_sessions"
+    )
+    tasks: Mapped[list["Task"]] = relationship(
+        foreign_keys="Task.session_id", back_populates="session"
+    )
     messages: Mapped[list["Message"]] = relationship(back_populates="session")
     events: Mapped[list["Event"]] = relationship(back_populates="session")
     checkpoints: Mapped[list["Checkpoint"]] = relationship(back_populates="session")
@@ -196,7 +206,13 @@ class Task(Base):
         Unicode(50), nullable=False, server_default="backlog"
     )
 
-    session: Mapped["Session"] = relationship(back_populates="tasks")
+    session: Mapped["Session"] = relationship(
+        foreign_keys="Task.session_id",
+        back_populates="tasks",
+    )
+    agent_sessions: Mapped[list["Session"]] = relationship(
+        foreign_keys="Session.task_id", back_populates="bound_task"
+    )
     pipeline_logs: Mapped[list["TaskPipelineLog"]] = relationship(back_populates="task")
 
 

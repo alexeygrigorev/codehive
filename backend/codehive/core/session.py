@@ -8,7 +8,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.schemas.session import QueueEmptyAction
-from codehive.db.models import Issue, Message, Project
+from codehive.api.schemas.session import VALID_PIPELINE_STEPS
+from codehive.db.models import Issue, Message, Project, Task
 from codehive.db.models import Session as SessionModel
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,14 @@ class InvalidStatusTransitionError(Exception):
 
 class NoUserMessageError(Exception):
     """Raised when an interrupted session has no user messages to replay."""
+
+
+class TaskNotFoundError(Exception):
+    """Raised when a task_id does not exist."""
+
+
+class InvalidPipelineStepError(Exception):
+    """Raised when a pipeline_step is not valid."""
 
 
 class InvalidRoleError(Exception):
@@ -91,12 +100,21 @@ async def create_session(
     role: str | None = None,
     issue_id: uuid.UUID | None = None,
     parent_session_id: uuid.UUID | None = None,
+    task_id: uuid.UUID | None = None,
+    pipeline_step: str | None = None,
     config: dict | None = None,
 ) -> SessionModel:
-    """Create a new session. Validates project, issue, parent session, and role."""
+    """Create a new session. Validates project, issue, parent session, task, and role."""
     _validate_queue_empty_action(config)
 
     await validate_role(db, role)
+
+    # Validate pipeline_step
+    if pipeline_step is not None and pipeline_step not in VALID_PIPELINE_STEPS:
+        raise InvalidPipelineStepError(
+            f"Invalid pipeline_step '{pipeline_step}'. "
+            f"Must be one of: {', '.join(sorted(VALID_PIPELINE_STEPS))}"
+        )
 
     project = await db.get(Project, project_id)
     if project is None:
@@ -112,6 +130,11 @@ async def create_session(
         if parent is None:
             raise SessionNotFoundError(f"Session {parent_session_id} not found")
 
+    if task_id is not None:
+        task = await db.get(Task, task_id)
+        if task is None:
+            raise TaskNotFoundError(f"Task {task_id} not found")
+
     session = SessionModel(
         project_id=project_id,
         name=name,
@@ -121,6 +144,8 @@ async def create_session(
         status="idle",
         issue_id=issue_id,
         parent_session_id=parent_session_id,
+        task_id=task_id,
+        pipeline_step=pipeline_step,
         config=config if config is not None else {},
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
@@ -140,6 +165,15 @@ async def list_sessions(
         raise ProjectNotFoundError(f"Project {project_id} not found")
 
     result = await db.execute(select(SessionModel).where(SessionModel.project_id == project_id))
+    return list(result.scalars().all())
+
+
+async def list_sessions_by_task(
+    db: AsyncSession,
+    task_id: uuid.UUID,
+) -> list[SessionModel]:
+    """Return all sessions bound to a given task_id."""
+    result = await db.execute(select(SessionModel).where(SessionModel.task_id == task_id))
     return list(result.scalars().all())
 
 
