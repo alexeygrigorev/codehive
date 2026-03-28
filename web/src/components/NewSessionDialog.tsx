@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchProviders, type ProviderInfo } from "@/api/providers";
+import ModelCombobox from "@/components/ModelCombobox";
 
 interface Props {
   open: boolean;
@@ -10,6 +11,12 @@ interface Props {
     model: string;
   }) => void;
   creating: boolean;
+}
+
+function getDefaultModel(provider: ProviderInfo | undefined): string {
+  if (!provider) return "";
+  const defaultModel = provider.models.find((m) => m.is_default);
+  return defaultModel ? defaultModel.id : provider.models[0]?.id ?? "";
 }
 
 export default function NewSessionDialog({
@@ -37,7 +44,7 @@ export default function NewSessionDialog({
         // Set default model from the default provider
         const defaultProv = data.find((p) => p.name === "claude");
         if (defaultProv) {
-          setModel(defaultProv.default_model);
+          setModel(getDefaultModel(defaultProv));
         }
       } catch {
         // Silently continue with empty providers list
@@ -56,7 +63,7 @@ export default function NewSessionDialog({
     setSelectedProvider(providerName);
     const prov = providers.find((p) => p.name === providerName);
     if (prov) {
-      setModel(prov.default_model);
+      setModel(getDefaultModel(prov));
     }
   }
 
@@ -66,6 +73,9 @@ export default function NewSessionDialog({
   }
 
   if (!open) return null;
+
+  const currentProvider = providers.find((p) => p.name === selectedProvider);
+  const currentModels = currentProvider?.models ?? [];
 
   return (
     <div
@@ -149,13 +159,10 @@ export default function NewSessionDialog({
               >
                 Model
               </label>
-              <input
-                id="session-model"
-                type="text"
+              <ModelCombobox
+                models={currentModels}
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100"
-                data-testid="model-input"
+                onChange={setModel}
               />
             </div>
           </div>

@@ -1,11 +1,17 @@
 import { apiClient } from "./client";
 
+export interface ModelInfo {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
 export interface ProviderInfo {
   name: string;
   type: string;
   available: boolean;
   reason: string;
-  default_model: string;
+  models: ModelInfo[];
 }
 
 export async function fetchProviders(): Promise<ProviderInfo[]> {

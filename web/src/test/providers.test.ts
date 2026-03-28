@@ -9,16 +9,24 @@ describe("API: providers", () => {
   it("fetchProviders calls correct endpoint and returns parsed array", async () => {
     const mockData = [
       {
-        name: "anthropic",
-        base_url: "https://api.anthropic.com",
-        api_key_set: true,
-        default_model: "claude-sonnet-4-20250514",
+        name: "claude",
+        type: "cli",
+        available: true,
+        reason: "",
+        models: [
+          { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+          { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+        ],
       },
       {
         name: "zai",
-        base_url: "https://api.z.ai/api/anthropic",
-        api_key_set: false,
-        default_model: "glm-4.7",
+        type: "api",
+        available: false,
+        reason: "API key not set",
+        models: [
+          { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+          { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+        ],
       },
     ];
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -34,6 +42,8 @@ describe("API: providers", () => {
       "http://localhost:7433/api/providers",
     );
     expect(result).toEqual(mockData);
+    expect(result[0].models).toHaveLength(2);
+    expect(result[0].models[0].is_default).toBe(true);
   });
 
   it("fetchProviders throws on non-ok response", async () => {

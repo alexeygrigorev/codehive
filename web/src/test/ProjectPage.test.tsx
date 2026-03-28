@@ -101,14 +101,20 @@ describe("ProjectPage", () => {
       type: "claude_code",
       available: true,
       reason: "",
-      default_model: "claude-sonnet-4-20250514",
+      models: [
+        { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+        { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+      ],
     },
     {
       name: "zai",
       type: "native",
       available: true,
       reason: "",
-      default_model: "glm-4.7",
+      models: [
+        { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+        { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+      ],
     },
   ];
 
@@ -226,7 +232,7 @@ describe("ProjectPage", () => {
         name: "New Session",
         engine: "claude_code",
         mode: "execution",
-        config: { provider: "claude", model: "claude-sonnet-4-20250514" },
+        config: { provider: "claude", model: "claude-sonnet-4-6" },
       });
     });
     expect(mockNavigate).toHaveBeenCalledWith("/sessions/s-new");

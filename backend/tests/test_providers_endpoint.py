@@ -163,45 +163,6 @@ class TestProvidersEndpoint:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
-    async def test_zai_default_model(self):
-        """Z.ai provider default model is glm-4.7."""
-        from codehive.api.routes.providers import list_providers
-
-        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
-            mock_shutil.which.return_value = None
-            result = await list_providers()
-
-        zai = next(p for p in result if p.name == "zai")
-        assert zai.default_model == "glm-4.7"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_claude_default_model(self):
-        """Claude provider default model is claude-sonnet-4-20250514."""
-        from codehive.api.routes.providers import list_providers
-
-        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
-            mock_shutil.which.return_value = None
-            result = await list_providers()
-
-        claude = next(p for p in result if p.name == "claude")
-        assert claude.default_model == "claude-sonnet-4-20250514"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
-    async def test_openai_default_model(self):
-        """OpenAI provider default model is codex-mini-latest."""
-        from codehive.api.routes.providers import list_providers
-
-        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
-            mock_shutil.which.return_value = None
-            result = await list_providers()
-
-        openai_prov = next(p for p in result if p.name == "openai")
-        assert openai_prov.default_model == "codex-mini-latest"
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("_isolated_settings")
     async def test_provider_info_has_type_field(self):
         """Each provider has a type field (cli or api)."""
         from codehive.api.routes.providers import list_providers
@@ -212,6 +173,138 @@ class TestProvidersEndpoint:
 
         for p in result:
             assert p.type in ("cli", "api")
+
+
+class TestModelListsPerProvider:
+    """Tests for the model lists returned per provider."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_each_provider_has_nonempty_models(self):
+        """Every provider has at least one model."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        assert len(result) == 6
+        for p in result:
+            assert len(p.models) > 0, f"{p.name} has no models"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_each_provider_has_exactly_one_default(self):
+        """Each provider has exactly one model with is_default=True."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        for p in result:
+            defaults = [m for m in p.models if m.is_default]
+            assert len(defaults) == 1, f"{p.name} has {len(defaults)} default models"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_claude_models(self):
+        """Claude has 4 models with correct IDs; default is claude-sonnet-4-6."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        claude = next(p for p in result if p.name == "claude")
+        assert len(claude.models) == 4
+        ids = [m.id for m in claude.models]
+        assert "claude-sonnet-4-6" in ids
+        assert "claude-opus-4-6" in ids
+        assert "claude-sonnet-4-5" in ids
+        assert "claude-haiku-4-5" in ids
+        default = next(m for m in claude.models if m.is_default)
+        assert default.id == "claude-sonnet-4-6"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_openai_models(self):
+        """OpenAI has 4 models with correct IDs; default is gpt-5.4."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        openai_prov = next(p for p in result if p.name == "openai")
+        assert len(openai_prov.models) == 4
+        ids = [m.id for m in openai_prov.models]
+        assert "gpt-5.4" in ids
+        assert "gpt-5.4-mini" in ids
+        assert "o4-mini" in ids
+        assert "o3" in ids
+        default = next(m for m in openai_prov.models if m.is_default)
+        assert default.id == "gpt-5.4"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_codex_models(self):
+        """Codex has 3 models; default is gpt-5.4."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        codex = next(p for p in result if p.name == "codex")
+        assert len(codex.models) == 3
+        default = next(m for m in codex.models if m.is_default)
+        assert default.id == "gpt-5.4"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_gemini_models(self):
+        """Gemini has 3 models; default is gemini-2.5-flash."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        gemini = next(p for p in result if p.name == "gemini")
+        assert len(gemini.models) == 3
+        default = next(m for m in gemini.models if m.is_default)
+        assert default.id == "gemini-2.5-flash"
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_copilot_models(self):
+        """Copilot has 1 model (id=default)."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        copilot = next(p for p in result if p.name == "copilot")
+        assert len(copilot.models) == 1
+        assert copilot.models[0].id == "default"
+        assert copilot.models[0].is_default is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_isolated_settings")
+    async def test_zai_models(self):
+        """Z.ai has 2 models; default is claude-sonnet-4-6."""
+        from codehive.api.routes.providers import list_providers
+
+        with patch("codehive.api.routes.providers.shutil") as mock_shutil:
+            mock_shutil.which.return_value = None
+            result = await list_providers()
+
+        zai = next(p for p in result if p.name == "zai")
+        assert len(zai.models) == 2
+        default = next(m for m in zai.models if m.is_default)
+        assert default.id == "claude-sonnet-4-6"
 
 
 class TestFullProviderList:

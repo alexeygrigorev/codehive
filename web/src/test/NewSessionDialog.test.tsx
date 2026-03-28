@@ -12,24 +12,37 @@ const mockFetchProviders = vi.mocked(fetchProviders);
 const providers = [
   {
     name: "claude",
-    type: "claude_code",
+    type: "cli",
     available: true,
     reason: "",
-    default_model: "claude-sonnet-4-20250514",
+    models: [
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+      { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+      { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", is_default: false },
+      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", is_default: false },
+    ],
   },
   {
     name: "zai",
-    type: "native",
+    type: "api",
     available: true,
     reason: "",
-    default_model: "glm-4.7",
+    models: [
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+      { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+    ],
   },
   {
     name: "openai",
-    type: "codex",
+    type: "api",
     available: true,
     reason: "",
-    default_model: "codex-mini-latest",
+    models: [
+      { id: "gpt-5.4", name: "GPT-5.4", is_default: true },
+      { id: "gpt-5.4-mini", name: "GPT-5.4 Mini", is_default: false },
+      { id: "o4-mini", name: "O4 Mini", is_default: false },
+      { id: "o3", name: "O3", is_default: false },
+    ],
   },
 ];
 
@@ -68,6 +81,24 @@ describe("NewSessionDialog", () => {
     expect(screen.getByTestId("model-input")).toBeInTheDocument();
   });
 
+  it("renders model combobox instead of plain text input", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("model-input")).toBeInTheDocument();
+    // The input should have combobox role
+    const input = screen.getByTestId("model-input");
+    expect(input.getAttribute("role")).toBe("combobox");
+  });
+
   it("loads providers and shows them in dropdown", async () => {
     render(
       <NewSessionDialog
@@ -104,10 +135,10 @@ describe("NewSessionDialog", () => {
     expect(select.value).toBe("claude");
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("claude-sonnet-4-20250514");
+    expect(modelInput.value).toBe("claude-sonnet-4-6");
   });
 
-  it("selecting Z.ai updates model to glm-4.7", async () => {
+  it("selecting Z.ai updates model to claude-sonnet-4-6", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -126,10 +157,10 @@ describe("NewSessionDialog", () => {
     });
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("glm-4.7");
+    expect(modelInput.value).toBe("claude-sonnet-4-6");
   });
 
-  it("selecting OpenAI updates model to codex-mini-latest", async () => {
+  it("selecting OpenAI updates model to gpt-5.4", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -148,7 +179,7 @@ describe("NewSessionDialog", () => {
     });
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("codex-mini-latest");
+    expect(modelInput.value).toBe("gpt-5.4");
   });
 
   it("displays OpenAI label in dropdown", async () => {
@@ -203,7 +234,7 @@ describe("NewSessionDialog", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       name: "My ZAI Session",
       provider: "zai",
-      model: "glm-4.7",
+      model: "claude-sonnet-4-6",
     });
   });
 
@@ -269,9 +300,156 @@ describe("NewSessionDialog", () => {
 
     const select = screen.getByTestId("provider-select") as HTMLSelectElement;
     const options = Array.from(select.options);
-    // Anthropic has key set - shows checkmark
+    // Claude has key set - shows checkmark
     expect(options[0].textContent).toContain("\u2713");
     // Z.ai has no key - shows "(no key)"
     expect(options[1].textContent).toContain("(no key)");
+  });
+
+  it("shows model dropdown list when input is focused", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
+    });
+
+    const modelInput = screen.getByTestId("model-input");
+    fireEvent.focus(modelInput);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
+    });
+  });
+
+  it("dropdown shows display names with model IDs", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
+    });
+
+    const modelInput = screen.getByTestId("model-input");
+    fireEvent.focus(modelInput);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
+    });
+
+    // Should show display name with model ID in parentheses
+    const listbox = screen.getByTestId("model-listbox");
+    expect(listbox.textContent).toContain("Claude Sonnet 4.6");
+    expect(listbox.textContent).toContain("(claude-sonnet-4-6)");
+    expect(listbox.textContent).toContain("Claude Opus 4.6");
+    expect(listbox.textContent).toContain("(claude-opus-4-6)");
+  });
+
+  it("clicking a model option sets the input value to model ID", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
+    });
+
+    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
+    fireEvent.focus(modelInput);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
+    });
+
+    // Click on "Claude Opus 4.6"
+    const listbox = screen.getByTestId("model-listbox");
+    const options = listbox.querySelectorAll('[role="option"]');
+    // Second option should be Claude Opus 4.6
+    const opusOption = Array.from(options).find((o) =>
+      o.textContent?.includes("Claude Opus 4.6"),
+    );
+    expect(opusOption).toBeDefined();
+    fireEvent.mouseDown(opusOption!);
+
+    expect(modelInput.value).toBe("claude-opus-4-6");
+  });
+
+  it("user can type a custom model ID freely", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
+    });
+
+    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
+    fireEvent.change(modelInput, {
+      target: { value: "claude-test-model-preview" },
+    });
+
+    expect(modelInput.value).toBe("claude-test-model-preview");
+  });
+
+  it("form submission sends model ID string not display name", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
+    });
+
+    // Select a model from dropdown
+    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
+    fireEvent.focus(modelInput);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
+    });
+
+    const listbox = screen.getByTestId("model-listbox");
+    const options = listbox.querySelectorAll('[role="option"]');
+    const opusOption = Array.from(options).find((o) =>
+      o.textContent?.includes("Claude Opus 4.6"),
+    );
+    fireEvent.mouseDown(opusOption!);
+
+    // Submit
+    fireEvent.click(screen.getByTestId("create-session-btn"));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "New Session",
+      provider: "claude",
+      model: "claude-opus-4-6",
+    });
   });
 });

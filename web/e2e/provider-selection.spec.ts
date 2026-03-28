@@ -32,45 +32,82 @@ test.describe("Provider selection during session creation", () => {
     });
     await expect(page.locator('[data-testid="provider-select"]')).toBeVisible();
 
-    // 6. Verify "anthropic" is selected by default
+    // 6. Verify "claude" is selected by default
     const providerSelect = page.locator('[data-testid="provider-select"]');
-    await expect(providerSelect).toHaveValue("anthropic");
+    await expect(providerSelect).toHaveValue("claude");
 
-    // 7. Verify model field shows default Anthropic model
+    // 7. Verify model combobox appears with correct default
+    const modelCombobox = page.locator('[data-testid="model-combobox"]');
+    await expect(modelCombobox).toBeVisible();
     const modelInput = page.locator('[data-testid="model-input"]');
-    await expect(modelInput).toHaveValue("claude-sonnet-4-20250514");
+    await expect(modelInput).toHaveValue("claude-sonnet-4-6");
 
     // 8. Take screenshot of dialog with default provider
     await page.screenshot({ path: "/tmp/provider-dialog-default.png" });
 
-    // 9. Select Z.ai provider
+    // 9. Click model input to open dropdown and verify Claude models are listed
+    await modelInput.click();
+    const modelListbox = page.locator('[data-testid="model-listbox"]');
+    await expect(modelListbox).toBeVisible();
+    await expect(modelListbox).toContainText("Claude Sonnet 4.6");
+    await expect(modelListbox).toContainText("Claude Opus 4.6");
+    await expect(modelListbox).toContainText("(claude-sonnet-4-6)");
+
+    // 10. Take screenshot of model dropdown open
+    await page.screenshot({ path: "/tmp/provider-dialog-model-dropdown.png" });
+
+    // 11. Select Z.ai provider
     await providerSelect.selectOption("zai");
 
-    // 10. Verify model field updates to glm-4.7
-    await expect(modelInput).toHaveValue("glm-4.7");
+    // 12. Verify model field updates to claude-sonnet-4-6 (Z.ai default)
+    await expect(modelInput).toHaveValue("claude-sonnet-4-6");
 
-    // 11. Take screenshot of dialog with Z.ai selected
+    // 13. Take screenshot of dialog with Z.ai selected
     await page.screenshot({ path: "/tmp/provider-dialog-zai.png" });
 
-    // 12. Switch back to Anthropic and create
-    await providerSelect.selectOption("anthropic");
-    await expect(modelInput).toHaveValue("claude-sonnet-4-20250514");
+    // 14. Switch to OpenAI and verify default model changes
+    await providerSelect.selectOption("openai");
+    await expect(modelInput).toHaveValue("gpt-5.4");
 
-    // 13. Click Create
+    // 15. Click model input and select a non-default model from dropdown
+    await modelInput.click();
+    await expect(modelListbox).toBeVisible();
+    const o3Option = page.locator('[data-testid="model-listbox"] [role="option"]', {
+      hasText: "O3",
+    });
+    await o3Option.click();
+    await expect(modelInput).toHaveValue("o3");
+
+    // 16. Take screenshot of non-default model selected
+    await page.screenshot({ path: "/tmp/provider-dialog-openai-o3.png" });
+
+    // 17. Test custom model ID: clear and type a custom value
+    await modelInput.clear();
+    await modelInput.fill("my-custom-model-preview");
+    await expect(modelInput).toHaveValue("my-custom-model-preview");
+
+    // 18. Take screenshot of custom model typed
+    await page.screenshot({ path: "/tmp/provider-dialog-custom-model.png" });
+
+    // 19. Switch back to Claude and create
+    await providerSelect.selectOption("claude");
+    await expect(modelInput).toHaveValue("claude-sonnet-4-6");
+
+    // 20. Click Create
     await page.click('[data-testid="create-session-btn"]');
 
-    // 14. Verify redirect to session page
+    // 21. Verify redirect to session page
     await expect(page.locator('[data-testid="session-header"]')).toBeVisible({
       timeout: 10_000,
     });
 
-    // 15. Verify provider badge is visible
+    // 22. Verify provider badge is visible
     await expect(page.locator('[data-testid="provider-badge"]')).toBeVisible();
     await expect(page.locator('[data-testid="provider-badge"]')).toContainText(
-      "Anthropic",
+      "Claude",
     );
 
-    // 16. Take screenshot of session page with provider badge
+    // 23. Take screenshot of session page with provider badge
     await page.screenshot({ path: "/tmp/provider-badge-session.png" });
   });
 });

@@ -11,6 +11,14 @@ from codehive.config import Settings
 providers_router = APIRouter(prefix="/api/providers", tags=["providers"])
 
 
+class ModelInfo(BaseModel):
+    """Information about a model available for a provider."""
+
+    id: str
+    name: str
+    is_default: bool = False
+
+
 class ProviderInfo(BaseModel):
     """Information about a configured LLM provider."""
 
@@ -18,7 +26,47 @@ class ProviderInfo(BaseModel):
     type: str  # "cli" or "api"
     available: bool
     reason: str
-    default_model: str
+    models: list[ModelInfo]
+
+
+# ---------------------------------------------------------------------------
+# Model constants per provider (March 2026)
+# ---------------------------------------------------------------------------
+
+CLAUDE_MODELS: list[ModelInfo] = [
+    ModelInfo(id="claude-sonnet-4-6", name="Claude Sonnet 4.6", is_default=True),
+    ModelInfo(id="claude-opus-4-6", name="Claude Opus 4.6"),
+    ModelInfo(id="claude-sonnet-4-5", name="Claude Sonnet 4.5"),
+    ModelInfo(id="claude-haiku-4-5", name="Claude Haiku 4.5"),
+]
+
+OPENAI_MODELS: list[ModelInfo] = [
+    ModelInfo(id="gpt-5.4", name="GPT-5.4", is_default=True),
+    ModelInfo(id="gpt-5.4-mini", name="GPT-5.4 Mini"),
+    ModelInfo(id="o4-mini", name="O4 Mini"),
+    ModelInfo(id="o3", name="O3"),
+]
+
+CODEX_MODELS: list[ModelInfo] = [
+    ModelInfo(id="gpt-5.4", name="GPT-5.4", is_default=True),
+    ModelInfo(id="gpt-5.3-codex", name="GPT-5.3 Codex"),
+    ModelInfo(id="gpt-5.4-mini", name="GPT-5.4 Mini"),
+]
+
+GEMINI_MODELS: list[ModelInfo] = [
+    ModelInfo(id="gemini-2.5-flash", name="Gemini 2.5 Flash", is_default=True),
+    ModelInfo(id="gemini-2.5-pro", name="Gemini 2.5 Pro"),
+    ModelInfo(id="gemini-3.1-pro-preview", name="Gemini 3.1 Pro (Preview)"),
+]
+
+COPILOT_MODELS: list[ModelInfo] = [
+    ModelInfo(id="default", name="Default", is_default=True),
+]
+
+ZAI_MODELS: list[ModelInfo] = [
+    ModelInfo(id="claude-sonnet-4-6", name="Claude Sonnet 4.6", is_default=True),
+    ModelInfo(id="claude-opus-4-6", name="Claude Opus 4.6"),
+]
 
 
 def _check_cli_available(cli_name: str) -> tuple[bool, str]:
@@ -75,41 +123,41 @@ async def list_providers() -> list[ProviderInfo]:
             type="cli",
             available=claude_available,
             reason=claude_reason,
-            default_model=settings.default_model,
+            models=CLAUDE_MODELS,
         ),
         ProviderInfo(
             name="codex",
             type="cli",
             available=codex_available,
             reason=codex_reason,
-            default_model="codex-mini-latest",
+            models=CODEX_MODELS,
         ),
         ProviderInfo(
             name="openai",
             type="api",
             available=openai_available,
             reason=openai_reason,
-            default_model="codex-mini-latest",
+            models=OPENAI_MODELS,
         ),
         ProviderInfo(
             name="zai",
             type="api",
             available=zai_available,
             reason=zai_reason,
-            default_model="glm-4.7",
+            models=ZAI_MODELS,
         ),
         ProviderInfo(
             name="copilot",
             type="cli",
             available=copilot_available,
             reason=copilot_reason,
-            default_model="default",
+            models=COPILOT_MODELS,
         ),
         ProviderInfo(
             name="gemini",
             type="cli",
             available=gemini_available,
             reason=gemini_reason,
-            default_model="auto-gemini-3",
+            models=GEMINI_MODELS,
         ),
     ]
