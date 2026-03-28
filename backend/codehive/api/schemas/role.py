@@ -28,6 +28,14 @@ class RoleUpdate(BaseModel):
     system_prompt_extra: str | None = None
 
 
+class PipelineRoleUpdate(BaseModel):
+    """Request body for PATCH /api/roles/{name} (pipeline roles)."""
+
+    display_name: str | None = None
+    system_prompt: str | None = None
+    color: str | None = None
+
+
 class RoleRead(BaseModel):
     """Response schema for a single role."""
 
@@ -40,3 +48,14 @@ class RoleRead(BaseModel):
     coding_rules: list[str]
     system_prompt_extra: str
     is_builtin: bool = False
+
+
+class PipelineRoleRead(BaseModel):
+    """Response schema for a pipeline role (pm, swe, qa, oncall)."""
+
+    name: str
+    display_name: str
+    system_prompt: str
+    allowed_transitions: dict[str, list[str]]
+    color: str
+    is_builtin: bool = True

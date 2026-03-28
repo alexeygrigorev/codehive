@@ -30,6 +30,10 @@ class InvalidPipelineTransitionError(Exception):
     """Raised when a pipeline status transition is not allowed."""
 
 
+class RoleNotAllowedError(Exception):
+    """Raised when a session's role is not allowed to perform a pipeline transition."""
+
+
 # Allowed status transitions: from_status -> set of to_statuses
 _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"running", "blocked", "skipped"},
@@ -252,8 +256,17 @@ async def pipeline_transition(
     task_id: uuid.UUID,
     target_status: str,
     actor: str | None = None,
+    actor_session_id: uuid.UUID | None = None,
 ) -> Task:
-    """Transition a task's pipeline_status. Validates the transition is allowed."""
+    """Transition a task's pipeline_status. Validates the transition is allowed.
+
+    When ``actor_session_id`` is provided, the session is looked up and its role
+    is checked against the built-in role's ``allowed_transitions``.  If the
+    session has no role (``role=None``), any valid graph transition is permitted
+    (backward compatible).
+    """
+    from codehive.core.roles import BUILTIN_ROLES
+
     task = await db.get(Task, task_id)
     if task is None:
         raise TaskNotFoundError(f"Task {task_id} not found")
@@ -266,6 +279,27 @@ async def pipeline_transition(
             f"Valid transitions: {valid_str}"
         )
 
+    # Role-based enforcement when actor_session_id is provided
+    resolved_actor = actor
+    if actor_session_id is not None:
+        actor_session = await db.get(SessionModel, actor_session_id)
+        if actor_session is None:
+            raise SessionNotFoundError(f"Session {actor_session_id} not found")
+        if actor_session.role is not None:
+            # Check role permissions
+            role_name = actor_session.role
+            if role_name in BUILTIN_ROLES:
+                role_def = BUILTIN_ROLES[role_name]
+                role_allowed = role_def["allowed_transitions"]
+                targets = role_allowed.get(task.pipeline_status, set())
+                if target_status not in targets:
+                    raise RoleNotAllowedError(
+                        f"Role '{role_name}' is not allowed to perform transition "
+                        f"'{task.pipeline_status}' -> '{target_status}'"
+                    )
+            # Build actor string with role info
+            resolved_actor = f"{role_name}:session:{actor_session_id}"
+
     from_status = task.pipeline_status
     task.pipeline_status = target_status
 
@@ -273,7 +307,7 @@ async def pipeline_transition(
         task_id=task_id,
         from_status=from_status,
         to_status=target_status,
-        actor=actor,
+        actor=resolved_actor,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(log_entry)

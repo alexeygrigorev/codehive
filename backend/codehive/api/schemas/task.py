@@ -55,6 +55,7 @@ class PipelineTransitionRequest(BaseModel):
 
     status: str
     actor: str | None = Field(default=None, max_length=255)
+    actor_session_id: uuid.UUID | None = None
 
 
 class TaskPipelineLogRead(BaseModel):

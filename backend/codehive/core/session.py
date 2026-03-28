@@ -38,6 +38,10 @@ class NoUserMessageError(Exception):
     """Raised when an interrupted session has no user messages to replay."""
 
 
+class InvalidRoleError(Exception):
+    """Raised when a session is created with an unknown role."""
+
+
 def _validate_queue_empty_action(config: dict | None) -> None:
     """Raise ValueError if config contains an invalid queue_empty_action."""
     if config is None:
@@ -54,6 +58,29 @@ def _validate_queue_empty_action(config: dict | None) -> None:
 _PAUSABLE_STATUSES = {"idle", "planning", "executing"}
 
 
+async def validate_role(db: AsyncSession, role: str | None) -> None:
+    """Validate that a role is known (built-in pipeline role or custom_roles table).
+
+    Raises InvalidRoleError if the role is not recognized.
+    Does nothing if role is None.
+    """
+    if role is None:
+        return
+    from codehive.core.roles import BUILTIN_ROLES
+    from codehive.db.models import CustomRole
+
+    if role in BUILTIN_ROLES:
+        return
+    # Check custom_roles table
+    existing = await db.get(CustomRole, role)
+    if existing is not None:
+        return
+    raise InvalidRoleError(
+        f"Unknown role '{role}'. Must be one of the built-in roles "
+        f"({', '.join(sorted(BUILTIN_ROLES.keys()))}) or a custom role."
+    )
+
+
 async def create_session(
     db: AsyncSession,
     *,
@@ -61,12 +88,15 @@ async def create_session(
     name: str,
     engine: str,
     mode: str,
+    role: str | None = None,
     issue_id: uuid.UUID | None = None,
     parent_session_id: uuid.UUID | None = None,
     config: dict | None = None,
 ) -> SessionModel:
-    """Create a new session. Validates project, issue, and parent session exist."""
+    """Create a new session. Validates project, issue, parent session, and role."""
     _validate_queue_empty_action(config)
+
+    await validate_role(db, role)
 
     project = await db.get(Project, project_id)
     if project is None:
@@ -87,6 +117,7 @@ async def create_session(
         name=name,
         engine=engine,
         mode=mode,
+        role=role,
         status="idle",
         issue_id=issue_id,
         parent_session_id=parent_session_id,

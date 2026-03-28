@@ -41,6 +41,7 @@ class SessionCreate(BaseModel):
     name: str = Field(..., max_length=255)
     engine: str = Field(..., max_length=50)
     mode: str = Field(..., max_length=50)
+    role: str | None = Field(default=None, max_length=50)
     issue_id: uuid.UUID | None = None
     parent_session_id: uuid.UUID | None = None
     config: dict = Field(default_factory=dict)
@@ -100,6 +101,7 @@ class SessionRead(BaseModel):
     issue_id: uuid.UUID | None
     parent_session_id: uuid.UUID | None
     name: str
+    role: str | None
     engine: str
     mode: str
     status: str

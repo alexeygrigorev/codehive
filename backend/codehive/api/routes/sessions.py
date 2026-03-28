@@ -21,6 +21,7 @@ from codehive.api.schemas.session import (
 )
 from codehive.execution.diff import DiffService
 from codehive.core.session import (
+    InvalidRoleError,
     InvalidStatusTransitionError,
     IssueNotFoundError,
     NoUserMessageError,
@@ -69,10 +70,13 @@ async def create_session_endpoint(
             name=body.name,
             engine=body.engine,
             mode=body.mode,
+            role=body.role,
             issue_id=body.issue_id,
             parent_session_id=body.parent_session_id,
             config=body.config,
         )
+    except InvalidRoleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except ProjectNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     except IssueNotFoundError:

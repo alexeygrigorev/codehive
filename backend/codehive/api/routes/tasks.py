@@ -19,6 +19,7 @@ from codehive.core.task_queue import (
     InvalidDependencyError,
     InvalidPipelineTransitionError,
     InvalidStatusTransitionError,
+    RoleNotAllowedError,
     SessionNotFoundError,
     TaskNotFoundError,
     create_task,
@@ -173,11 +174,21 @@ async def pipeline_transition_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> TaskRead:
     try:
-        task = await pipeline_transition(db, task_id, body.status, actor=body.actor)
+        task = await pipeline_transition(
+            db,
+            task_id,
+            body.status,
+            actor=body.actor,
+            actor_session_id=body.actor_session_id,
+        )
     except TaskNotFoundError:
         raise HTTPException(status_code=404, detail="Task not found")
     except InvalidPipelineTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except RoleNotAllowedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Actor session not found")
     return TaskRead.model_validate(task)
 
 

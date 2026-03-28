@@ -2,15 +2,122 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+logger = logging.getLogger(__name__)
+
 
 class RoleNotFoundError(Exception):
     """Raised when a role name cannot be resolved."""
+
+
+class RoleNotAllowedError(Exception):
+    """Raised when a session's role is not allowed to perform a pipeline transition."""
+
+
+# ---------------------------------------------------------------------------
+# Built-in pipeline roles (PM, SWE, QA, OnCall)
+# ---------------------------------------------------------------------------
+
+BUILTIN_ROLES: dict[str, dict[str, Any]] = {
+    "pm": {
+        "display_name": "Product Manager",
+        "system_prompt": "You are a Product Manager agent. You groom tasks, write acceptance criteria, and accept or reject deliverables.",
+        "allowed_transitions": {
+            "backlog": {"grooming"},
+            "grooming": {"groomed"},
+            "accepting": {"done", "implementing"},
+        },
+        "color": "blue",
+    },
+    "swe": {
+        "display_name": "Software Engineer",
+        "system_prompt": "You are a Software Engineer agent. You implement features, write code, and create tests.",
+        "allowed_transitions": {
+            "groomed": {"implementing"},
+            "implementing": {"testing"},
+        },
+        "color": "green",
+    },
+    "qa": {
+        "display_name": "QA Tester",
+        "system_prompt": "You are a QA Tester agent. You verify implementations, run tests, and report results.",
+        "allowed_transitions": {
+            "testing": {"accepting", "implementing"},
+        },
+        "color": "orange",
+    },
+    "oncall": {
+        "display_name": "On-Call Engineer",
+        "system_prompt": "You are an On-Call Engineer agent. You can perform SWE and QA tasks as an emergency responder.",
+        "allowed_transitions": {
+            "groomed": {"implementing"},
+            "implementing": {"testing"},
+            "testing": {"accepting", "implementing"},
+        },
+        "color": "red",
+    },
+}
+
+
+def is_valid_role(role_name: str) -> bool:
+    """Check if a role name is a known built-in pipeline role."""
+    return role_name in BUILTIN_ROLES
+
+
+def check_role_transition(
+    role_name: str,
+    from_status: str,
+    to_status: str,
+) -> None:
+    """Validate that a role is allowed to perform a pipeline transition.
+
+    Raises RoleNotAllowedError if the transition is not in the role's allowed_transitions.
+    Does nothing if role_name is not a known built-in role (custom roles are not enforced).
+    """
+    if role_name not in BUILTIN_ROLES:
+        return
+    role_def = BUILTIN_ROLES[role_name]
+    allowed = role_def["allowed_transitions"]
+    targets = allowed.get(from_status, set())
+    if to_status not in targets:
+        raise RoleNotAllowedError(
+            f"Role '{role_name}' is not allowed to perform transition "
+            f"'{from_status}' -> '{to_status}'"
+        )
+
+
+async def seed_builtin_roles(db: Any) -> int:
+    """Seed built-in pipeline roles into the custom_roles table (idempotent).
+
+    Only inserts roles that do not already exist -- never overwrites user edits.
+    Returns the number of roles inserted.
+    """
+    from codehive.db.models import CustomRole
+
+    count = 0
+    for name, definition in BUILTIN_ROLES.items():
+        existing = await db.get(CustomRole, name)
+        if existing is None:
+            # Convert sets to sorted lists for JSON serialization
+            serializable_def = {**definition, "is_builtin": True}
+            if "allowed_transitions" in serializable_def:
+                serializable_def["allowed_transitions"] = {
+                    k: sorted(v) for k, v in serializable_def["allowed_transitions"].items()
+                }
+            row = CustomRole(name=name, definition=serializable_def)
+            db.add(row)
+            count += 1
+            logger.info("Seeded built-in role: %s", name)
+
+    if count:
+        await db.commit()
+    return count
 
 
 class RoleDefinition(BaseModel):

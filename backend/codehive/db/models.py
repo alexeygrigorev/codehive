@@ -151,6 +151,7 @@ class Session(Base):
         PortableUUID, ForeignKey("sessions.id"), nullable=True
     )
     name: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    role: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
     engine: Mapped[str] = mapped_column(Unicode(50), nullable=False)
     mode: Mapped[str] = mapped_column(Unicode(50), nullable=False)
     status: Mapped[str] = mapped_column(Unicode(50), nullable=False, server_default="idle")
