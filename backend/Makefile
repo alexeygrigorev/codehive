@@ -1,4 +1,7 @@
-.PHONY: test setup shell coverage publish-build publish-test publish publish-clean infra-up infra-down infra-status
+.PHONY: run test setup shell coverage publish-build publish-test publish publish-clean infra-up infra-down infra-status
+
+run:
+	uv run codehive serve
 
 test:
 	uv run pytest

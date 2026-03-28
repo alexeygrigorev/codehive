@@ -6,8 +6,8 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   server: {
-    watch: {
-      ignored: ["!**/web/src/**", "**/test/**", "**/e2e/**", "**/backend/**", "**/data/**", "**/docs/**", "**/*.db", "**/*.db-wal", "**/*.db-shm", "**/node_modules/**"],
+    hmr: {
+      overlay: false,
     },
   },
   resolve: {

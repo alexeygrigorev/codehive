@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,web -c blue,green \"cd backend && uv run codehive serve\" \"cd web && npm run dev\"",
+    "dev:backend": "cd backend && uv run codehive serve",
+    "dev:web": "cd web && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -15,6 +15,12 @@
             document.documentElement.classList.add('dark');
           }
         } catch(e) {}
+        // Unregister stale service workers in dev mode to prevent HMR reload loops
+        if (location.port && navigator.serviceWorker) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            regs.forEach(function(r) { r.unregister(); });
+          });
+        }
       })();
     </script>
   </head>
