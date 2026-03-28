@@ -50,8 +50,9 @@ const providers = [
     available: true,
     reason: "",
     models: [
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
-      { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+      { id: "glm-5", name: "GLM-5", is_default: true },
+      { id: "glm-5-turbo", name: "GLM-5 Turbo", is_default: false },
+      { id: "glm-4.7", name: "GLM-4.7", is_default: false },
     ],
   },
   {
@@ -139,11 +140,11 @@ describe("NewSessionDialog", () => {
     });
 
     const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    // openai is the first API provider in the list that is available
-    expect(select.value).toBe("openai");
+    // zai is preferred as default orchestrator when available
+    expect(select.value).toBe("zai");
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("gpt-5.4");
+    expect(modelInput.value).toBe("glm-5");
   });
 
   it("sub-agent checkboxes show ALL providers", async () => {
@@ -182,11 +183,13 @@ describe("NewSessionDialog", () => {
       expect(screen.getByTestId("sub-agent-engines")).toBeInTheDocument();
     });
 
-    // Available providers should be checked
+    // Only Claude and Codex are pre-checked by default
     expect(screen.getByTestId("sub-agent-claude")).toBeChecked();
     expect(screen.getByTestId("sub-agent-codex")).toBeChecked();
-    expect(screen.getByTestId("sub-agent-openai")).toBeChecked();
-    expect(screen.getByTestId("sub-agent-zai")).toBeChecked();
+
+    // Other available providers are NOT pre-checked
+    expect(screen.getByTestId("sub-agent-openai")).not.toBeChecked();
+    expect(screen.getByTestId("sub-agent-zai")).not.toBeChecked();
 
     // Unavailable provider should be unchecked and disabled
     const copilotCheckbox = screen.getByTestId("sub-agent-copilot") as HTMLInputElement;
@@ -241,13 +244,15 @@ describe("NewSessionDialog", () => {
       expect(screen.getByTestId("provider-select")).toBeInTheDocument();
     });
 
-    // Switch to zai
-    fireEvent.change(screen.getByTestId("provider-select"), {
-      target: { value: "zai" },
-    });
-
+    // Default is zai with glm-5
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("claude-sonnet-4-6");
+    expect(modelInput.value).toBe("glm-5");
+
+    // Switch to openai — model should update to gpt-5.4
+    fireEvent.change(screen.getByTestId("provider-select"), {
+      target: { value: "openai" },
+    });
+    expect(modelInput.value).toBe("gpt-5.4");
   });
 
   it("calls onSubmit with provider, model, and sub_agent_engines", async () => {
@@ -282,7 +287,7 @@ describe("NewSessionDialog", () => {
       expect.objectContaining({
         name: "My ZAI Session",
         provider: "zai",
-        model: "claude-sonnet-4-6",
+        model: "glm-5",
       }),
     );
     // sub_agent_engines should be an array of engine strings

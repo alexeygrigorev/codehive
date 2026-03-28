@@ -66,20 +66,23 @@ export default function NewSessionDialog({
         if (cancelled) return;
         setProviders(data);
 
-        // Default orchestrator: first available API provider
+        // Default orchestrator: prefer Z.ai, then first available API provider
         const apiProviders = data.filter((p) => p.type === "api");
         const defaultOrch =
-          apiProviders.find((p) => p.available) ?? apiProviders[0];
+          apiProviders.find((p) => p.name === "zai" && p.available) ??
+          apiProviders.find((p) => p.available) ??
+          apiProviders[0];
         if (defaultOrch) {
           setSelectedProvider(defaultOrch.name);
           setModel(getDefaultModel(defaultOrch));
         }
 
-        // Default sub-agent engines: all providers, pre-checked based on availability
+        // Default sub-agent engines: only Claude and Codex pre-checked
+        const DEFAULT_SUB_AGENTS = ["claude", "codex"];
         const defaultEngines = new Set<string>();
         for (const p of data) {
           const engine = PROVIDER_ENGINE_MAP[p.name];
-          if (engine && p.available) {
+          if (engine && p.available && DEFAULT_SUB_AGENTS.includes(p.name)) {
             defaultEngines.add(engine);
           }
         }
