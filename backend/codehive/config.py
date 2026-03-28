@@ -97,7 +97,7 @@ class Settings(BaseSettings):
 
     model_config = {
         "env_prefix": "CODEHIVE_",
-        "env_file": ".env",
+        "env_file": ("../.env", ".env"),
         "env_file_encoding": "utf-8",
     }
 
