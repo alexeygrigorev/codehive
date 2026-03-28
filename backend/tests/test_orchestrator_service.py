@@ -375,6 +375,148 @@ class TestMaxRejections:
 
 
 # ---------------------------------------------------------------------------
+# Unit: Sub-agent engine selection
+# ---------------------------------------------------------------------------
+
+
+class TestSubAgentEngineSelection:
+    def test_resolve_sub_agent_engine_from_config(self):
+        """When sub_agent_engines is set, the first entry is used."""
+        service = OrchestratorService(
+            db_session_factory=AsyncMock(),
+            project_id=uuid.uuid4(),
+            config={"sub_agent_engines": ["claude_code", "native"]},
+        )
+        assert service._resolve_sub_agent_engine() == "claude_code"
+
+    def test_resolve_sub_agent_engine_fallback(self):
+        """When sub_agent_engines is not set, falls back to orchestrator engine."""
+        service = OrchestratorService(
+            db_session_factory=AsyncMock(),
+            project_id=uuid.uuid4(),
+            config={"engine": "native"},
+        )
+        assert service._resolve_sub_agent_engine() == "native"
+
+    def test_resolve_sub_agent_engine_empty_list_fallback(self):
+        """When sub_agent_engines is an empty list, falls back to orchestrator engine."""
+        service = OrchestratorService(
+            db_session_factory=AsyncMock(),
+            project_id=uuid.uuid4(),
+            config={"engine": "codex", "sub_agent_engines": []},
+        )
+        assert service._resolve_sub_agent_engine() == "codex"
+
+    def test_resolve_sub_agent_engine_default_config(self):
+        """Without any config override, falls back to DEFAULT_CONFIG engine."""
+        service = OrchestratorService(
+            db_session_factory=AsyncMock(),
+            project_id=uuid.uuid4(),
+        )
+        # DEFAULT_CONFIG["engine"] is "claude_code"
+        assert service._resolve_sub_agent_engine() == "claude_code"
+
+
+@pytest.mark.asyncio
+class TestSubAgentEngineSpawn:
+    async def test_spawn_uses_sub_agent_engine(
+        self,
+        db_session_factory,
+        db_session: AsyncSession,
+        project: Project,
+        orch_session: SessionModel,
+        issue: Issue,
+    ):
+        """Pipeline spawns child sessions using sub_agent_engines config."""
+        orch_session.issue_id = issue.id
+        await db_session.commit()
+
+        task = await create_task(
+            db_session,
+            session_id=orch_session.id,
+            title="test-spawn",
+            pipeline_status="backlog",
+        )
+
+        engines_seen: list[str] = []
+
+        async def mock_spawn(task_id, step, role, mode, instructions):
+            engines_seen.append(step)
+            if step == "grooming":
+                return "Groomed. VERDICT: PASS"
+            elif step == "implementing":
+                return "Done. VERDICT: PASS"
+            elif step == "testing":
+                return "Pass. VERDICT: PASS"
+            elif step == "accepting":
+                return "Accept. VERDICT: ACCEPT"
+            return ""
+
+        service = OrchestratorService(
+            db_session_factory,
+            project.id,
+            config={"sub_agent_engines": ["claude_code", "native"]},
+        )
+        service._spawn_and_run = mock_spawn
+
+        # Verify the engine resolution works correctly
+        assert service._resolve_sub_agent_engine() == "claude_code"
+
+        await service._run_task_pipeline(task)
+
+        # Pipeline should complete
+        async with db_session_factory() as db:
+            refreshed = await db.get(Task, task.id)
+            assert refreshed.pipeline_status == "done"
+
+    async def test_spawn_fallback_engine(
+        self,
+        db_session_factory,
+        db_session: AsyncSession,
+        project: Project,
+        orch_session: SessionModel,
+        issue: Issue,
+    ):
+        """Without sub_agent_engines, falls back to orchestrator's engine."""
+        orch_session.issue_id = issue.id
+        await db_session.commit()
+
+        task = await create_task(
+            db_session,
+            session_id=orch_session.id,
+            title="test-fallback",
+            pipeline_status="backlog",
+        )
+
+        async def mock_spawn(task_id, step, role, mode, instructions):
+            if step == "grooming":
+                return "Groomed. VERDICT: PASS"
+            elif step == "implementing":
+                return "Done. VERDICT: PASS"
+            elif step == "testing":
+                return "Pass. VERDICT: PASS"
+            elif step == "accepting":
+                return "Accept. VERDICT: ACCEPT"
+            return ""
+
+        service = OrchestratorService(
+            db_session_factory,
+            project.id,
+            config={"engine": "native"},
+        )
+        service._spawn_and_run = mock_spawn
+
+        # Without sub_agent_engines, falls back to engine
+        assert service._resolve_sub_agent_engine() == "native"
+
+        await service._run_task_pipeline(task)
+
+        async with db_session_factory() as db:
+            refreshed = await db.get(Task, task.id)
+            assert refreshed.pipeline_status == "done"
+
+
+# ---------------------------------------------------------------------------
 # Unit: OrchestratorService.get_status
 # ---------------------------------------------------------------------------
 

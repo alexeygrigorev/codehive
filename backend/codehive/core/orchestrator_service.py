@@ -638,6 +638,17 @@ class OrchestratorService:
         verdict = parse_verdict(output)
         return StepResult(verdict=verdict, output=output)
 
+    def _resolve_sub_agent_engine(self) -> str:
+        """Pick an engine for a sub-agent session.
+
+        If ``sub_agent_engines`` is set in the orchestrator config, use the
+        first entry.  Otherwise fall back to the orchestrator's own engine.
+        """
+        engines: list[str] = self.config.get("sub_agent_engines", [])
+        if engines:
+            return engines[0]
+        return self.config["engine"]
+
     async def _default_spawn_and_run(
         self,
         task_id: uuid.UUID,
@@ -652,12 +663,14 @@ class OrchestratorService:
         In production this would use _build_engine and send_message.
         For now returns empty string -- tests override via _spawn_and_run hook.
         """
+        sub_engine = self._resolve_sub_agent_engine()
+
         async with self._db_session_factory() as db:
             child_session = await create_db_session(
                 db,
                 project_id=self.project_id,
                 name=f"{role}-{step}-{task_id}",
-                engine=self.config["engine"],
+                engine=sub_engine,
                 mode=mode,
                 task_id=task_id,
                 pipeline_step=step,

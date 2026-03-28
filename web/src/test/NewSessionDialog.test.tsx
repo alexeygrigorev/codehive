@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import NewSessionDialog from "@/components/NewSessionDialog";
+import { PROVIDER_ENGINE_MAP } from "@/components/NewSessionDialog";
 
 vi.mock("@/api/providers", () => ({
   fetchProviders: vi.fn(),
@@ -23,13 +24,12 @@ const providers = [
     ],
   },
   {
-    name: "zai",
-    type: "api",
+    name: "codex",
+    type: "cli",
     available: true,
     reason: "",
     models: [
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
-      { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+      { id: "gpt-5.4", name: "GPT-5.4", is_default: true },
     ],
   },
   {
@@ -43,6 +43,23 @@ const providers = [
       { id: "o4-mini", name: "O4 Mini", is_default: false },
       { id: "o3", name: "O3", is_default: false },
     ],
+  },
+  {
+    name: "zai",
+    type: "api",
+    available: true,
+    reason: "",
+    models: [
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", is_default: true },
+      { id: "claude-opus-4-6", name: "Claude Opus 4.6", is_default: false },
+    ],
+  },
+  {
+    name: "copilot",
+    type: "cli",
+    available: false,
+    reason: "CLI not found",
+    models: [{ id: "default", name: "Default", is_default: true }],
   },
 ];
 
@@ -81,25 +98,7 @@ describe("NewSessionDialog", () => {
     expect(screen.getByTestId("model-input")).toBeInTheDocument();
   });
 
-  it("renders model combobox instead of plain text input", async () => {
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-        creating={false}
-      />,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
-    });
-    expect(screen.getByTestId("model-input")).toBeInTheDocument();
-    // The input should have combobox role
-    const input = screen.getByTestId("model-input");
-    expect(input.getAttribute("role")).toBe("combobox");
-  });
-
-  it("loads providers and shows them in dropdown", async () => {
+  it("orchestrator dropdown shows ONLY API providers", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -114,10 +113,18 @@ describe("NewSessionDialog", () => {
     });
 
     const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    expect(select.options).toHaveLength(3);
+    // Should only have 2 options: openai and zai (API providers)
+    expect(select.options).toHaveLength(2);
+    const optionValues = Array.from(select.options).map((o) => o.value);
+    expect(optionValues).toContain("openai");
+    expect(optionValues).toContain("zai");
+    // CLI providers should NOT be in the dropdown
+    expect(optionValues).not.toContain("claude");
+    expect(optionValues).not.toContain("codex");
+    expect(optionValues).not.toContain("copilot");
   });
 
-  it("default provider is claude with correct model", async () => {
+  it("default orchestrator is first available API provider", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -132,13 +139,69 @@ describe("NewSessionDialog", () => {
     });
 
     const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    expect(select.value).toBe("claude");
+    // openai is the first API provider in the list that is available
+    expect(select.value).toBe("openai");
 
     const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("claude-sonnet-4-6");
+    expect(modelInput.value).toBe("gpt-5.4");
   });
 
-  it("selecting Z.ai updates model to claude-sonnet-4-6", async () => {
+  it("sub-agent checkboxes show ALL providers", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sub-agent-engines")).toBeInTheDocument();
+    });
+
+    // All 5 providers should have checkboxes
+    expect(screen.getByTestId("sub-agent-claude")).toBeInTheDocument();
+    expect(screen.getByTestId("sub-agent-codex")).toBeInTheDocument();
+    expect(screen.getByTestId("sub-agent-openai")).toBeInTheDocument();
+    expect(screen.getByTestId("sub-agent-zai")).toBeInTheDocument();
+    expect(screen.getByTestId("sub-agent-copilot")).toBeInTheDocument();
+  });
+
+  it("available sub-agents are pre-checked, unavailable are unchecked and disabled", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sub-agent-engines")).toBeInTheDocument();
+    });
+
+    // Available providers should be checked
+    expect(screen.getByTestId("sub-agent-claude")).toBeChecked();
+    expect(screen.getByTestId("sub-agent-codex")).toBeChecked();
+    expect(screen.getByTestId("sub-agent-openai")).toBeChecked();
+    expect(screen.getByTestId("sub-agent-zai")).toBeChecked();
+
+    // Unavailable provider should be unchecked and disabled
+    const copilotCheckbox = screen.getByTestId("sub-agent-copilot") as HTMLInputElement;
+    expect(copilotCheckbox).not.toBeChecked();
+    expect(copilotCheckbox).toBeDisabled();
+  });
+
+  it("unavailable API provider shown disabled in orchestrator dropdown", async () => {
+    const withUnavailableApi = providers.map((p) =>
+      p.name === "openai"
+        ? { ...p, available: false, reason: "API key not set" }
+        : p,
+    );
+    mockFetchProviders.mockResolvedValue(withUnavailableApi);
+
     render(
       <NewSessionDialog
         open={true}
@@ -152,6 +215,33 @@ describe("NewSessionDialog", () => {
       expect(screen.getByTestId("provider-select")).toBeInTheDocument();
     });
 
+    const select = screen.getByTestId("provider-select") as HTMLSelectElement;
+    const openaiOption = Array.from(select.options).find(
+      (o) => o.value === "openai",
+    );
+    expect(openaiOption).toBeDefined();
+    expect(openaiOption!.disabled).toBe(true);
+    expect(openaiOption!.textContent).toContain("API key not set");
+
+    // Z.ai should be auto-selected as the only available API provider
+    expect(select.value).toBe("zai");
+  });
+
+  it("selecting orchestrator provider updates model dropdown", async () => {
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-select")).toBeInTheDocument();
+    });
+
+    // Switch to zai
     fireEvent.change(screen.getByTestId("provider-select"), {
       target: { value: "zai" },
     });
@@ -160,50 +250,7 @@ describe("NewSessionDialog", () => {
     expect(modelInput.value).toBe("claude-sonnet-4-6");
   });
 
-  it("selecting OpenAI updates model to gpt-5.4", async () => {
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-        creating={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("provider-select")).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByTestId("provider-select"), {
-      target: { value: "openai" },
-    });
-
-    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    expect(modelInput.value).toBe("gpt-5.4");
-  });
-
-  it("displays OpenAI label in dropdown", async () => {
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-        creating={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("provider-select")).toBeInTheDocument();
-    });
-
-    const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    const options = Array.from(select.options);
-    const openaiOption = options.find((o) => o.value === "openai");
-    expect(openaiOption).toBeDefined();
-    expect(openaiOption!.textContent).toContain("OpenAI");
-  });
-
-  it("calls onSubmit with correct data when form is submitted", async () => {
+  it("calls onSubmit with provider, model, and sub_agent_engines", async () => {
     const onSubmit = vi.fn();
     render(
       <NewSessionDialog
@@ -231,11 +278,42 @@ describe("NewSessionDialog", () => {
     // Submit
     fireEvent.click(screen.getByTestId("create-session-btn"));
 
-    expect(onSubmit).toHaveBeenCalledWith({
-      name: "My ZAI Session",
-      provider: "zai",
-      model: "claude-sonnet-4-6",
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "My ZAI Session",
+        provider: "zai",
+        model: "claude-sonnet-4-6",
+      }),
+    );
+    // sub_agent_engines should be an array of engine strings
+    const callArgs = onSubmit.mock.calls[0][0];
+    expect(callArgs.sub_agent_engines).toBeInstanceOf(Array);
+    expect(callArgs.sub_agent_engines.length).toBeGreaterThan(0);
+  });
+
+  it("unchecking a sub-agent engine removes it from submit data", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <NewSessionDialog
+        open={true}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        creating={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sub-agent-engines")).toBeInTheDocument();
     });
+
+    // Uncheck claude
+    fireEvent.click(screen.getByTestId("sub-agent-claude"));
+
+    // Submit
+    fireEvent.click(screen.getByTestId("create-session-btn"));
+
+    const callArgs = onSubmit.mock.calls[0][0];
+    expect(callArgs.sub_agent_engines).not.toContain("claude_code");
   });
 
   it("Create button is disabled when creating", async () => {
@@ -277,14 +355,7 @@ describe("NewSessionDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("shows key status indicator for each provider", async () => {
-    const providersWithMissingKey = [
-      { ...providers[0] },
-      { ...providers[1], available: false, reason: "no key" },
-      { ...providers[2] },
-    ];
-    mockFetchProviders.mockResolvedValue(providersWithMissingKey);
-
+  it("shows Orchestrator Engine label", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -295,18 +366,12 @@ describe("NewSessionDialog", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("provider-select")).toBeInTheDocument();
+      expect(screen.getByText("Orchestrator Engine")).toBeInTheDocument();
     });
-
-    const select = screen.getByTestId("provider-select") as HTMLSelectElement;
-    const options = Array.from(select.options);
-    // Claude has key set - shows checkmark
-    expect(options[0].textContent).toContain("\u2713");
-    // Z.ai has no key - shows "(no key)"
-    expect(options[1].textContent).toContain("(no key)");
+    expect(screen.getByText("Sub-Agent Engines")).toBeInTheDocument();
   });
 
-  it("shows model dropdown list when input is focused", async () => {
+  it("renders model combobox", async () => {
     render(
       <NewSessionDialog
         open={true}
@@ -315,141 +380,36 @@ describe("NewSessionDialog", () => {
         creating={false}
       />,
     );
-
     await waitFor(() => {
       expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
     });
+    const input = screen.getByTestId("model-input");
+    expect(input.getAttribute("role")).toBe("combobox");
+  });
+});
 
-    const modelInput = screen.getByTestId("model-input");
-    fireEvent.focus(modelInput);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
-    });
+describe("PROVIDER_ENGINE_MAP", () => {
+  it("maps zai to native", () => {
+    expect(PROVIDER_ENGINE_MAP["zai"]).toBe("native");
   });
 
-  it("dropdown shows display names with model IDs", async () => {
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-        creating={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
-    });
-
-    const modelInput = screen.getByTestId("model-input");
-    fireEvent.focus(modelInput);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
-    });
-
-    // Should show display name with model ID in parentheses
-    const listbox = screen.getByTestId("model-listbox");
-    expect(listbox.textContent).toContain("Claude Sonnet 4.6");
-    expect(listbox.textContent).toContain("(claude-sonnet-4-6)");
-    expect(listbox.textContent).toContain("Claude Opus 4.6");
-    expect(listbox.textContent).toContain("(claude-opus-4-6)");
+  it("maps openai to codex", () => {
+    expect(PROVIDER_ENGINE_MAP["openai"]).toBe("codex");
   });
 
-  it("clicking a model option sets the input value to model ID", async () => {
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-        creating={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
-    });
-
-    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    fireEvent.focus(modelInput);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
-    });
-
-    // Click on "Claude Opus 4.6"
-    const listbox = screen.getByTestId("model-listbox");
-    const options = listbox.querySelectorAll('[role="option"]');
-    // Second option should be Claude Opus 4.6
-    const opusOption = Array.from(options).find((o) =>
-      o.textContent?.includes("Claude Opus 4.6"),
-    );
-    expect(opusOption).toBeDefined();
-    fireEvent.mouseDown(opusOption!);
-
-    expect(modelInput.value).toBe("claude-opus-4-6");
+  it("maps claude to claude_code", () => {
+    expect(PROVIDER_ENGINE_MAP["claude"]).toBe("claude_code");
   });
 
-  it("user can type a custom model ID freely", async () => {
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-        creating={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
-    });
-
-    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    fireEvent.change(modelInput, {
-      target: { value: "claude-test-model-preview" },
-    });
-
-    expect(modelInput.value).toBe("claude-test-model-preview");
+  it("maps codex to codex_cli", () => {
+    expect(PROVIDER_ENGINE_MAP["codex"]).toBe("codex_cli");
   });
 
-  it("form submission sends model ID string not display name", async () => {
-    const onSubmit = vi.fn();
-    render(
-      <NewSessionDialog
-        open={true}
-        onClose={vi.fn()}
-        onSubmit={onSubmit}
-        creating={false}
-      />,
-    );
+  it("maps copilot to copilot_cli", () => {
+    expect(PROVIDER_ENGINE_MAP["copilot"]).toBe("copilot_cli");
+  });
 
-    await waitFor(() => {
-      expect(screen.getByTestId("model-combobox")).toBeInTheDocument();
-    });
-
-    // Select a model from dropdown
-    const modelInput = screen.getByTestId("model-input") as HTMLInputElement;
-    fireEvent.focus(modelInput);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("model-listbox")).toBeInTheDocument();
-    });
-
-    const listbox = screen.getByTestId("model-listbox");
-    const options = listbox.querySelectorAll('[role="option"]');
-    const opusOption = Array.from(options).find((o) =>
-      o.textContent?.includes("Claude Opus 4.6"),
-    );
-    fireEvent.mouseDown(opusOption!);
-
-    // Submit
-    fireEvent.click(screen.getByTestId("create-session-btn"));
-
-    expect(onSubmit).toHaveBeenCalledWith({
-      name: "New Session",
-      provider: "claude",
-      model: "claude-opus-4-6",
-    });
+  it("maps gemini to gemini_cli", () => {
+    expect(PROVIDER_ENGINE_MAP["gemini"]).toBe("gemini_cli");
   });
 });

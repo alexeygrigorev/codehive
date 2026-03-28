@@ -112,15 +112,33 @@ export default function ProjectPage() {
     name: string;
     provider: string;
     model: string;
+    sub_agent_engines: string[];
   }) {
     if (!projectId) return;
     setCreatingSession(true);
+
+    const PROVIDER_ENGINE_MAP: Record<string, string> = {
+      zai: "native",
+      openai: "codex",
+      claude: "claude_code",
+      codex: "codex_cli",
+      copilot: "copilot_cli",
+      gemini: "gemini_cli",
+    };
+    const engine = PROVIDER_ENGINE_MAP[data.provider] || "claude_code";
+
     try {
       const session = await createSession(projectId, {
         name: data.name,
-        engine: "claude_code",
+        engine,
         mode: "execution",
-        config: { provider: data.provider, model: data.model },
+        config: {
+          provider: data.provider,
+          model: data.model,
+          orchestrator_provider: data.provider,
+          orchestrator_model: data.model,
+          sub_agent_engines: data.sub_agent_engines,
+        },
       });
       setShowNewSessionDialog(false);
       navigate(`/sessions/${session.id}`);

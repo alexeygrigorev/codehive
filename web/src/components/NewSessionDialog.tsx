@@ -2,6 +2,26 @@ import { useEffect, useState } from "react";
 import { fetchProviders, type ProviderInfo } from "@/api/providers";
 import ModelCombobox from "@/components/ModelCombobox";
 
+/** Maps provider name to the engine type string used by the backend. */
+export const PROVIDER_ENGINE_MAP: Record<string, string> = {
+  zai: "native",
+  openai: "codex",
+  claude: "claude_code",
+  codex: "codex_cli",
+  copilot: "copilot_cli",
+  gemini: "gemini_cli",
+};
+
+/** Human-readable labels for each provider. */
+const PROVIDER_LABELS: Record<string, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  openai: "OpenAI",
+  zai: "Z.ai",
+  copilot: "Copilot",
+  gemini: "Gemini",
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -9,6 +29,7 @@ interface Props {
     name: string;
     provider: string;
     model: string;
+    sub_agent_engines: string[];
   }) => void;
   creating: boolean;
 }
@@ -27,9 +48,12 @@ export default function NewSessionDialog({
 }: Props) {
   const [name, setName] = useState("New Session");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState("claude");
+  const [selectedProvider, setSelectedProvider] = useState("");
   const [model, setModel] = useState("");
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [subAgentEngines, setSubAgentEngines] = useState<Set<string>>(
+    new Set(),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -41,11 +65,25 @@ export default function NewSessionDialog({
         const data = await fetchProviders();
         if (cancelled) return;
         setProviders(data);
-        // Set default model from the default provider
-        const defaultProv = data.find((p) => p.name === "claude");
-        if (defaultProv) {
-          setModel(getDefaultModel(defaultProv));
+
+        // Default orchestrator: first available API provider
+        const apiProviders = data.filter((p) => p.type === "api");
+        const defaultOrch =
+          apiProviders.find((p) => p.available) ?? apiProviders[0];
+        if (defaultOrch) {
+          setSelectedProvider(defaultOrch.name);
+          setModel(getDefaultModel(defaultOrch));
         }
+
+        // Default sub-agent engines: all providers, pre-checked based on availability
+        const defaultEngines = new Set<string>();
+        for (const p of data) {
+          const engine = PROVIDER_ENGINE_MAP[p.name];
+          if (engine && p.available) {
+            defaultEngines.add(engine);
+          }
+        }
+        setSubAgentEngines(defaultEngines);
       } catch {
         // Silently continue with empty providers list
       } finally {
@@ -67,13 +105,33 @@ export default function NewSessionDialog({
     }
   }
 
+  function handleSubAgentToggle(providerName: string) {
+    const engine = PROVIDER_ENGINE_MAP[providerName];
+    if (!engine) return;
+    setSubAgentEngines((prev) => {
+      const next = new Set(prev);
+      if (next.has(engine)) {
+        next.delete(engine);
+      } else {
+        next.add(engine);
+      }
+      return next;
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit({ name, provider: selectedProvider, model });
+    onSubmit({
+      name,
+      provider: selectedProvider,
+      model,
+      sub_agent_engines: Array.from(subAgentEngines),
+    });
   }
 
   if (!open) return null;
 
+  const apiProviders = providers.filter((p) => p.type === "api");
   const currentProvider = providers.find((p) => p.name === selectedProvider);
   const currentModels = currentProvider?.models ?? [];
 
@@ -112,14 +170,17 @@ export default function NewSessionDialog({
               />
             </div>
 
-            {/* Provider selection */}
+            {/* Orchestrator Engine selection */}
             <div>
               <label
                 htmlFor="session-provider"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
               >
-                Provider
+                Orchestrator Engine
               </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                The API-based engine that coordinates work.
+              </p>
               {loadingProviders ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Loading providers...
@@ -132,18 +193,16 @@ export default function NewSessionDialog({
                   className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100"
                   data-testid="provider-select"
                 >
-                  {providers.map((p) => {
-                    const labels: Record<string, string> = {
-                      claude: "Claude",
-                      codex: "Codex",
-                      openai: "OpenAI",
-                      zai: "Z.ai",
-                    };
-                    const label = labels[p.name] || p.name;
+                  {apiProviders.map((p) => {
+                    const label = PROVIDER_LABELS[p.name] || p.name;
                     return (
-                      <option key={p.name} value={p.name}>
+                      <option
+                        key={p.name}
+                        value={p.name}
+                        disabled={!p.available}
+                      >
                         {label}
-                        {p.available ? " \u2713" : ` (${p.reason})`}
+                        {p.available ? "" : ` (${p.reason})`}
                       </option>
                     );
                   })}
@@ -164,6 +223,51 @@ export default function NewSessionDialog({
                 value={model}
                 onChange={setModel}
               />
+            </div>
+
+            {/* Sub-Agent Engines */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Sub-Agent Engines
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                Engines the orchestrator may use for coding sub-agents.
+              </p>
+              <div
+                className="space-y-1"
+                data-testid="sub-agent-engines"
+              >
+                {providers.map((p) => {
+                  const engine = PROVIDER_ENGINE_MAP[p.name];
+                  if (!engine) return null;
+                  const label = PROVIDER_LABELS[p.name] || p.name;
+                  const checked = subAgentEngines.has(engine);
+                  return (
+                    <label
+                      key={p.name}
+                      className={`flex items-center gap-2 text-sm ${
+                        !p.available
+                          ? "text-gray-400 dark:text-gray-500"
+                          : "text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!p.available}
+                        onChange={() => handleSubAgentToggle(p.name)}
+                        data-testid={`sub-agent-${p.name}`}
+                      />
+                      {label}
+                      {!p.available && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          ({p.reason})
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

@@ -98,7 +98,7 @@ describe("ProjectPage", () => {
   const defaultProviders = [
     {
       name: "claude",
-      type: "claude_code",
+      type: "cli",
       available: true,
       reason: "",
       models: [
@@ -108,7 +108,7 @@ describe("ProjectPage", () => {
     },
     {
       name: "zai",
-      type: "native",
+      type: "api",
       available: true,
       reason: "",
       models: [
@@ -230,9 +230,15 @@ describe("ProjectPage", () => {
     await waitFor(() => {
       expect(mockCreateSession).toHaveBeenCalledWith("p1", {
         name: "New Session",
-        engine: "claude_code",
+        engine: "native",
         mode: "execution",
-        config: { provider: "claude", model: "claude-sonnet-4-6" },
+        config: {
+          provider: "zai",
+          model: "claude-sonnet-4-6",
+          orchestrator_provider: "zai",
+          orchestrator_model: "claude-sonnet-4-6",
+          sub_agent_engines: ["claude_code", "native"],
+        },
       });
     });
     expect(mockNavigate).toHaveBeenCalledWith("/sessions/s-new");
