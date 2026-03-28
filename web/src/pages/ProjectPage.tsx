@@ -85,7 +85,7 @@ export default function ProjectPage() {
         setIssuesLoaded(true);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to load issues",
+          err instanceof Error ? err.message : "Failed to load tasks",
         );
       }
     },
@@ -278,7 +278,7 @@ export default function ProjectPage() {
                 : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             }`}
           >
-            Issues
+            Tasks
           </button>
           <button
             role="tab"

@@ -136,13 +136,13 @@ describe("ProjectPage", () => {
     expect(screen.getByText("Loading project...")).toBeInTheDocument();
   });
 
-  it("renders Sessions and Issues tabs", async () => {
+  it("renders Sessions and Tasks tabs", async () => {
     renderProjectPage();
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
     expect(screen.getByRole("tab", { name: "Sessions" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tasks" })).toBeInTheDocument();
   });
 
   it("Sessions tab is active by default and shows SessionList", async () => {
@@ -155,18 +155,18 @@ describe("ProjectPage", () => {
     expect(screen.getByText("Session Alpha")).toBeInTheDocument();
   });
 
-  it("clicking Issues tab shows IssueList", async () => {
+  it("clicking Tasks tab shows IssueList", async () => {
     renderProjectPage();
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Issues" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
 
     await waitFor(() => {
       expect(screen.getByText("Fix login bug")).toBeInTheDocument();
     });
-    const issuesTab = screen.getByRole("tab", { name: "Issues" });
+    const issuesTab = screen.getByRole("tab", { name: "Tasks" });
     expect(issuesTab).toHaveAttribute("aria-selected", "true");
   });
 
@@ -179,7 +179,7 @@ describe("ProjectPage", () => {
     expect(screen.getByText("web-app")).toBeInTheDocument();
     expect(screen.getByText("Path: /tmp/my-project")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Issues" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
     expect(screen.getByRole("heading", { name: "My Project" })).toBeInTheDocument();
     expect(screen.getByText("A great project")).toBeInTheDocument();
   });
@@ -360,7 +360,7 @@ describe("ProjectPage", () => {
     expect(screen.getByText("idle")).toBeInTheDocument();
   });
 
-  it("Issues tab creates issue via API and adds it to the list", async () => {
+  it("Tasks tab creates task via API and adds it to the list", async () => {
     const newIssue = {
       id: "i2",
       project_id: "p1",
@@ -377,17 +377,17 @@ describe("ProjectPage", () => {
     });
 
     // Switch to issues tab
-    fireEvent.click(screen.getByRole("tab", { name: "Issues" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
     await waitFor(() => {
       expect(screen.getByText("Fix login bug")).toBeInTheDocument();
     });
 
     // Open create form
-    fireEvent.click(screen.getByText("+ New Issue"));
-    fireEvent.change(screen.getByPlaceholderText("Issue title"), {
+    fireEvent.click(screen.getByText("+ New Task"));
+    fireEvent.change(screen.getByPlaceholderText("Task title"), {
       target: { value: "New feature request" },
     });
-    fireEvent.click(screen.getByText("Create Issue"));
+    fireEvent.click(screen.getByText("Create Task"));
 
     await waitFor(() => {
       expect(mockCreateIssue).toHaveBeenCalledWith("p1", {

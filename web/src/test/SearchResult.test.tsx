@@ -38,9 +38,9 @@ describe("SearchResult", () => {
     expect(screen.getByTestId("type-badge")).toHaveTextContent("Message");
   });
 
-  it("renders issue type badge", () => {
+  it("renders issue type badge as Task", () => {
     renderResult(makeResult({ type: "issue" }));
-    expect(screen.getByTestId("type-badge")).toHaveTextContent("Issue");
+    expect(screen.getByTestId("type-badge")).toHaveTextContent("Task");
   });
 
   it("renders snippet text, project name, and timestamp", () => {

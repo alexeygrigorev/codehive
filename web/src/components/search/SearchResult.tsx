@@ -10,7 +10,7 @@ interface SearchResultProps {
 const TYPE_LABELS: Record<string, string> = {
   session: "Session",
   message: "Message",
-  issue: "Issue",
+  issue: "Task",
   event: "Event",
 };
 

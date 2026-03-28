@@ -102,7 +102,7 @@ describe("TaskDetailPanel", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Issue Log")).toBeInTheDocument();
+      expect(screen.getByText("Task Log")).toBeInTheDocument();
     });
 
     const entries = screen.getAllByTestId("issue-log-entry");
@@ -128,7 +128,7 @@ describe("TaskDetailPanel", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("No issue log entries")).toBeInTheDocument();
+      expect(screen.getByText("No task log entries")).toBeInTheDocument();
     });
   });
 });

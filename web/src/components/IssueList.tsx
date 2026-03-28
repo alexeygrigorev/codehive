@@ -82,7 +82,7 @@ export default function IssueList({
           onClick={() => setShowForm(!showForm)}
           className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm"
         >
-          + New Issue
+          + New Task
         </button>
       </div>
 
@@ -99,7 +99,7 @@ export default function IssueList({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Issue title"
+              placeholder="Task title"
               required
               className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
@@ -111,7 +111,7 @@ export default function IssueList({
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Issue description"
+              placeholder="Task description"
               rows={3}
               className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
@@ -122,7 +122,7 @@ export default function IssueList({
               disabled={creating || !title.trim()}
               className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
             >
-              {creating ? "Creating..." : "Create Issue"}
+              {creating ? "Creating..." : "Create Task"}
             </button>
             <button
               type="button"
@@ -136,7 +136,7 @@ export default function IssueList({
       )}
 
       {issues.length === 0 ? (
-        <p className="text-gray-500 dark:text-gray-400 text-sm">No issues found.</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">No tasks found.</p>
       ) : (
         <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
           {issues.map((issue) => {

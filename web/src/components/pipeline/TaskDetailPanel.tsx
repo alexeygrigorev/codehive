@@ -157,12 +157,12 @@ export default function TaskDetailPanel({
           {task.issue_id && (
             <div data-testid="issue-log-section">
               <h3 className="text-sm font-medium text-gray-400 mb-1">
-                Issue Log
+                Task Log
               </h3>
               {issueLogLoading ? (
-                <p className="text-gray-500 text-sm">Loading issue logs...</p>
+                <p className="text-gray-500 text-sm">Loading task logs...</p>
               ) : issueLog.length === 0 ? (
-                <p className="text-gray-500 text-sm">No issue log entries</p>
+                <p className="text-gray-500 text-sm">No task log entries</p>
               ) : (
                 <ul className="space-y-2">
                   {issueLog.map((entry) => (

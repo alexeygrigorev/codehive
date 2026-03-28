@@ -47,7 +47,7 @@ describe("IssueList", () => {
         onCreateIssue={vi.fn()}
       />,
     );
-    expect(screen.getByText("No issues found.")).toBeInTheDocument();
+    expect(screen.getByText("No tasks found.")).toBeInTheDocument();
   });
 
   it("status filter buttons highlight the active filter", () => {
@@ -111,7 +111,7 @@ describe("IssueList", () => {
     expect(closedBadge.className).toContain("bg-green-100");
   });
 
-  it("New Issue button shows create form and Cancel hides it", () => {
+  it("New Task button shows create form and Cancel hides it", () => {
     render(
       <IssueList
         issues={[]}
@@ -121,12 +121,12 @@ describe("IssueList", () => {
       />,
     );
     // Form not visible initially
-    expect(screen.queryByPlaceholderText("Issue title")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Task title")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("+ New Issue"));
-    expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("+ New Task"));
+    expect(screen.getByPlaceholderText("Task title")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Cancel"));
-    expect(screen.queryByPlaceholderText("Issue title")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Task title")).not.toBeInTheDocument();
   });
 });
