@@ -4,7 +4,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -644,15 +644,15 @@ class TestMessagesEndpointIntegration:
             for ev in fake_events:
                 yield ev
 
-        mock_engine = MagicMock()
+        mock_engine = AsyncMock()
         mock_engine.send_message = fake_send_message
 
-        async def mock_build_engine(session_config, engine_type="native"):
+        async def mock_build_engine(session_config, engine_type="claude_code"):
             return mock_engine
 
         with patch(
             "codehive.api.routes.sessions._build_engine",
-            side_effect=mock_build_engine,
+            new=mock_build_engine,
         ):
             resp = await api_client.post(
                 f"/api/sessions/{session_obj.id}/messages",
@@ -674,15 +674,15 @@ class TestMessagesEndpointIntegration:
             raise RuntimeError("Engine exploded")
             yield  # pragma: no cover
 
-        mock_engine = MagicMock()
+        mock_engine = AsyncMock()
         mock_engine.send_message = failing_send
 
-        async def mock_build_engine(session_config, engine_type="native"):
+        async def mock_build_engine(session_config, engine_type="claude_code"):
             return mock_engine
 
         with patch(
             "codehive.api.routes.sessions._build_engine",
-            side_effect=mock_build_engine,
+            new=mock_build_engine,
         ):
             resp = await api_client.post(
                 f"/api/sessions/{session_obj.id}/messages",

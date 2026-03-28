@@ -32,9 +32,9 @@ class TestWorkflowSyntax:
         else:
             raise AssertionError(f"Unexpected trigger format: {triggers}")
 
-    def test_exactly_four_jobs(self):
+    def test_exactly_three_jobs(self):
         data = yaml.safe_load(WORKFLOW_FILE.read_text())
-        expected_jobs = {"backend", "frontend", "mobile", "docker-build"}
+        expected_jobs = {"backend", "frontend", "mobile"}
         actual_jobs = set(data["jobs"].keys())
         assert expected_jobs == actual_jobs, f"Expected jobs {expected_jobs}, got {actual_jobs}"
 
@@ -99,61 +99,6 @@ class TestMobileJob:
             s for s in job["steps"] if s.get("uses", "").startswith("actions/checkout@v4")
         ]
         assert len(checkout_steps) >= 1, "Mobile job must use actions/checkout@v4"
-
-
-class TestDockerBuildJob:
-    """Validate docker-build job structure."""
-
-    def _get_docker_job(self):
-        data = yaml.safe_load(WORKFLOW_FILE.read_text())
-        return data["jobs"]["docker-build"]
-
-    def test_runs_on_ubuntu_latest(self):
-        job = self._get_docker_job()
-        assert job["runs-on"] == "ubuntu-latest"
-
-    def test_uses_checkout(self):
-        job = self._get_docker_job()
-        checkout_steps = [
-            s for s in job["steps"] if s.get("uses", "").startswith("actions/checkout@v4")
-        ]
-        assert len(checkout_steps) >= 1, "docker-build job must use actions/checkout@v4"
-
-    def test_builds_backend_dockerfile(self):
-        job = self._get_docker_job()
-        run_commands = [s.get("run", "") for s in job["steps"]]
-        assert any(
-            "docker build" in cmd
-            and "backend/Dockerfile" in cmd
-            and cmd.rstrip().endswith("backend/")
-            for cmd in run_commands
-        ), "docker-build job must run 'docker build -f backend/Dockerfile backend/'"
-
-    def test_builds_web_dockerfile(self):
-        job = self._get_docker_job()
-        run_commands = [s.get("run", "") for s in job["steps"]]
-        assert any(
-            "docker build" in cmd and "web/Dockerfile" in cmd and cmd.rstrip().endswith("web/")
-            for cmd in run_commands
-        ), "docker-build job must run 'docker build -f web/Dockerfile web/'"
-
-    def test_no_push_flag(self):
-        job = self._get_docker_job()
-        run_commands = [s.get("run", "") for s in job["steps"]]
-        for cmd in run_commands:
-            if "docker" in cmd:
-                assert "--push" not in cmd, "Docker builds must not use --push flag"
-
-    def test_no_registry_login(self):
-        job = self._get_docker_job()
-        steps = job["steps"]
-        for step in steps:
-            uses = step.get("uses", "")
-            run = step.get("run", "")
-            assert "docker/login-action" not in uses, (
-                "docker-build must not have registry login steps"
-            )
-            assert "docker login" not in run, "docker-build must not have docker login commands"
 
 
 class TestExistingJobsUnchanged:

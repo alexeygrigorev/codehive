@@ -16,7 +16,6 @@ from codehive.db.models import (
     Project,
     Session,
     Task,
-    Workspace,
 )
 from codehive.db.session import async_session_factory
 
@@ -55,22 +54,9 @@ requires_pg = pytest.mark.skipif(not _pg_available(), reason="Postgres not avail
 # ---------------------------------------------------------------------------
 
 
-class TestWorkspaceModel:
-    def test_instantiation(self):
-        ws = Workspace(name="test-ws", root_path="/tmp/ws")
-        assert ws.name == "test-ws"
-        assert ws.root_path == "/tmp/ws"
-
-    def test_uuid_pk_generated_on_init_or_flush(self):
-        """UUID PK is either set at construction or at flush time."""
-        ws = Workspace(id=uuid.uuid4(), name="ws", root_path="/tmp")
-        assert ws.id is not None
-        assert isinstance(ws.id, uuid.UUID)
-
-
 class TestProjectModel:
     def test_instantiation(self):
-        p = Project(workspace_id=uuid.uuid4(), name="proj")
+        p = Project(name="proj")
         assert p.name == "proj"
         assert p.path is None
         assert p.description is None
@@ -173,12 +159,12 @@ class TestBaseMetadata:
     def test_all_tables_registered(self):
         expected = {
             "users",
-            "workspaces",
-            "workspace_members",
             "projects",
             "issues",
+            "issue_log_entries",
             "sessions",
             "tasks",
+            "task_pipeline_logs",
             "messages",
             "events",
             "checkpoints",
@@ -188,6 +174,9 @@ class TestBaseMetadata:
             "remote_targets",
             "push_subscriptions",
             "device_tokens",
+            "usage_records",
+            "rate_limit_snapshots",
+            "model_usage_snapshots",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -204,16 +193,16 @@ class TestAsyncSessionFactory:
         assert callable(factory)
 
     @pytest.mark.asyncio
-    async def test_round_trip_workspace(self):
+    async def test_round_trip_project(self):
         factory = async_session_factory(database_url=DATABASE_URL)
         async with factory() as session:
-            ws = Workspace(name=f"test-{uuid.uuid4().hex[:8]}", root_path="/tmp/test")
-            session.add(ws)
+            proj = Project(name=f"test-{uuid.uuid4().hex[:8]}", path="/tmp/test")
+            session.add(proj)
             await session.commit()
 
-            result = await session.get(Workspace, ws.id)
+            result = await session.get(Project, proj.id)
             assert result is not None
-            assert result.name == ws.name
+            assert result.name == proj.name
             assert result.created_at is not None
 
             # cleanup
@@ -228,11 +217,7 @@ class TestFullEntityGraph:
         """Insert a full entity graph and verify FK references persist."""
         factory = async_session_factory(database_url=DATABASE_URL)
         async with factory() as session:
-            ws = Workspace(name=f"graph-{uuid.uuid4().hex[:8]}", root_path="/tmp")
-            session.add(ws)
-            await session.flush()
-
-            proj = Project(workspace_id=ws.id, name="proj")
+            proj = Project(name=f"graph-{uuid.uuid4().hex[:8]}", path="/tmp")
             session.add(proj)
             await session.flush()
 
@@ -244,7 +229,7 @@ class TestFullEntityGraph:
                 project_id=proj.id,
                 issue_id=issue.id,
                 name="sess-1",
-                engine="native",
+                engine="claude_code",
                 mode="execution",
             )
             session.add(sess)
@@ -255,7 +240,7 @@ class TestFullEntityGraph:
                 project_id=proj.id,
                 parent_session_id=sess.id,
                 name="child-sess",
-                engine="native",
+                engine="claude_code",
                 mode="execution",
             )
             session.add(child_sess)
@@ -271,12 +256,11 @@ class TestFullEntityGraph:
             await session.commit()
 
             # Verify all persisted with UUIDs
-            for obj in [ws, proj, issue, sess, child_sess, task, msg, evt, cp, pq]:
+            for obj in [proj, issue, sess, child_sess, task, msg, evt, cp, pq]:
                 assert obj.id is not None
                 assert isinstance(obj.id, uuid.UUID)
 
             # Verify FK references
-            assert proj.workspace_id == ws.id
             assert issue.project_id == proj.id
             assert sess.project_id == proj.id
             assert sess.issue_id == issue.id
@@ -288,12 +272,12 @@ class TestFullEntityGraph:
             assert pq.session_id == sess.id
 
             # Verify server defaults populated
-            assert ws.created_at is not None
+            assert proj.created_at is not None
             assert task.created_at is not None
             assert pq.answered is False
 
             # cleanup (delete in reverse FK order)
-            for obj in [pq, cp, evt, msg, task, child_sess, sess, issue, proj, ws]:
+            for obj in [pq, cp, evt, msg, task, child_sess, sess, issue, proj]:
                 await session.delete(obj)
             await session.commit()
 
