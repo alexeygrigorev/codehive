@@ -22,7 +22,7 @@ from codehive.core.engine_throttle import EngineThrottleTracker
 from codehive.core.git_service import GitError, GitService
 from codehive.core.issues import create_issue_log_entry
 from codehive.core.session import create_session as create_db_session
-from codehive.core.task_queue import list_tasks, pipeline_transition
+from codehive.core.task_queue import list_tasks
 from codehive.core.verdicts import get_verdict as get_structured_verdict
 from codehive.core.spawn_config import get_engine_extra_args, get_system_prompt_for_role
 from codehive.db.models import AgentProfile, Issue, Project, Task
@@ -344,106 +344,26 @@ class OrchestratorService:
     async def _run_task_pipeline(self, task: Task) -> None:
         """Run the full pipeline for a single task.
 
-        Continues until the task reaches "done", is flagged, or the service
-        is stopped (checked between steps to allow graceful shutdown).
+        Delegates to ``TaskExecutionRunner`` for the deterministic state-machine
+        loop.  Continues until the task reaches "done", is flagged, or the
+        service is stopped.
         """
-        task_id = task.id
-        current_step = task.pipeline_status
+        from codehive.core.task_runner import TaskExecutionRunner
 
-        # Pipeline order: backlog -> grooming -> groomed -> implementing -> testing -> accepting -> done
-        steps_from: dict[str, str] = {
-            "backlog": "grooming",
-            "grooming": "grooming",
-            "groomed": "implementing",
-            "implementing": "implementing",
-            "testing": "testing",
-            "accepting": "accepting",
-        }
+        runner = TaskExecutionRunner(
+            db_session_factory=self._db_session_factory,
+            task_id=task.id,
+            config=self.config,
+            spawn_fn=self._spawn_and_run,
+        )
 
-        last_output: str = ""
-        last_feedback: str = ""
+        result = await runner.run()
 
-        while True:
-            if task_id in self.state.flagged_tasks:
-                break
-
-            # Get the next step to execute
-            next_step = steps_from.get(current_step)
-            if next_step is None or current_step == "done":
-                break
-
-            # Transition to the active step if needed
-            if current_step in ("backlog", "groomed"):
-                async with self._db_session_factory() as db:
-                    await pipeline_transition(db, task_id, next_step, actor="orchestrator")
-                current_step = next_step
-                # Post GitHub comment for the step transition
-                await self._try_post_github_comment(task_id, current_step)
-
-            # Run the step
-            result = await self._run_pipeline_step(
-                task_id, current_step, last_feedback, last_output
-            )
-
-            last_output = result.output
-
-            # Route the result
-            target = route_result(current_step, result.verdict)
-            if target is None:
-                break
-
-            # Check rejection limits
-            if target == "implementing" and current_step in ("testing", "accepting"):
-                count = self.state.rejection_counts.get(task_id, 0) + 1
-                self.state.rejection_counts[task_id] = count
-                # Prefer structured feedback over raw output
-                last_feedback = result.feedback or result.output
-
-                if count >= self.config["max_rejections_per_step"]:
-                    self.state.flagged_tasks.add(task_id)
-                    # Log the flagging
-                    async with self._db_session_factory() as db:
-                        # Find issue_id from task's session
-                        refreshed_task = await db.get(Task, task_id)
-                        if refreshed_task:
-                            session = await db.get(SessionModel, refreshed_task.session_id)
-                            if session and session.issue_id:
-                                await create_issue_log_entry(
-                                    db,
-                                    issue_id=session.issue_id,
-                                    agent_role="orchestrator",
-                                    content=f"Task flagged for human review after "
-                                    f"{count} rejections.",
-                                )
-                    break
-
-                # Log the rejection feedback
-                async with self._db_session_factory() as db:
-                    refreshed_task = await db.get(Task, task_id)
-                    if refreshed_task:
-                        session = await db.get(SessionModel, refreshed_task.session_id)
-                        if session and session.issue_id:
-                            role = "qa" if current_step == "testing" else "pm"
-                            await create_issue_log_entry(
-                                db,
-                                issue_id=session.issue_id,
-                                agent_role=role,
-                                content=result.output or "Rejected",
-                            )
-
-            # Transition
-            async with self._db_session_factory() as db:
-                await pipeline_transition(db, task_id, target, actor="orchestrator")
-
-            # Git commit after transitioning to done
-            commit_sha: str | None = None
-            if target == "done":
-                commit_sha = await self._try_git_commit(task_id)
-
-            # Post GitHub comment for the transition
-            await self._try_post_github_comment(task_id, target, commit_sha=commit_sha)
-
-            current_step = target
+        # Mirror flagged status into orchestrator state
+        if result.final_status == "flagged":
+            self.state.flagged_tasks.add(task.id)
+        if result.rejection_count > 0:
+            self.state.rejection_counts[task.id] = result.rejection_count
 
     async def _try_post_github_comment(
         self, task_id: uuid.UUID, step: str, commit_sha: str | None = None
