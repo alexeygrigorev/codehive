@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
 from codehive.api.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
+from codehive.core.context_files import read_context_file, scan_context_files
 from codehive.core.project import (
     InvalidArchetypeError,
     ProjectNotFoundError,
@@ -160,3 +161,65 @@ async def unarchive_project_endpoint(
     except ProjectNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     return ProjectRead.model_validate(project)
+
+
+# ---------------------------------------------------------------------------
+# Context files endpoints
+# ---------------------------------------------------------------------------
+
+
+class ContextFileEntry(BaseModel):
+    path: str
+    size: int
+
+
+class ContextFileContent(BaseModel):
+    path: str
+    content: str
+
+
+@router.get(
+    "/{project_id}/context-files",
+    response_model=list[ContextFileEntry],
+)
+async def list_context_files_endpoint(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[ContextFileEntry]:
+    """Return detected context files for a project."""
+    project = await get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.path:
+        return []
+
+    files = scan_context_files(project.path)
+    return [ContextFileEntry(**f) for f in files]
+
+
+@router.get(
+    "/{project_id}/context-files/{file_path:path}",
+    response_model=ContextFileContent,
+)
+async def read_context_file_endpoint(
+    project_id: uuid.UUID,
+    file_path: str,
+    db: AsyncSession = Depends(get_db),
+) -> ContextFileContent:
+    """Return the content of a single context file."""
+    project = await get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.path:
+        raise HTTPException(status_code=404, detail="Project has no path")
+
+    try:
+        content = read_context_file(project.path, file_path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Context file not found")
+
+    return ContextFileContent(path=file_path, content=content)

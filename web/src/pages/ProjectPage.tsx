@@ -18,8 +18,10 @@ import IssueList from "@/components/IssueList";
 import Breadcrumb from "@/components/Breadcrumb";
 import NewSessionDialog from "@/components/NewSessionDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ContextFilesSection from "@/components/ContextFilesSection";
+import ProjectSettingsPanel from "@/components/ProjectSettingsPanel";
 
-type Tab = "sessions" | "issues" | "team";
+type Tab = "sessions" | "issues" | "team" | "settings";
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -253,6 +255,8 @@ export default function ProjectPage() {
         )}
       </div>
 
+      {project.path && <ContextFilesSection projectId={project.id} />}
+
       {/* Tabs */}
       <div className="mt-6 border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-4" role="tablist">
@@ -291,6 +295,18 @@ export default function ProjectPage() {
             }`}
           >
             Team
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "settings"}
+            onClick={() => setActiveTab("settings")}
+            className={`pb-2 text-sm font-medium border-b-2 ${
+              activeTab === "settings"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            }`}
+          >
+            Settings
           </button>
         </nav>
       </div>
@@ -381,6 +397,10 @@ export default function ProjectPage() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === "settings" && projectId && (
+          <ProjectSettingsPanel projectId={projectId} />
         )}
       </div>
 
