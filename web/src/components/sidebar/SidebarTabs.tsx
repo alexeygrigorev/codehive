@@ -9,6 +9,7 @@ import AgentCommPanel from "./AgentCommPanel";
 import SessionHistorySearch from "@/components/SessionHistorySearch";
 import UsagePanel from "./UsagePanel";
 import CompactionPanel from "./CompactionPanel";
+import SpawnConfigPanel from "./SpawnConfigPanel";
 
 export type TabKey =
   | "todo"
@@ -20,7 +21,8 @@ export type TabKey =
   | "checkpoints"
   | "search"
   | "usage"
-  | "compaction";
+  | "compaction"
+  | "spawn-config";
 
 interface TabDef {
   key: TabKey;
@@ -38,6 +40,7 @@ const TABS: TabDef[] = [
   { key: "search", label: "Search" },
   { key: "usage", label: "Usage" },
   { key: "compaction", label: "Compaction" },
+  { key: "spawn-config", label: "Spawn Config" },
 ];
 
 interface SidebarTabsProps {
@@ -101,6 +104,9 @@ export default function SidebarTabs({
         {activeTab === "usage" && <UsagePanel sessionId={sessionId} />}
         {activeTab === "compaction" && (
           <CompactionPanel sessionId={sessionId} />
+        )}
+        {activeTab === "spawn-config" && (
+          <SpawnConfigPanel sessionId={sessionId} />
         )}
       </div>
     </div>

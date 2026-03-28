@@ -45,6 +45,7 @@ from codehive.api.routes.providers import providers_router
 from codehive.api.routes.usage import session_usage_router, usage_router
 from codehive.api.routes.orchestrator import orchestrator_router
 from codehive.api.routes.agent import agent_router
+from codehive.api.routes.spawn_config import router as spawn_config_router
 from codehive.api.routes.team import router as team_router
 from codehive.api.ws import router as ws_router
 
@@ -175,6 +176,7 @@ def create_app() -> FastAPI:
     app.include_router(usage_router, dependencies=_auth)
     app.include_router(session_usage_router, dependencies=_auth)
     app.include_router(orchestrator_router, dependencies=_auth)
+    app.include_router(spawn_config_router, dependencies=_auth)
     app.include_router(team_router, dependencies=_auth)
 
     return app

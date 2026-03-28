@@ -57,6 +57,13 @@ vi.mock("@/components/sidebar/CompactionPanel", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/sidebar/SpawnConfigPanel", () => ({
+  default: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="spawn-config-panel" data-session-id={sessionId ?? ""}>
+      SpawnConfigPanel
+    </div>
+  ),
+}));
 
 describe("SidebarTabs", () => {
   it("renders all tab labels", () => {
@@ -72,6 +79,7 @@ describe("SidebarTabs", () => {
     expect(screen.getByText("Search")).toBeInTheDocument();
     expect(screen.getByText("Usage")).toBeInTheDocument();
     expect(screen.getByText("Compaction")).toBeInTheDocument();
+    expect(screen.getByText("Spawn Config")).toBeInTheDocument();
   });
 
   it("defaults to the ToDo tab being selected", () => {

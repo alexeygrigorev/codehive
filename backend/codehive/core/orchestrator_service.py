@@ -24,6 +24,7 @@ from codehive.core.issues import create_issue_log_entry
 from codehive.core.session import create_session as create_db_session
 from codehive.core.task_queue import list_tasks, pipeline_transition
 from codehive.core.verdicts import get_verdict as get_structured_verdict
+from codehive.core.spawn_config import get_engine_extra_args, get_system_prompt_for_role
 from codehive.db.models import AgentProfile, Issue, Project, Task
 from codehive.db.models import Session as SessionModel
 from codehive.integrations.github.commenter import build_pipeline_message, post_pipeline_comment
@@ -744,6 +745,25 @@ class OrchestratorService:
                 if profile and profile.preferred_engine:
                     sub_engine = profile.preferred_engine
 
+        # Read custom prompt templates and engine config from project knowledge
+        system_prompt = ""
+        engine_args: list[str] = []
+        async with self._db_session_factory() as db:
+            project = await db.get(Project, self.project_id)
+            if project is not None:
+                system_prompt = get_system_prompt_for_role(project, role)
+                engine_args = get_engine_extra_args(project, sub_engine)
+
+        # Build spawn_config to record what was sent to the agent
+        spawn_config: dict[str, Any] = {
+            "system_prompt": system_prompt,
+            "initial_message": instructions,
+            "engine": sub_engine,
+            "engine_args": engine_args,
+            "role": role,
+            "pipeline_step": step,
+        }
+
         async with self._db_session_factory() as db:
             child_session = await create_db_session(
                 db,
@@ -754,11 +774,13 @@ class OrchestratorService:
                 task_id=task_id,
                 pipeline_step=step,
             )
+            # Store spawn_config in the session's config JSON
+            child_session.config = {"spawn_config": spawn_config}
             # Set agent_profile_id on the session directly
             if agent_profile_id is not None:
                 child_session.agent_profile_id = agent_profile_id
-                await db.commit()
-                await db.refresh(child_session)
+            await db.commit()
+            await db.refresh(child_session)
             self.state.active_sessions.append(child_session.id)
 
         # In a real implementation, we'd build the engine and send the message.
