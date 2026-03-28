@@ -346,7 +346,7 @@ describe("NewProjectPage", () => {
       });
     });
 
-    it("selecting a directory with has_git unchecks the checkbox and shows indicator", async () => {
+    it("selecting a git directory hides the checkbox and shows 'Git repository detected' indicator", async () => {
       const user = userEvent.setup();
       mockFetchDirectories.mockResolvedValue({
         path: "/home/user/codehive",
@@ -372,11 +372,184 @@ describe("NewProjectPage", () => {
 
       await user.click(screen.getByTestId("browse-entry-myrepo"));
 
+      // Checkbox should NOT be in the DOM
+      expect(
+        screen.queryByTestId("git-init-checkbox"),
+      ).not.toBeInTheDocument();
+
+      // Indicator should be visible
+      expect(
+        screen.getByTestId("git-detected-indicator"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Git repository detected"),
+      ).toBeInTheDocument();
+    });
+
+    it("selecting a non-git directory shows the checkbox and no indicator", async () => {
+      const user = userEvent.setup();
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "newproj",
+            path: "/home/user/codehive/newproj",
+            has_git: false,
+          },
+        ],
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-newproj"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("browse-entry-newproj"));
+
+      // Checkbox should be present and checked
       const checkbox = screen.getByTestId(
         "git-init-checkbox",
       ) as HTMLInputElement;
-      expect(checkbox.checked).toBe(false);
-      expect(screen.getByText("(already a git repo)")).toBeInTheDocument();
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox.checked).toBe(true);
+
+      // Indicator should NOT be in the DOM
+      expect(
+        screen.queryByTestId("git-detected-indicator"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("switching from git directory to non-git directory: indicator disappears, checkbox reappears", async () => {
+      const user = userEvent.setup();
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "gitrepo",
+            path: "/home/user/codehive/gitrepo",
+            has_git: true,
+          },
+          {
+            name: "plaindir",
+            path: "/home/user/codehive/plaindir",
+            has_git: false,
+          },
+        ],
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-gitrepo"),
+        ).toBeInTheDocument();
+      });
+
+      // Select git directory first
+      await user.click(screen.getByTestId("browse-entry-gitrepo"));
+      expect(
+        screen.getByTestId("git-detected-indicator"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("git-init-checkbox"),
+      ).not.toBeInTheDocument();
+
+      // Now select non-git directory
+      await user.click(screen.getByTestId("browse-entry-plaindir"));
+      expect(
+        screen.queryByTestId("git-detected-indicator"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("git-init-checkbox")).toBeInTheDocument();
+    });
+
+    it("after selecting a git directory, manually typing in path restores the checkbox", async () => {
+      const user = userEvent.setup();
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "myrepo",
+            path: "/home/user/codehive/myrepo",
+            has_git: true,
+          },
+        ],
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-myrepo"),
+        ).toBeInTheDocument();
+      });
+
+      // Select git directory
+      await user.click(screen.getByTestId("browse-entry-myrepo"));
+      expect(
+        screen.getByTestId("git-detected-indicator"),
+      ).toBeInTheDocument();
+
+      // Manually type in path field
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
+      await user.type(pathInput, "/some/other/path");
+
+      // Checkbox should reappear, indicator should disappear
+      expect(
+        screen.queryByTestId("git-detected-indicator"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("git-init-checkbox")).toBeInTheDocument();
+    });
+
+    it("creating a project after selecting a git directory sends git_init: false", async () => {
+      const user = userEvent.setup();
+      mockCreateProject.mockResolvedValue({
+        id: "p1",
+        name: "myrepo",
+        path: "/home/user/codehive/myrepo",
+        description: null,
+        archetype: null,
+        knowledge: null,
+        created_at: "2026-03-18T00:00:00Z",
+      });
+      mockFetchDirectories.mockResolvedValue({
+        path: "/home/user/codehive",
+        parent: "/home/user",
+        directories: [
+          {
+            name: "myrepo",
+            path: "/home/user/codehive/myrepo",
+            has_git: true,
+          },
+        ],
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-myrepo"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("browse-entry-myrepo"));
+      await user.click(screen.getByText("Create Project"));
+
+      await waitFor(() => {
+        expect(mockCreateProject).toHaveBeenCalledWith(
+          expect.objectContaining({ git_init: false }),
+        );
+      });
     });
   });
 

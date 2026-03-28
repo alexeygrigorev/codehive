@@ -545,31 +545,50 @@ export default function NewProjectPage() {
             />
           </div>
 
-          {/* Git init checkbox */}
-          <div className="flex items-center gap-2">
-            <input
-              id="git-init"
-              type="checkbox"
-              checked={gitInit}
-              onChange={(e) => {
-                setGitInit(e.target.checked);
-                setGitInitAutoDisabled(false);
-              }}
-              className="rounded border-gray-300 dark:border-gray-600"
-              data-testid="git-init-checkbox"
-            />
-            <label
-              htmlFor="git-init"
-              className="text-sm dark:text-gray-200"
+          {/* Git init checkbox / detected indicator */}
+          {gitInitAutoDisabled ? (
+            <div
+              className="flex items-center gap-2"
+              data-testid="git-detected-indicator"
             >
-              Initialize git repository
-            </label>
-            {gitInitAutoDisabled && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                (already a git repo)
+              <svg
+                className="h-4 w-4 text-green-600 dark:text-green-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              <span className="text-sm text-green-700 dark:text-green-300 font-medium">
+                Git repository detected
               </span>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                id="git-init"
+                type="checkbox"
+                checked={gitInit}
+                onChange={(e) => {
+                  setGitInit(e.target.checked);
+                  setGitInitAutoDisabled(false);
+                }}
+                className="rounded border-gray-300 dark:border-gray-600"
+                data-testid="git-init-checkbox"
+              />
+              <label
+                htmlFor="git-init"
+                className="text-sm dark:text-gray-200"
+              >
+                Initialize git repository
+              </label>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button

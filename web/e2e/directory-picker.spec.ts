@@ -125,12 +125,13 @@ test.describe("Directory Picker E2E", () => {
     const dirInput = page.locator("#dir-path");
     await expect(dirInput).toHaveValue(new RegExp(browseDirName));
 
-    // Assert the git init checkbox is unchecked (already a git repo)
-    const gitCheckbox = page.getByTestId("git-init-checkbox");
-    await expect(gitCheckbox).not.toBeChecked();
+    // Assert the git init checkbox is NOT visible (hidden when git detected)
+    await expect(page.getByTestId("git-init-checkbox")).not.toBeVisible();
 
-    // Assert "(already a git repo)" text is visible
-    await expect(page.locator("text=(already a git repo)")).toBeVisible();
+    // Assert "Git repository detected" indicator is visible
+    const indicator = page.getByTestId("git-detected-indicator");
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toContainText("Git repository detected");
   });
 
   test("E2E 3: Navigate to parent directory", async ({ page }) => {
