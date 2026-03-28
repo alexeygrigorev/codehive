@@ -4,6 +4,8 @@ import contextlib
 import logging
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import inspect, text
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -49,6 +51,34 @@ from codehive.api.ws import router as ws_router
 logger = logging.getLogger(__name__)
 
 
+def _sync_sqlite_columns(connection) -> None:  # type: ignore[no-untyped-def]
+    """Add missing columns to existing SQLite tables.
+
+    SQLAlchemy's create_all only creates new tables — it won't add columns
+    to tables that already exist. This helper inspects each table and adds
+    any columns defined in the model but missing from the DB.
+    """
+    from codehive.db.models import Base
+
+    inspector = inspect(connection)
+    for table_name, table in Base.metadata.tables.items():
+        if not inspector.has_table(table_name):
+            continue
+        existing = {col["name"] for col in inspector.get_columns(table_name)}
+        for column in table.columns:
+            if column.name not in existing:
+                col_type = column.type.compile(dialect=connection.dialect)
+                default = ""
+                if column.server_default is not None:
+                    default = f" DEFAULT {column.server_default.arg}"
+                connection.execute(
+                    text(f"ALTER TABLE {table_name} ADD COLUMN {column.name} {col_type}{default}")
+                )
+                logging.getLogger(__name__).info(
+                    "Added missing column %s.%s", table_name, column.name
+                )
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
@@ -59,11 +89,13 @@ def create_app() -> FastAPI:
         from codehive.db.session import create_async_engine_from_settings
 
         # Auto-create tables for SQLite (no Alembic needed for dev)
+        # Also syncs missing columns on existing tables (create_all only creates new tables)
         settings = Settings()
         if settings.database_url.startswith("sqlite"):
             engine = create_async_engine_from_settings(settings.database_url)
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                await conn.run_sync(_sync_sqlite_columns)
             await engine.dispose()
 
         session_maker = async_session_factory()
