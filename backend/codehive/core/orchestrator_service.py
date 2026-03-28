@@ -18,10 +18,12 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codehive.core.git_service import GitError, GitService
 from codehive.core.issues import create_issue_log_entry
 from codehive.core.session import create_session as create_db_session
 from codehive.core.task_queue import list_tasks, pipeline_transition
-from codehive.db.models import Issue, Task
+from codehive.core.verdicts import get_verdict as get_structured_verdict
+from codehive.db.models import Issue, Project, Task
 from codehive.db.models import Session as SessionModel
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,9 @@ class StepResult:
     verdict: Verdict
     output: str = ""
     session_id: uuid.UUID | None = None
+    evidence: list[dict[str, Any]] | None = None
+    criteria_results: list[dict[str, Any]] | None = None
+    feedback: str | None = None
 
 
 @dataclass
@@ -186,7 +191,13 @@ def build_instructions(
             parts.append(f"\n## SWE Output\n\n{agent_output}")
         parts.append(
             "\nVerify the implementation. Run tests and check acceptance criteria. "
-            "End with VERDICT: PASS or VERDICT: FAIL."
+            "End with VERDICT: PASS or VERDICT: FAIL.\n\n"
+            "Preferred: call submit_verdict with a structured payload:\n"
+            '  submit_verdict(session_id, verdict="PASS"|"FAIL", role="qa", '
+            "task_id=<uuid>,\n"
+            '    evidence=[{"type": "test_output", "content": "..."}],\n'
+            '    criteria_results=[{"criterion": "...", "result": "PASS"|"FAIL"}],\n'
+            '    feedback="optional feedback")'
         )
 
     elif step == "accepting":
@@ -196,7 +207,12 @@ def build_instructions(
         if agent_output:
             parts.append(f"\n## QA Evidence\n\n{agent_output}")
         parts.append(
-            "\nReview the QA evidence and decide. End with VERDICT: ACCEPT or VERDICT: REJECT."
+            "\nReview the QA evidence and decide. End with VERDICT: ACCEPT or VERDICT: REJECT.\n\n"
+            "Preferred: call submit_verdict with a structured payload:\n"
+            '  submit_verdict(session_id, verdict="ACCEPT"|"REJECT", role="pm", '
+            "task_id=<uuid>,\n"
+            '    evidence=[{"type": "...", "content": "..."}],\n'
+            '    feedback="optional rejection reason")'
         )
 
     return "\n\n".join(parts)
@@ -350,7 +366,8 @@ class OrchestratorService:
             if target == "implementing" and current_step in ("testing", "accepting"):
                 count = self.state.rejection_counts.get(task_id, 0) + 1
                 self.state.rejection_counts[task_id] = count
-                last_feedback = result.output
+                # Prefer structured feedback over raw output
+                last_feedback = result.feedback or result.output
 
                 if count >= self.config["max_rejections_per_step"]:
                     self.state.flagged_tasks.add(task_id)
@@ -388,7 +405,44 @@ class OrchestratorService:
             async with self._db_session_factory() as db:
                 await pipeline_transition(db, task_id, target, actor="orchestrator")
 
+            # Git commit after transitioning to done
+            if target == "done":
+                await self._try_git_commit(task_id)
+
             current_step = target
+
+    async def _try_git_commit(self, task_id: uuid.UUID) -> None:
+        """Attempt to git-commit after a task reaches done. Non-fatal on failure."""
+        async with self._db_session_factory() as db:
+            task = await db.get(Task, task_id)
+            if task is None:
+                return
+            session = await db.get(SessionModel, task.session_id)
+            if session is None:
+                return
+            project = await db.get(Project, session.project_id)
+            issue_id = session.issue_id
+
+        try:
+            sha = await GitService.commit_task(project, task)
+            if sha and issue_id:
+                async with self._db_session_factory() as db:
+                    await create_issue_log_entry(
+                        db,
+                        issue_id=issue_id,
+                        agent_role="orchestrator",
+                        content=f"Git commit: {sha}",
+                    )
+        except GitError as e:
+            logger.warning("Git commit failed for task %s: %s", task_id, e)
+            if issue_id:
+                async with self._db_session_factory() as db:
+                    await create_issue_log_entry(
+                        db,
+                        issue_id=issue_id,
+                        agent_role="orchestrator",
+                        content=f"Git commit failed: {e}",
+                    )
 
     async def _run_pipeline_step(
         self,
@@ -442,6 +496,7 @@ class OrchestratorService:
             )
 
         # Log the agent output
+        child_session_id: uuid.UUID | None = None
         async with self._db_session_factory() as db:
             task = await db.get(Task, task_id)
             if task:
@@ -454,6 +509,43 @@ class OrchestratorService:
                         content=output or "(no output)",
                     )
 
+            # Find the most recent child session for this task+step
+            child_stmt = (
+                select(SessionModel)
+                .where(
+                    SessionModel.task_id == task_id,
+                    SessionModel.pipeline_step == step,
+                )
+                .order_by(SessionModel.created_at.desc())
+                .limit(1)
+            )
+            child_result = await db.execute(child_stmt)
+            child_session = child_result.scalar_one_or_none()
+            if child_session:
+                child_session_id = child_session.id
+
+        # Try structured verdict first, fall back to regex parsing
+        structured_verdict: dict[str, Any] | None = None
+        if child_session_id is not None:
+            async with self._db_session_factory() as db:
+                structured_verdict = await get_structured_verdict(db, child_session_id)
+
+        if structured_verdict is not None:
+            verdict_str = structured_verdict.get("verdict", "FAIL")
+            try:
+                verdict = Verdict(verdict_str)
+            except ValueError:
+                verdict = Verdict.FAIL
+            return StepResult(
+                verdict=verdict,
+                output=output,
+                session_id=child_session_id,
+                evidence=structured_verdict.get("evidence"),
+                criteria_results=structured_verdict.get("criteria_results"),
+                feedback=structured_verdict.get("feedback"),
+            )
+
+        # Fallback: regex-based verdict parsing
         verdict = parse_verdict(output)
         return StepResult(verdict=verdict, output=output)
 
