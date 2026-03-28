@@ -172,4 +172,4 @@ class TestAlembicIntegration:
             r[0] for r in conn.execute("SELECT version_num FROM alembic_version").fetchall()
         ]
         conn.close()
-        assert versions == ["i9d0e1f2g3h4"], f"Expected single head, got {versions}"
+        assert versions == ["j0e1f2g3h4i5"], f"Expected single head, got {versions}"

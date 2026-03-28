@@ -9,6 +9,8 @@ export interface AgentProfileRead {
   avatar_url: string;
   personality: string | null;
   system_prompt_modifier: string | null;
+  preferred_engine: string | null;
+  preferred_model: string | null;
   created_at: string;
 }
 

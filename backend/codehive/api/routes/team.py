@@ -53,6 +53,8 @@ async def add_team_member(
         avatar_seed=avatar_seed,
         personality=body.personality,
         system_prompt_modifier=body.system_prompt_modifier,
+        preferred_engine=body.preferred_engine,
+        preferred_model=body.preferred_model,
     )
     db.add(profile)
     await db.commit()

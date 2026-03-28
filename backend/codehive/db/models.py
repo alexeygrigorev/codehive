@@ -103,6 +103,8 @@ class AgentProfile(Base):
     avatar_seed: Mapped[str] = mapped_column(Unicode(255), nullable=False)
     personality: Mapped[str | None] = mapped_column(Text, nullable=True)
     system_prompt_modifier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_engine: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    preferred_model: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),

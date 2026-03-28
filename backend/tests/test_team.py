@@ -2,11 +2,12 @@
 
 import uuid
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event, select
+from sqlalchemy import event, select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from codehive.api.app import create_app
@@ -454,3 +455,374 @@ class TestTeamAPI:
         data = resp.json()
         assert data["agent_name"] is None
         assert data["agent_avatar_url"] is None
+
+
+# ---------------------------------------------------------------------------
+# Unit: AgentProfile preferred_engine / preferred_model fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestEngineFields:
+    async def test_create_profile_with_engine(self, db_session: AsyncSession):
+        """AgentProfile with preferred_engine and preferred_model persists correctly."""
+        project = await _create_project(db_session)
+        profile = AgentProfile(
+            project_id=project.id,
+            name="EngineAgent",
+            role="swe",
+            avatar_seed=f"EngineAgent-{project.id}",
+            preferred_engine="claude_code",
+            preferred_model="claude-sonnet-4-6",
+        )
+        db_session.add(profile)
+        await db_session.commit()
+        await db_session.refresh(profile)
+        assert profile.preferred_engine == "claude_code"
+        assert profile.preferred_model == "claude-sonnet-4-6"
+
+    async def test_create_profile_without_engine_defaults_none(self, db_session: AsyncSession):
+        """AgentProfile without engine fields defaults to None (backward compat)."""
+        project = await _create_project(db_session)
+        profile = AgentProfile(
+            project_id=project.id,
+            name="NoEngineAgent",
+            role="qa",
+            avatar_seed=f"NoEngineAgent-{project.id}",
+        )
+        db_session.add(profile)
+        await db_session.commit()
+        await db_session.refresh(profile)
+        assert profile.preferred_engine is None
+        assert profile.preferred_model is None
+
+    async def test_default_team_engine_fields_are_none(self, db_session: AsyncSession):
+        """generate_default_team creates profiles with preferred_engine=None."""
+        project = await _create_project(db_session)
+        result = await db_session.execute(
+            select(AgentProfile).where(AgentProfile.project_id == project.id)
+        )
+        profiles = list(result.scalars().all())
+        assert len(profiles) == 6
+        for p in profiles:
+            assert p.preferred_engine is None
+            assert p.preferred_model is None
+
+
+# ---------------------------------------------------------------------------
+# Unit: Orchestrator engine resolution with preferred_engine
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestOrchestratorEngineResolution:
+    @pytest_asyncio.fixture
+    async def db_engine(self):
+        engine = create_async_engine(SQLITE_URL)
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, _):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield engine
+        # Disable FK checks for clean teardown
+        async with engine.begin() as conn:
+            await conn.execute(sa_text("PRAGMA foreign_keys=OFF"))
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+    @pytest_asyncio.fixture
+    async def db_session_factory(self, db_engine):
+        return async_sessionmaker(db_engine, expire_on_commit=False)
+
+    @pytest_asyncio.fixture
+    async def orch_db_session(self, db_session_factory) -> AsyncGenerator[AsyncSession, None]:
+        async with db_session_factory() as session:
+            yield session
+
+    async def test_spawn_uses_preferred_engine(self, db_session_factory, orch_db_session):
+        """When agent profile has preferred_engine, child session uses it."""
+        from codehive.core.orchestrator_service import OrchestratorService
+        from codehive.core.session import create_session as create_db_session
+        from codehive.db.models import Session as SessionModel
+
+        db = orch_db_session
+        project = Project(name="orch-test", knowledge={})
+        db.add(project)
+        await db.flush()
+
+        profile = AgentProfile(
+            project_id=project.id,
+            name="Alice",
+            role="swe",
+            avatar_seed=f"Alice-{project.id}",
+            preferred_engine="codex",
+            preferred_model="gpt-5.4",
+        )
+        db.add(profile)
+        await db.flush()
+
+        # Create orchestrator session
+        orch_session = await create_db_session(
+            db,
+            project_id=project.id,
+            name=f"orchestrator-{project.id}",
+            engine="claude_code",
+            mode="orchestrator",
+        )
+        # Create a task
+        from codehive.core.task_queue import create_task
+
+        task = await create_task(db, session_id=orch_session.id, title="Test task")
+        await db.commit()
+
+        @asynccontextmanager
+        async def _factory():
+            async with db_session_factory() as s:
+                yield s
+
+        orch = OrchestratorService(
+            db_session_factory=_factory,
+            project_id=project.id,
+        )
+
+        await orch._default_spawn_and_run(
+            task_id=task.id,
+            step="implementing",
+            role="swe",
+            mode="execution",
+            instructions="do stuff",
+            agent_profile_id=profile.id,
+        )
+
+        # Verify the child session was created with the preferred engine
+        async with _factory() as s:
+            result = await s.execute(
+                select(SessionModel).where(
+                    SessionModel.task_id == task.id,
+                    SessionModel.pipeline_step == "implementing",
+                )
+            )
+            child = result.scalar_one()
+            assert child.engine == "codex"
+
+    async def test_spawn_falls_back_when_no_preferred_engine(
+        self, db_session_factory, orch_db_session
+    ):
+        """When agent profile has no preferred_engine, falls back to default."""
+        from codehive.core.orchestrator_service import OrchestratorService
+        from codehive.core.session import create_session as create_db_session
+        from codehive.db.models import Session as SessionModel
+
+        db = orch_db_session
+        project = Project(name="orch-test-2", knowledge={})
+        db.add(project)
+        await db.flush()
+
+        profile = AgentProfile(
+            project_id=project.id,
+            name="Bob",
+            role="swe",
+            avatar_seed=f"Bob-{project.id}",
+            # No preferred_engine
+        )
+        db.add(profile)
+        await db.flush()
+
+        orch_session = await create_db_session(
+            db,
+            project_id=project.id,
+            name=f"orchestrator-{project.id}",
+            engine="claude_code",
+            mode="orchestrator",
+        )
+        from codehive.core.task_queue import create_task
+
+        task = await create_task(db, session_id=orch_session.id, title="Test task 2")
+        await db.commit()
+
+        @asynccontextmanager
+        async def _factory():
+            async with db_session_factory() as s:
+                yield s
+
+        orch = OrchestratorService(
+            db_session_factory=_factory,
+            project_id=project.id,
+        )
+
+        await orch._default_spawn_and_run(
+            task_id=task.id,
+            step="implementing",
+            role="swe",
+            mode="execution",
+            instructions="do stuff",
+            agent_profile_id=profile.id,
+        )
+
+        async with _factory() as s:
+            result = await s.execute(
+                select(SessionModel).where(
+                    SessionModel.task_id == task.id,
+                    SessionModel.pipeline_step == "implementing",
+                )
+            )
+            child = result.scalar_one()
+            # Should fall back to orchestrator's default engine
+            assert child.engine == "claude_code"
+
+    async def test_spawn_falls_back_when_no_profile(self, db_session_factory, orch_db_session):
+        """When agent_profile_id is None, falls back to default engine."""
+        from codehive.core.orchestrator_service import OrchestratorService
+        from codehive.core.session import create_session as create_db_session
+        from codehive.db.models import Session as SessionModel
+
+        db = orch_db_session
+        project = Project(name="orch-test-3", knowledge={})
+        db.add(project)
+        await db.flush()
+
+        orch_session = await create_db_session(
+            db,
+            project_id=project.id,
+            name=f"orchestrator-{project.id}",
+            engine="claude_code",
+            mode="orchestrator",
+        )
+        from codehive.core.task_queue import create_task
+
+        task = await create_task(db, session_id=orch_session.id, title="Test task 3")
+        await db.commit()
+
+        @asynccontextmanager
+        async def _factory():
+            async with db_session_factory() as s:
+                yield s
+
+        orch = OrchestratorService(
+            db_session_factory=_factory,
+            project_id=project.id,
+        )
+
+        await orch._default_spawn_and_run(
+            task_id=task.id,
+            step="implementing",
+            role="swe",
+            mode="execution",
+            instructions="do stuff",
+            agent_profile_id=None,
+        )
+
+        async with _factory() as s:
+            result = await s.execute(
+                select(SessionModel).where(
+                    SessionModel.task_id == task.id,
+                    SessionModel.pipeline_step == "implementing",
+                )
+            )
+            child = result.scalar_one()
+            assert child.engine == "claude_code"
+
+
+# ---------------------------------------------------------------------------
+# Integration: API endpoints for preferred_engine / preferred_model
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestTeamEngineAPI:
+    async def test_post_team_member_with_engine(self, client: AsyncClient):
+        """POST /api/projects/{id}/team with preferred_engine persists both fields."""
+        resp = await client.post("/api/projects", json={"name": "engine-project"})
+        project_id = resp.json()["id"]
+
+        resp = await client.post(
+            f"/api/projects/{project_id}/team",
+            json={
+                "name": "EngineAgent",
+                "role": "swe",
+                "preferred_engine": "codex",
+                "preferred_model": "gpt-5.4",
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["preferred_engine"] == "codex"
+        assert data["preferred_model"] == "gpt-5.4"
+
+    async def test_patch_team_member_engine(self, client: AsyncClient):
+        """PATCH /api/projects/{id}/team/{agent_id} updates preferred_engine."""
+        resp = await client.post("/api/projects", json={"name": "patch-engine"})
+        project_id = resp.json()["id"]
+
+        team_resp = await client.get(f"/api/projects/{project_id}/team")
+        agent_id = team_resp.json()[0]["id"]
+
+        resp = await client.patch(
+            f"/api/projects/{project_id}/team/{agent_id}",
+            json={"preferred_engine": "claude_code", "preferred_model": "claude-sonnet-4-6"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["preferred_engine"] == "claude_code"
+        assert data["preferred_model"] == "claude-sonnet-4-6"
+
+    async def test_patch_team_member_clear_engine(self, client: AsyncClient):
+        """PATCH with preferred_engine: null clears the field."""
+        resp = await client.post("/api/projects", json={"name": "clear-engine"})
+        project_id = resp.json()["id"]
+
+        # First set an engine
+        team_resp = await client.get(f"/api/projects/{project_id}/team")
+        agent_id = team_resp.json()[0]["id"]
+
+        await client.patch(
+            f"/api/projects/{project_id}/team/{agent_id}",
+            json={"preferred_engine": "codex"},
+        )
+
+        # Now clear it
+        resp = await client.patch(
+            f"/api/projects/{project_id}/team/{agent_id}",
+            json={"preferred_engine": None},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["preferred_engine"] is None
+
+    async def test_get_team_returns_engine_fields(self, client: AsyncClient):
+        """GET /api/projects/{id}/team returns preferred_engine and preferred_model."""
+        resp = await client.post("/api/projects", json={"name": "get-engine"})
+        project_id = resp.json()["id"]
+
+        resp = await client.get(f"/api/projects/{project_id}/team")
+        assert resp.status_code == 200
+        team = resp.json()
+        assert len(team) == 6
+        for member in team:
+            assert "preferred_engine" in member
+            assert "preferred_model" in member
+            assert member["preferred_engine"] is None
+            assert member["preferred_model"] is None
+
+    async def test_get_team_after_patch_persists_engine(self, client: AsyncClient):
+        """GET after PATCH shows the updated engine in the team list."""
+        resp = await client.post("/api/projects", json={"name": "persist-engine"})
+        project_id = resp.json()["id"]
+
+        team_resp = await client.get(f"/api/projects/{project_id}/team")
+        agent_id = team_resp.json()[0]["id"]
+
+        await client.patch(
+            f"/api/projects/{project_id}/team/{agent_id}",
+            json={"preferred_engine": "codex", "preferred_model": "gpt-5.4"},
+        )
+
+        resp = await client.get(f"/api/projects/{project_id}/team")
+        updated = [m for m in resp.json() if m["id"] == agent_id]
+        assert len(updated) == 1
+        assert updated[0]["preferred_engine"] == "codex"
+        assert updated[0]["preferred_model"] == "gpt-5.4"

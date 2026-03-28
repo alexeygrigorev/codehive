@@ -16,6 +16,8 @@ class AgentProfileCreate(BaseModel):
     avatar_seed: str | None = Field(default=None, max_length=255)
     personality: str | None = None
     system_prompt_modifier: str | None = None
+    preferred_engine: str | None = Field(default=None, max_length=50)
+    preferred_model: str | None = Field(default=None, max_length=255)
 
 
 class AgentProfileUpdate(BaseModel):
@@ -26,6 +28,8 @@ class AgentProfileUpdate(BaseModel):
     avatar_seed: str | None = Field(default=None, max_length=255)
     personality: str | None = None
     system_prompt_modifier: str | None = None
+    preferred_engine: str | None = Field(default=None, max_length=50)
+    preferred_model: str | None = Field(default=None, max_length=255)
 
 
 class AgentProfileRead(BaseModel):
@@ -41,6 +45,8 @@ class AgentProfileRead(BaseModel):
     avatar_url: str = ""
     personality: str | None
     system_prompt_modifier: str | None
+    preferred_engine: str | None
+    preferred_model: str | None
     created_at: datetime
 
     def model_post_init(self, __context: object) -> None:
