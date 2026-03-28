@@ -1,4 +1,4 @@
-"""Issue business logic (DB queries)."""
+"""Issue business logic (DB queries, status transitions, log entries)."""
 
 import uuid
 from datetime import datetime, timezone
@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from codehive.db.models import Issue, Project
+from codehive.db.models import Issue, IssueLogEntry, Project
 from codehive.db.models import Session as SessionModel
 
 
@@ -27,7 +27,24 @@ class SessionNotFoundError(Exception):
     """Raised when a session is not found by ID."""
 
 
-VALID_STATUSES = {"open", "in_progress", "closed"}
+class InvalidStatusTransitionError(Exception):
+    """Raised when a status transition is not allowed."""
+
+
+VALID_STATUSES = {"open", "groomed", "in_progress", "done", "closed"}
+
+# Allowed status transitions: from_status -> set of to_statuses
+_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    "open": {"groomed", "in_progress", "closed"},
+    "groomed": {"in_progress", "closed"},
+    "in_progress": {"done", "open", "closed"},
+    "done": {"closed", "open"},
+    "closed": {"open"},
+}
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def create_issue(
@@ -36,18 +53,26 @@ async def create_issue(
     project_id: uuid.UUID,
     title: str,
     description: str | None = None,
+    acceptance_criteria: str | None = None,
+    assigned_agent: str | None = None,
+    priority: int = 0,
 ) -> Issue:
     """Create a new issue. Raises ProjectNotFoundError if project doesn't exist."""
     project = await db.get(Project, project_id)
     if project is None:
         raise ProjectNotFoundError(f"Project {project_id} not found")
 
+    now = _now()
     issue = Issue(
         project_id=project_id,
         title=title,
         description=description,
+        acceptance_criteria=acceptance_criteria,
+        assigned_agent=assigned_agent,
+        priority=priority,
         status="open",
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=now,
+        updated_at=now,
     )
     db.add(issue)
     await db.commit()
@@ -60,8 +85,9 @@ async def list_issues(
     project_id: uuid.UUID,
     *,
     status: str | None = None,
+    assigned_agent: str | None = None,
 ) -> list[Issue]:
-    """Return all issues for a project, optionally filtered by status.
+    """Return all issues for a project, optionally filtered by status and/or assigned_agent.
 
     Raises ProjectNotFoundError if the project doesn't exist.
     """
@@ -72,6 +98,8 @@ async def list_issues(
     stmt = select(Issue).where(Issue.project_id == project_id)
     if status is not None:
         stmt = stmt.where(Issue.status == status)
+    if assigned_agent is not None:
+        stmt = stmt.where(Issue.assigned_agent == assigned_agent)
 
     result = await db.execute(stmt)
     return list(result.scalars().all())
@@ -81,8 +109,12 @@ async def get_issue(
     db: AsyncSession,
     issue_id: uuid.UUID,
 ) -> Issue | None:
-    """Return an issue by ID with sessions eagerly loaded, or None if not found."""
-    stmt = select(Issue).where(Issue.id == issue_id).options(selectinload(Issue.sessions))
+    """Return an issue by ID with sessions and logs eagerly loaded, or None if not found."""
+    stmt = (
+        select(Issue)
+        .where(Issue.id == issue_id)
+        .options(selectinload(Issue.sessions), selectinload(Issue.logs))
+    )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -90,15 +122,32 @@ async def get_issue(
 async def update_issue(
     db: AsyncSession,
     issue_id: uuid.UUID,
-    **fields: str | None,
+    **fields: str | int | None,
 ) -> Issue:
-    """Update specific fields on an issue. Raises IssueNotFoundError if not found."""
+    """Update specific fields on an issue.
+
+    Raises IssueNotFoundError if not found.
+    Raises InvalidStatusTransitionError if status transition is not allowed.
+    """
     issue = await db.get(Issue, issue_id)
     if issue is None:
         raise IssueNotFoundError(f"Issue {issue_id} not found")
 
+    # Validate status transition if status is being changed
+    if "status" in fields and fields["status"] is not None:
+        new_status = fields["status"]
+        if new_status != issue.status:
+            allowed = _ALLOWED_TRANSITIONS.get(issue.status, set())
+            if new_status not in allowed:
+                raise InvalidStatusTransitionError(
+                    f"Cannot transition from '{issue.status}' to '{new_status}'"
+                )
+
     for key, value in fields.items():
         setattr(issue, key, value)
+
+    # Explicitly set updated_at so it works even if onupdate doesn't fire
+    issue.updated_at = _now()
 
     await db.commit()
     await db.refresh(issue)
@@ -147,3 +196,53 @@ async def link_session_to_issue(
     await db.commit()
     await db.refresh(session)
     return session
+
+
+# ---------------------------------------------------------------------------
+# Issue log entry operations
+# ---------------------------------------------------------------------------
+
+
+async def create_issue_log_entry(
+    db: AsyncSession,
+    *,
+    issue_id: uuid.UUID,
+    agent_role: str,
+    content: str,
+) -> IssueLogEntry:
+    """Create a log entry for an issue. Raises IssueNotFoundError if issue doesn't exist."""
+    issue = await db.get(Issue, issue_id)
+    if issue is None:
+        raise IssueNotFoundError(f"Issue {issue_id} not found")
+
+    entry = IssueLogEntry(
+        issue_id=issue_id,
+        agent_role=agent_role,
+        content=content,
+        created_at=_now(),
+    )
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
+async def list_issue_log_entries(
+    db: AsyncSession,
+    issue_id: uuid.UUID,
+) -> list[IssueLogEntry]:
+    """Return all log entries for an issue in chronological order.
+
+    Raises IssueNotFoundError if issue doesn't exist.
+    """
+    issue = await db.get(Issue, issue_id)
+    if issue is None:
+        raise IssueNotFoundError(f"Issue {issue_id} not found")
+
+    stmt = (
+        select(IssueLogEntry)
+        .where(IssueLogEntry.issue_id == issue_id)
+        .order_by(IssueLogEntry.created_at.asc())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

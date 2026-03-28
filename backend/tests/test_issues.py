@@ -1,4 +1,4 @@
-"""Tests for Issue CRUD API endpoints and core logic."""
+"""Tests for Issue CRUD API endpoints, log entries, and core logic."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -13,14 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from codehive.api.app import create_app
 from codehive.api.deps import get_db
 from codehive.core.issues import (
+    InvalidStatusTransitionError,
     IssueHasLinkedSessionsError,
     IssueNotFoundError,
     ProjectNotFoundError,
     SessionNotFoundError,
     create_issue,
+    create_issue_log_entry,
     delete_issue,
     get_issue,
     link_session_to_issue,
+    list_issue_log_entries,
     list_issues,
     update_issue,
 )
@@ -139,6 +142,31 @@ class TestCoreCreateIssue:
         assert issue.project_id == project.id
         assert issue.created_at is not None
 
+    async def test_create_issue_with_new_fields(self, db_session: AsyncSession, project):
+        issue = await create_issue(
+            db_session,
+            project_id=project.id,
+            title="Feature",
+            acceptance_criteria="- [ ] All tests pass",
+            assigned_agent="swe",
+            priority=10,
+        )
+        assert issue.acceptance_criteria == "- [ ] All tests pass"
+        assert issue.assigned_agent == "swe"
+        assert issue.priority == 10
+        assert issue.updated_at is not None
+
+    async def test_create_issue_defaults_for_new_fields(self, db_session: AsyncSession, project):
+        issue = await create_issue(
+            db_session,
+            project_id=project.id,
+            title="Minimal",
+        )
+        assert issue.acceptance_criteria is None
+        assert issue.assigned_agent is None
+        assert issue.priority == 0
+        assert issue.updated_at is not None
+
     async def test_create_issue_nonexistent_project(self, db_session: AsyncSession):
         with pytest.raises(ProjectNotFoundError):
             await create_issue(
@@ -168,6 +196,15 @@ class TestCoreListIssues:
         open_issues = await list_issues(db_session, project.id, status="open")
         assert len(open_issues) == 1
         assert open_issues[0].id == issue1.id
+
+    async def test_list_with_assigned_agent_filter(self, db_session: AsyncSession, project):
+        await create_issue(
+            db_session, project_id=project.id, title="SWE issue", assigned_agent="swe"
+        )
+        await create_issue(db_session, project_id=project.id, title="QA issue", assigned_agent="qa")
+        swe_issues = await list_issues(db_session, project.id, assigned_agent="swe")
+        assert len(swe_issues) == 1
+        assert swe_issues[0].title == "SWE issue"
 
     async def test_list_nonexistent_project(self, db_session: AsyncSession):
         with pytest.raises(ProjectNotFoundError):
@@ -199,10 +236,25 @@ class TestCoreUpdateIssue:
         assert updated.description == "new"
         assert updated.title == "Original"  # unchanged
 
-    async def test_update_status(self, db_session: AsyncSession, project):
+    async def test_update_status_valid_transition(self, db_session: AsyncSession, project):
         issue = await create_issue(db_session, project_id=project.id, title="Status test")
-        updated = await update_issue(db_session, issue.id, status="closed")
-        assert updated.status == "closed"
+        updated = await update_issue(db_session, issue.id, status="in_progress")
+        assert updated.status == "in_progress"
+
+    async def test_update_status_invalid_transition(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="Status test")
+        with pytest.raises(InvalidStatusTransitionError):
+            await update_issue(db_session, issue.id, status="done")
+
+    async def test_update_assigned_agent_changes_updated_at(
+        self, db_session: AsyncSession, project
+    ):
+        issue = await create_issue(db_session, project_id=project.id, title="Agent test")
+        original_updated_at = issue.updated_at
+        # Small delay not needed; _now() will produce a new timestamp
+        updated = await update_issue(db_session, issue.id, assigned_agent="swe")
+        assert updated.assigned_agent == "swe"
+        assert updated.updated_at >= original_updated_at
 
     async def test_update_nonexistent(self, db_session: AsyncSession):
         with pytest.raises(IssueNotFoundError):
@@ -251,6 +303,113 @@ class TestCoreLinkSession:
 
 
 # ---------------------------------------------------------------------------
+# Unit tests: Issue log entry operations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestCoreIssueLogEntries:
+    async def test_create_log_entry(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="Log test")
+        entry = await create_issue_log_entry(
+            db_session, issue_id=issue.id, agent_role="swe", content="Started work"
+        )
+        assert entry.id is not None
+        assert entry.issue_id == issue.id
+        assert entry.agent_role == "swe"
+        assert entry.content == "Started work"
+        assert entry.created_at is not None
+
+    async def test_create_log_entry_nonexistent_issue(self, db_session: AsyncSession):
+        with pytest.raises(IssueNotFoundError):
+            await create_issue_log_entry(
+                db_session,
+                issue_id=uuid.uuid4(),
+                agent_role="swe",
+                content="orphan",
+            )
+
+    async def test_list_log_entries_empty(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="Empty logs")
+        entries = await list_issue_log_entries(db_session, issue.id)
+        assert entries == []
+
+    async def test_list_log_entries_chronological(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="Multi logs")
+        await create_issue_log_entry(
+            db_session, issue_id=issue.id, agent_role="swe", content="First"
+        )
+        await create_issue_log_entry(
+            db_session, issue_id=issue.id, agent_role="qa", content="Second"
+        )
+        await create_issue_log_entry(
+            db_session, issue_id=issue.id, agent_role="pm", content="Third"
+        )
+        entries = await list_issue_log_entries(db_session, issue.id)
+        assert len(entries) == 3
+        assert entries[0].content == "First"
+        assert entries[1].content == "Second"
+        assert entries[2].content == "Third"
+
+    async def test_list_log_entries_nonexistent_issue(self, db_session: AsyncSession):
+        with pytest.raises(IssueNotFoundError):
+            await list_issue_log_entries(db_session, uuid.uuid4())
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: Status transition validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestCoreStatusTransitions:
+    async def test_open_to_groomed(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        updated = await update_issue(db_session, issue.id, status="groomed")
+        assert updated.status == "groomed"
+
+    async def test_open_to_in_progress(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        updated = await update_issue(db_session, issue.id, status="in_progress")
+        assert updated.status == "in_progress"
+
+    async def test_open_to_closed(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        updated = await update_issue(db_session, issue.id, status="closed")
+        assert updated.status == "closed"
+
+    async def test_open_to_done_invalid(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        with pytest.raises(InvalidStatusTransitionError):
+            await update_issue(db_session, issue.id, status="done")
+
+    async def test_in_progress_to_done(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        await update_issue(db_session, issue.id, status="in_progress")
+        updated = await update_issue(db_session, issue.id, status="done")
+        assert updated.status == "done"
+
+    async def test_done_to_open_reopen(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        await update_issue(db_session, issue.id, status="in_progress")
+        await update_issue(db_session, issue.id, status="done")
+        updated = await update_issue(db_session, issue.id, status="open")
+        assert updated.status == "open"
+
+    async def test_closed_to_open_reopen(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        await update_issue(db_session, issue.id, status="closed")
+        updated = await update_issue(db_session, issue.id, status="open")
+        assert updated.status == "open"
+
+    async def test_closed_to_in_progress_invalid(self, db_session: AsyncSession, project):
+        issue = await create_issue(db_session, project_id=project.id, title="T")
+        await update_issue(db_session, issue.id, status="closed")
+        with pytest.raises(InvalidStatusTransitionError):
+            await update_issue(db_session, issue.id, status="in_progress")
+
+
+# ---------------------------------------------------------------------------
 # Integration tests: API endpoints via AsyncClient
 # ---------------------------------------------------------------------------
 
@@ -267,8 +426,29 @@ class TestCreateIssueEndpoint:
         assert data["title"] == "Bug"
         assert data["status"] == "open"
         assert data["project_id"] == str(project.id)
+        assert data["priority"] == 0
+        assert data["acceptance_criteria"] is None
+        assert data["assigned_agent"] is None
         assert "id" in data
         assert "created_at" in data
+        assert "updated_at" in data
+
+    async def test_create_with_all_new_fields(self, client: AsyncClient, project):
+        resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={
+                "title": "Full",
+                "description": "desc",
+                "acceptance_criteria": "- [ ] done",
+                "assigned_agent": "swe",
+                "priority": 5,
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["acceptance_criteria"] == "- [ ] done"
+        assert data["assigned_agent"] == "swe"
+        assert data["priority"] == 5
 
     async def test_create_with_description(self, client: AsyncClient, project):
         resp = await client.post(
@@ -333,6 +513,41 @@ class TestListIssuesEndpoint:
         assert len(data) == 1
         assert data[0]["title"] == "Open one"
 
+    async def test_list_with_assigned_agent_filter(self, client: AsyncClient, project):
+        await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "SWE task", "assigned_agent": "swe"},
+        )
+        await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "QA task", "assigned_agent": "qa"},
+        )
+        resp = await client.get(f"/api/projects/{project.id}/issues?assigned_agent=swe")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "SWE task"
+
+    async def test_list_with_both_filters(self, client: AsyncClient, project):
+        await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "SWE open", "assigned_agent": "swe"},
+        )
+        r2 = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "SWE in_progress", "assigned_agent": "swe"},
+        )
+        issue2_id = r2.json()["id"]
+        await client.patch(f"/api/issues/{issue2_id}", json={"status": "in_progress"})
+
+        resp = await client.get(
+            f"/api/projects/{project.id}/issues?status=in_progress&assigned_agent=swe"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "SWE in_progress"
+
     async def test_list_bad_project_404(self, client: AsyncClient):
         resp = await client.get(f"/api/projects/{uuid.uuid4()}/issues")
         assert resp.status_code == 404
@@ -340,7 +555,7 @@ class TestListIssuesEndpoint:
 
 @pytest.mark.asyncio
 class TestGetIssueEndpoint:
-    async def test_get_200_with_sessions(self, client: AsyncClient, project):
+    async def test_get_200_with_sessions_and_logs(self, client: AsyncClient, project):
         create_resp = await client.post(
             f"/api/projects/{project.id}/issues",
             json={"title": "Get me"},
@@ -352,6 +567,25 @@ class TestGetIssueEndpoint:
         assert data["title"] == "Get me"
         assert "sessions" in data
         assert data["sessions"] == []
+        assert "logs" in data
+        assert data["logs"] == []
+
+    async def test_get_includes_logs(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "With logs"},
+        )
+        issue_id = create_resp.json()["id"]
+        # Add a log entry
+        await client.post(
+            f"/api/issues/{issue_id}/logs",
+            json={"agent_role": "swe", "content": "did stuff"},
+        )
+        resp = await client.get(f"/api/issues/{issue_id}")
+        data = resp.json()
+        assert len(data["logs"]) == 1
+        assert data["logs"][0]["agent_role"] == "swe"
+        assert data["logs"][0]["content"] == "did stuff"
 
     async def test_get_404(self, client: AsyncClient):
         resp = await client.get(f"/api/issues/{uuid.uuid4()}")
@@ -372,6 +606,49 @@ class TestUpdateIssueEndpoint:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "closed"
+
+    async def test_patch_status_valid_transition(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "Transition"},
+        )
+        issue_id = create_resp.json()["id"]
+        resp = await client.patch(
+            f"/api/issues/{issue_id}",
+            json={"status": "in_progress"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "in_progress"
+
+    async def test_patch_status_invalid_transition_409(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "Bad transition"},
+        )
+        issue_id = create_resp.json()["id"]
+        # open -> done is invalid
+        resp = await client.patch(
+            f"/api/issues/{issue_id}",
+            json={"status": "done"},
+        )
+        assert resp.status_code == 409
+
+    async def test_patch_assigned_agent_updates_updated_at(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "Agent test"},
+        )
+        data = create_resp.json()
+        issue_id = data["id"]
+        original_updated_at = data["updated_at"]
+
+        resp = await client.patch(
+            f"/api/issues/{issue_id}",
+            json={"assigned_agent": "swe"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["assigned_agent"] == "swe"
+        assert resp.json()["updated_at"] >= original_updated_at
 
     async def test_patch_partial_fields(self, client: AsyncClient, project):
         create_resp = await client.post(
@@ -463,3 +740,79 @@ class TestLinkSessionEndpoint:
         issue_id = create_resp.json()["id"]
         resp = await client.post(f"/api/issues/{issue_id}/link-session/{uuid.uuid4()}")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: Log entry API endpoints
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestLogEntryEndpoints:
+    async def test_create_log_entry_201(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "Log test"},
+        )
+        issue_id = create_resp.json()["id"]
+
+        resp = await client.post(
+            f"/api/issues/{issue_id}/logs",
+            json={"agent_role": "swe", "content": "Started implementation"},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["agent_role"] == "swe"
+        assert data["content"] == "Started implementation"
+        assert data["issue_id"] == issue_id
+        assert "id" in data
+        assert "created_at" in data
+
+    async def test_create_log_entry_nonexistent_issue_404(self, client: AsyncClient):
+        resp = await client.post(
+            f"/api/issues/{uuid.uuid4()}/logs",
+            json={"agent_role": "swe", "content": "orphan"},
+        )
+        assert resp.status_code == 404
+
+    async def test_list_log_entries_chronological(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "Multi logs"},
+        )
+        issue_id = create_resp.json()["id"]
+
+        await client.post(
+            f"/api/issues/{issue_id}/logs",
+            json={"agent_role": "swe", "content": "First"},
+        )
+        await client.post(
+            f"/api/issues/{issue_id}/logs",
+            json={"agent_role": "qa", "content": "Second"},
+        )
+        await client.post(
+            f"/api/issues/{issue_id}/logs",
+            json={"agent_role": "pm", "content": "Third"},
+        )
+
+        resp = await client.get(f"/api/issues/{issue_id}/logs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 3
+        assert data[0]["content"] == "First"
+        assert data[1]["content"] == "Second"
+        assert data[2]["content"] == "Third"
+
+    async def test_list_log_entries_nonexistent_issue_404(self, client: AsyncClient):
+        resp = await client.get(f"/api/issues/{uuid.uuid4()}/logs")
+        assert resp.status_code == 404
+
+    async def test_list_log_entries_empty(self, client: AsyncClient, project):
+        create_resp = await client.post(
+            f"/api/projects/{project.id}/issues",
+            json={"title": "Empty"},
+        )
+        issue_id = create_resp.json()["id"]
+        resp = await client.get(f"/api/issues/{issue_id}/logs")
+        assert resp.status_code == 200
+        assert resp.json() == []
