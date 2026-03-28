@@ -25,3 +25,19 @@ export async function fetchTeam(
   }
   return response.json() as Promise<AgentProfileRead[]>;
 }
+
+export async function generateTeam(
+  projectId: string,
+): Promise<AgentProfileRead[]> {
+  const response = await apiClient.post(
+    `/api/projects/${projectId}/team/generate`,
+    {},
+  );
+  if (response.status === 409) {
+    throw new Error("Team already exists");
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to generate team: ${response.status}`);
+  }
+  return response.json() as Promise<AgentProfileRead[]>;
+}

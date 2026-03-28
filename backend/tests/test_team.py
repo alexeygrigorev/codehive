@@ -315,6 +315,69 @@ class TestTeamAPI:
         )
         assert resp.status_code == 404
 
+    async def test_generate_team_for_empty_project(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """POST /api/projects/{id}/team/generate on a project with no team returns 201 and 6 profiles."""
+        # Create a project without auto-generating a team by inserting directly
+        project = Project(name="legacy-no-team", knowledge={})
+        db_session.add(project)
+        await db_session.commit()
+        await db_session.refresh(project)
+        project_id = str(project.id)
+
+        resp = await client.post(f"/api/projects/{project_id}/team/generate")
+        assert resp.status_code == 201
+        team = resp.json()
+        assert len(team) == 6
+
+        # Verify role distribution
+        roles = [m["role"] for m in team]
+        assert roles.count("pm") == 1
+        assert roles.count("swe") == 2
+        assert roles.count("qa") == 2
+        assert roles.count("oncall") == 1
+
+    async def test_generate_team_conflict_when_team_exists(self, client: AsyncClient):
+        """POST /api/projects/{id}/team/generate on a project that already has a team returns 409."""
+        # create_project auto-generates a team
+        resp = await client.post("/api/projects", json={"name": "has-team"})
+        assert resp.status_code == 201
+        project_id = resp.json()["id"]
+
+        resp = await client.post(f"/api/projects/{project_id}/team/generate")
+        assert resp.status_code == 409
+        assert "already exists" in resp.json()["detail"].lower()
+
+    async def test_generate_team_nonexistent_project_404(self, client: AsyncClient):
+        """POST /api/projects/{fake_id}/team/generate returns 404."""
+        fake_id = str(uuid.uuid4())
+        resp = await client.post(f"/api/projects/{fake_id}/team/generate")
+        assert resp.status_code == 404
+
+    async def test_generate_then_get_returns_same_team(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """After calling generate, GET /api/projects/{id}/team returns the same 6 profiles."""
+        project = Project(name="generate-then-get", knowledge={})
+        db_session.add(project)
+        await db_session.commit()
+        await db_session.refresh(project)
+        project_id = str(project.id)
+
+        gen_resp = await client.post(f"/api/projects/{project_id}/team/generate")
+        assert gen_resp.status_code == 201
+        generated = gen_resp.json()
+
+        get_resp = await client.get(f"/api/projects/{project_id}/team")
+        assert get_resp.status_code == 200
+        fetched = get_resp.json()
+        assert len(fetched) == 6
+
+        generated_ids = sorted([m["id"] for m in generated])
+        fetched_ids = sorted([m["id"] for m in fetched])
+        assert generated_ids == fetched_ids
+
     async def test_issue_logs_include_agent_info(
         self, client: AsyncClient, db_session: AsyncSession
     ):

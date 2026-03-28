@@ -3,11 +3,12 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
 from codehive.api.schemas.team import AgentProfileCreate, AgentProfileRead, AgentProfileUpdate
+from codehive.core.team import generate_default_team
 from codehive.db.models import AgentProfile, Project
 
 router = APIRouter(prefix="/api/projects/{project_id}/team", tags=["team"])
@@ -33,6 +34,27 @@ async def list_team(
         .order_by(AgentProfile.created_at)
     )
     profiles = list(result.scalars().all())
+    return [AgentProfileRead.model_validate(p) for p in profiles]
+
+
+@router.post("/generate", response_model=list[AgentProfileRead], status_code=201)
+async def generate_team(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[AgentProfileRead]:
+    """Generate the default team for a project that has no team yet."""
+    await _get_project_or_404(db, project_id)
+
+    # Check if team already exists
+    count_result = await db.execute(
+        select(func.count()).select_from(AgentProfile).where(AgentProfile.project_id == project_id)
+    )
+    count = count_result.scalar_one()
+    if count > 0:
+        raise HTTPException(status_code=409, detail="Team already exists")
+
+    profiles = await generate_default_team(db, project_id)
+    await db.commit()
     return [AgentProfileRead.model_validate(p) for p in profiles]
 
 

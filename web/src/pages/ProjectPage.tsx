@@ -12,7 +12,7 @@ import {
   type IssueRead,
   type IssueStatus,
 } from "@/api/issues";
-import { fetchTeam, type AgentProfileRead } from "@/api/team";
+import { fetchTeam, generateTeam, type AgentProfileRead } from "@/api/team";
 import SessionList from "@/components/SessionList";
 import IssueList from "@/components/IssueList";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -36,6 +36,8 @@ export default function ProjectPage() {
 
   const [team, setTeam] = useState<AgentProfileRead[]>([]);
   const [teamLoaded, setTeamLoaded] = useState(false);
+  const [generatingTeam, setGeneratingTeam] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   // Issues filter state
   const [issueFilter, setIssueFilter] = useState<IssueStatus | null>(null);
@@ -175,6 +177,22 @@ export default function ProjectPage() {
     if (!projectId) return;
     const issue = await createIssue(projectId, { title, description });
     setIssues((prev) => [...prev, issue]);
+  }
+
+  async function handleGenerateTeam() {
+    if (!projectId) return;
+    setGeneratingTeam(true);
+    setTeamError(null);
+    try {
+      const generated = await generateTeam(projectId);
+      setTeam(generated);
+    } catch (err) {
+      setTeamError(
+        err instanceof Error ? err.message : "Failed to generate team",
+      );
+    } finally {
+      setGeneratingTeam(false);
+    }
   }
 
   if (loading) {
@@ -319,8 +337,23 @@ export default function ProjectPage() {
         {activeTab === "team" && (
           <div>
             <h2 className="text-lg font-semibold mb-3">Team</h2>
+            {teamError && (
+              <p className="text-red-600 text-sm mb-3" data-testid="team-error">
+                {teamError}
+              </p>
+            )}
             {team.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400 text-sm">No team members.</p>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No team members.</p>
+                <button
+                  onClick={handleGenerateTeam}
+                  disabled={generatingTeam}
+                  className="mt-3 bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+                  data-testid="generate-team-btn"
+                >
+                  {generatingTeam ? "Generating..." : "Generate Team"}
+                </button>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {team.map((agent) => (
