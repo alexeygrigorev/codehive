@@ -44,6 +44,7 @@ from codehive.api.routes.async_dispatch import async_dispatch_router
 from codehive.api.routes.providers import providers_router
 from codehive.api.routes.usage import session_usage_router, usage_router
 from codehive.api.routes.orchestrator import orchestrator_router
+from codehive.api.routes.agent import agent_router
 from codehive.api.routes.team import router as team_router
 from codehive.api.ws import router as ws_router
 
@@ -123,6 +124,8 @@ def create_app() -> FastAPI:
 
     # ---- Public routes (no auth required) ----
     app.include_router(auth_router)
+    # Agent API: authenticated by X-Session-Id header, not JWT
+    app.include_router(agent_router)
     # WebSocket router handles its own JWT auth (query param or first message)
     app.include_router(ws_router)
 

@@ -162,6 +162,8 @@ def build_instructions(
     acceptance_criteria: str | None = None,
     feedback: str | None = None,
     agent_output: str | None = None,
+    session_id: str | None = None,
+    api_base_url: str | None = None,
 ) -> str:
     """Build the initial message/instructions for an agent session."""
     parts: list[str] = []
@@ -216,6 +218,28 @@ def build_instructions(
             '    evidence=[{"type": "...", "content": "..."}],\n'
             '    feedback="optional rejection reason")'
         )
+
+    # Append Task API block when a session_id is provided
+    if session_id is not None:
+        base = api_base_url or "http://localhost:7433"
+        api_block = (
+            f"## Task API\n\n"
+            f"You can use curl to interact with the Codehive API:\n\n"
+            f"Session ID: {session_id}\n\n"
+            f"# Fetch your task details:\n"
+            f'curl -s {base}/api/agent/my-task -H "X-Session-Id: {session_id}"\n\n'
+            f"# Log progress:\n"
+            f"curl -s -X POST {base}/api/agent/log "
+            f'-H "X-Session-Id: {session_id}" '
+            f'-H "Content-Type: application/json" '
+            f"""-d '{{"content": "your log message"}}'\n\n"""
+            f"# Submit verdict (QA/PM only):\n"
+            f"curl -s -X POST {base}/api/agent/verdict "
+            f'-H "X-Session-Id: {session_id}" '
+            f'-H "Content-Type: application/json" '
+            f"""-d '{{"verdict": "PASS", "feedback": "reason"}}'"""
+        )
+        parts.append(api_block)
 
     return "\n\n".join(parts)
 
