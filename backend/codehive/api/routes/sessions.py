@@ -9,10 +9,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from codehive.api.deps import get_db
 from codehive.core.team import avatar_url_for_seed
-from codehive.core.usage import persist_usage_event
+from codehive.core.usage import CHAT_EVENT_TYPES, persist_chat_event, persist_usage_event
 from codehive.api.schemas.diff import DiffFileEntry, SessionDiffsResponse
+from codehive.api.schemas.event import EventRead
 from codehive.api.schemas.session import (
     MessageSend,
     ModeSwitchRequest,
@@ -245,6 +248,37 @@ async def list_subagents_endpoint(
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     return [await _enrich_session(db, c) for c in children]
+
+
+@sessions_router.get("/{session_id}/messages", response_model=list[EventRead])
+async def list_session_messages_endpoint(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[EventRead]:
+    """Return all chat-relevant events for a session in chronological order.
+
+    Queries the ``events`` table for event types that are relevant to the
+    chat UI (messages, tool calls, errors, etc.) with no hard cap so that
+    long conversations are fully returned.
+    """
+    from codehive.db.models import Event
+    from codehive.db.models import Session as DBSession
+
+    # Verify session exists
+    session = await db.get(DBSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    stmt = (
+        select(Event)
+        .where(Event.session_id == session_id)
+        .where(Event.type.in_(CHAT_EVENT_TYPES))
+        .order_by(Event.created_at.asc())
+        .limit(1000)
+    )
+    result = await db.execute(stmt)
+    events = list(result.scalars().all())
+    return [EventRead.model_validate(e) for e in events]
 
 
 def _count_additions_deletions(diff_text: str) -> tuple[int, int]:
@@ -517,9 +551,16 @@ async def send_message_endpoint(
         if hasattr(engine, "create_session"):
             await engine.create_session(session_id)
 
+        # Check if engine already persists events via EventBus
+        engine_persists = getattr(engine, "_event_bus", None) is not None
+
         events: list[dict[str, Any]] = []
         async for event in engine.send_message(session_id, body.content, db=db):
             await persist_usage_event(db, session_id, event)
+            if not engine_persists:
+                event_id = await persist_chat_event(db, session_id, event)
+                if event_id is not None:
+                    event["id"] = str(event_id)
             events.append(event)
 
         # Engine finished a turn -- mark as waiting_input
@@ -572,8 +613,15 @@ async def send_message_stream_endpoint(
             if hasattr(engine, "create_session"):
                 await engine.create_session(session_id)
 
+            # Check if engine already persists events via EventBus
+            engine_persists = getattr(engine, "_event_bus", None) is not None
+
             async for event in engine.send_message(session_id, body.content, db=db):
                 await persist_usage_event(db, session_id, event)
+                if not engine_persists:
+                    event_id = await persist_chat_event(db, session_id, event)
+                    if event_id is not None:
+                        event["id"] = str(event_id)
                 yield f"data: {json.dumps(event)}\n\n"
 
             # Engine finished a turn -- mark as waiting_input

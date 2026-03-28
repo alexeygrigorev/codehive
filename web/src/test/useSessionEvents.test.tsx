@@ -4,6 +4,12 @@ import { WebSocketProvider } from "@/context/WebSocketContext.tsx";
 import { useSessionEvents } from "@/hooks/useSessionEvents.ts";
 import type { SessionEvent } from "@/api/websocket.ts";
 
+// Mock fetchMessages used by WebSocketContext for history loading
+vi.mock("@/api/messages.ts", () => ({
+  fetchMessages: vi.fn().mockResolvedValue([]),
+  sendMessage: vi.fn(),
+}));
+
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
 

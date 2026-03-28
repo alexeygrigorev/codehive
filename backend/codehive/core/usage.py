@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+# Chat-relevant event types that should be persisted during streaming.
+CHAT_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "message.created",
+        "message.delta",
+        "tool.call.started",
+        "tool.call.finished",
+        "error",
+        "approval.required",
+        "subagent.spawned",
+        "subagent.report",
+        "context.compacted",
+    }
+)
 
 # Prices per million tokens: (input_price, output_price) in USD.
 MODEL_PRICES: dict[str, tuple[float, float]] = {
@@ -142,6 +158,38 @@ async def persist_usage_event(
         if models:
             await db.flush()
         return
+
+
+async def persist_chat_event(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    event: dict,
+) -> uuid.UUID | None:
+    """Persist a chat-relevant engine event to the ``events`` table.
+
+    Only events whose ``type`` is in :data:`CHAT_EVENT_TYPES` are
+    persisted.  Returns the generated DB event ``id`` on success, or
+    ``None`` if the event type is not chat-relevant.
+    """
+    event_type = event.get("type", "")
+    if event_type not in CHAT_EVENT_TYPES:
+        return None
+
+    from codehive.db.models import Event
+
+    # Build a clean data dict (everything except 'type' and 'session_id' top-level keys)
+    data = {k: v for k, v in event.items() if k not in ("type",)}
+
+    db_event = Event(
+        session_id=session_id,
+        type=event_type,
+        data=data,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db.add(db_event)
+    await db.flush()
+    await db.refresh(db_event)
+    return db_event.id
 
 
 async def get_context_usage(

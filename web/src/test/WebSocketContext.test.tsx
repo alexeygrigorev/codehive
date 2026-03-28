@@ -3,6 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WebSocketProvider, useWebSocket } from "@/context/WebSocketContext.tsx";
 import type { SessionEvent } from "@/api/websocket.ts";
 
+// Mock fetchMessages used by WebSocketContext for history loading
+vi.mock("@/api/messages.ts", () => ({
+  fetchMessages: vi.fn().mockResolvedValue([]),
+  sendMessage: vi.fn(),
+}));
+
 // Mock WebSocket
 class MockWebSocket {
   static instances: MockWebSocket[] = [];

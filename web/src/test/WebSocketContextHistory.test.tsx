@@ -6,14 +6,15 @@ import {
 } from "@/context/WebSocketContext.tsx";
 import type { SessionEvent } from "@/api/websocket.ts";
 
-// Mock fetchEvents
-vi.mock("@/api/events.ts", () => ({
-  fetchEvents: vi.fn(),
+// Mock fetchMessages (used by WebSocketContext for history loading)
+vi.mock("@/api/messages.ts", () => ({
+  fetchMessages: vi.fn(),
+  sendMessage: vi.fn(),
 }));
 
-import { fetchEvents } from "@/api/events.ts";
+import { fetchMessages } from "@/api/messages.ts";
 
-const mockFetchEvents = vi.mocked(fetchEvents);
+const mockFetchEvents = vi.mocked(fetchMessages);
 
 // Mock WebSocket
 class MockWebSocket {

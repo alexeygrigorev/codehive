@@ -14,7 +14,7 @@ import type {
   ConnectionState,
   EventCallback,
 } from "@/api/websocket.ts";
-import { fetchEvents } from "@/api/events.ts";
+import { fetchMessages } from "@/api/messages.ts";
 
 interface WebSocketContextValue {
   connectionState: ConnectionState;
@@ -94,11 +94,11 @@ export function WebSocketProvider({
       setHistoricalEvents([]);
       client.connect(sessionId);
 
-      // Load historical events from the server
-      fetchEvents(sessionId)
-        .then((events) => {
+      // Load historical messages (chat-relevant events) from the server
+      fetchMessages(sessionId)
+        .then((msgs) => {
           if (!cancelled) {
-            setHistoricalEvents(events as SessionEvent[]);
+            setHistoricalEvents(msgs as SessionEvent[]);
           }
         })
         .catch((err) => {
