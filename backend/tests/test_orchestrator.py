@@ -151,8 +151,8 @@ async def _collect_events(aiter: Any) -> list[dict]:
 
 
 class TestOrchestratorToolFiltering:
-    def test_filter_returns_exactly_six_tools(self):
-        """filter_tools(TOOL_DEFINITIONS) returns exactly 6 allowed tools."""
+    def test_filter_returns_exactly_seven_tools(self):
+        """filter_tools(TOOL_DEFINITIONS) returns exactly 7 allowed tools."""
         filtered = filter_tools(TOOL_DEFINITIONS)
         names = {t["name"] for t in filtered}
         assert names == {
@@ -162,8 +162,9 @@ class TestOrchestratorToolFiltering:
             "run_shell",
             "get_subsession_result",
             "list_subsessions",
+            "create_task",
         }
-        assert len(filtered) == 6
+        assert len(filtered) == 7
 
     def test_edit_file_not_in_filtered(self):
         """edit_file is NOT in the filtered list."""
@@ -308,7 +309,7 @@ class TestZaiEngineOrchestratorMode:
             engine.send_message(session_id, "Plan the work", mode="orchestrator")
         )
 
-        # Verify API was called with filtered tools (6 tools) and system prompt
+        # Verify API was called with filtered tools (7 tools) and system prompt
         call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
@@ -319,8 +320,9 @@ class TestZaiEngineOrchestratorMode:
             "run_shell",
             "get_subsession_result",
             "list_subsessions",
+            "create_task",
         }
-        assert len(tools_passed) == 6
+        assert len(tools_passed) == 7
 
         # System prompt included
         assert "system" in call_kwargs.kwargs
@@ -396,10 +398,10 @@ class TestZaiEngineOrchestratorMode:
         call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
-        # Full set: 10 tools (including query_agent, send_to_agent, get_subsession_result, list_subsessions)
+        # Full set: 11 tools (including query_agent, send_to_agent, get_subsession_result, list_subsessions, create_task)
         assert "edit_file" in tool_names
         assert "git_commit" in tool_names
-        assert len(tools_passed) == 10
+        assert len(tools_passed) == 11
 
         # No system prompt
         assert "system" not in call_kwargs.kwargs

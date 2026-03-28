@@ -49,6 +49,7 @@ from codehive.engine.tools.get_subsession_result import GET_SUBSESSION_RESULT_TO
 from codehive.engine.tools.list_subsessions import LIST_SUBSESSIONS_TOOL
 from codehive.engine.tools.query_agent import QUERY_AGENT_TOOL
 from codehive.engine.tools.send_to_agent import SEND_TO_AGENT_TOOL
+from codehive.engine.tools.create_task import CREATE_TASK_TOOL
 from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -133,6 +134,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     SEND_TO_AGENT_TOOL,
     GET_SUBSESSION_RESULT_TOOL,
     LIST_SUBSESSIONS_TOOL,
+    CREATE_TASK_TOOL,
 ]
 
 # Default model for the native engine
@@ -964,6 +966,42 @@ class ZaiEngine:
                 except Exception as exc:
                     return {"content": str(exc), "is_error": True}
                 return {"content": json.dumps(result)}
+
+            elif tool_name == "create_task":
+                if session_id is None or db is None:
+                    return {
+                        "content": "create_task requires an active session with DB access",
+                        "is_error": True,
+                    }
+                try:
+                    from codehive.core.backlog_service import (
+                        ProjectNotFoundForBacklogError,
+                        create_backlog_task,
+                    )
+                    from codehive.db.models import Session as SessionModelLocal
+
+                    # Resolve project_id from the session context
+                    session_obj = await db.get(SessionModelLocal, session_id)
+                    if session_obj is None:
+                        return {
+                            "content": "Session not found",
+                            "is_error": True,
+                        }
+                    project_id = session_obj.project_id
+
+                    backlog_result = await create_backlog_task(
+                        db,
+                        project_id=project_id,
+                        title=tool_input["title"],
+                        description=tool_input.get("description"),
+                        acceptance_criteria=tool_input.get("acceptance_criteria"),
+                        event_bus=self._event_bus,
+                    )
+                    return {"content": json.dumps(backlog_result.to_dict())}
+                except ProjectNotFoundForBacklogError as exc:
+                    return {"content": str(exc), "is_error": True}
+                except Exception as exc:
+                    return {"content": str(exc), "is_error": True}
 
             else:
                 return {"content": f"Unknown tool: {tool_name}", "is_error": True}

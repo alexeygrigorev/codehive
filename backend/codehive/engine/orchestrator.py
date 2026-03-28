@@ -31,6 +31,7 @@ ORCHESTRATOR_ALLOWED_TOOLS: set[str] = {
     "run_shell",
     "get_subsession_result",
     "list_subsessions",
+    "create_task",
 }
 
 

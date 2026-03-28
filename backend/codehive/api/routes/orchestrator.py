@@ -10,14 +10,16 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
-from codehive.core.issues import create_issue
+from codehive.core.backlog_service import (
+    ProjectNotFoundForBacklogError,
+    create_backlog_task,
+)
 from codehive.core.orchestrator_service import (
     OrchestratorService,
     get_orchestrator,
     register_orchestrator,
     unregister_orchestrator,
 )
-from codehive.core.task_queue import create_task
 from codehive.db.session import async_session_factory
 
 orchestrator_router = APIRouter(prefix="/api/orchestrator", tags=["orchestrator"])
@@ -143,55 +145,19 @@ async def add_task(
     db: AsyncSession = Depends(get_db),
 ) -> AddTaskResponse:
     """Add a task to the pipeline backlog. Creates an issue and a task."""
-    from codehive.db.models import Project
-    from codehive.db.models import Session as SessionModel
-    from sqlalchemy import select
-
-    # Verify project exists
-    project = await db.get(Project, body.project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Create the issue
-    issue = await create_issue(
-        db,
-        project_id=body.project_id,
-        title=body.title,
-        description=body.description,
-        acceptance_criteria=body.acceptance_criteria,
-    )
-
-    # Find or create an orchestrator session for the project
-    result = await db.execute(
-        select(SessionModel).where(
-            SessionModel.project_id == body.project_id,
-            SessionModel.name == f"orchestrator-{body.project_id}",
-        )
-    )
-    orch_session = result.scalar_one_or_none()
-    if orch_session is None:
-        from codehive.core.session import create_session as create_db_session
-
-        orch_session = await create_db_session(
+    try:
+        result = await create_backlog_task(
             db,
             project_id=body.project_id,
-            name=f"orchestrator-{body.project_id}",
-            engine="claude_code",
-            mode="orchestrator",
-            issue_id=issue.id,
+            title=body.title,
+            description=body.description,
+            acceptance_criteria=body.acceptance_criteria,
         )
-
-    # Create the task in backlog
-    task = await create_task(
-        db,
-        session_id=orch_session.id,
-        title=body.title,
-        instructions=body.description,
-        pipeline_status="backlog",
-    )
+    except ProjectNotFoundForBacklogError:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     return AddTaskResponse(
-        issue_id=str(issue.id),
-        task_id=str(task.id),
-        pipeline_status="backlog",
+        issue_id=str(result.issue_id),
+        task_id=str(result.task_id),
+        pipeline_status=result.pipeline_status,
     )
