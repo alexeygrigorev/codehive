@@ -85,6 +85,9 @@ export interface IssueLogEntry {
   id: string;
   issue_id: string;
   agent_role: string;
+  agent_profile_id: string | null;
+  agent_name: string | null;
+  agent_avatar_url: string | null;
   content: string;
   created_at: string;
 }

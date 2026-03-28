@@ -86,6 +86,30 @@ class Project(Base):
 
     issues: Mapped[list["Issue"]] = relationship(back_populates="project")
     sessions: Mapped[list["Session"]] = relationship(back_populates="project")
+    team: Mapped[list["AgentProfile"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+
+
+class AgentProfile(Base):
+    __tablename__ = "agent_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PortableUUID, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    avatar_seed: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    personality: Mapped[str | None] = mapped_column(Text, nullable=True)
+    system_prompt_modifier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="team")
 
 
 class Issue(Base):
@@ -127,6 +151,9 @@ class IssueLogEntry(Base):
         PortableUUID, ForeignKey("issues.id"), nullable=False
     )
     agent_role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    agent_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        PortableUUID, ForeignKey("agent_profiles.id"), nullable=True
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
@@ -135,6 +162,7 @@ class IssueLogEntry(Base):
     )
 
     issue: Mapped["Issue"] = relationship(back_populates="logs")
+    agent_profile: Mapped["AgentProfile | None"] = relationship()
 
 
 class Session(Base):
@@ -170,7 +198,11 @@ class Session(Base):
         PortableUUID, ForeignKey("tasks.id", use_alter=True), nullable=True
     )
     pipeline_step: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    agent_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        PortableUUID, ForeignKey("agent_profiles.id"), nullable=True
+    )
 
+    agent_profile: Mapped["AgentProfile | None"] = relationship()
     bound_task: Mapped["Task | None"] = relationship(
         foreign_keys="Session.task_id", back_populates="agent_sessions"
     )

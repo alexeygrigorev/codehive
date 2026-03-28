@@ -55,6 +55,9 @@ class IssueLogEntryRead(BaseModel):
     id: uuid.UUID
     issue_id: uuid.UUID
     agent_role: str
+    agent_profile_id: uuid.UUID | None = None
+    agent_name: str | None = None
+    agent_avatar_url: str | None = None
     content: str
     created_at: datetime
 

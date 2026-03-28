@@ -56,6 +56,13 @@ async def create_project(
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     session.add(project)
+    await session.flush()
+
+    # Generate default team of agent profiles
+    from codehive.core.team import generate_default_team
+
+    await generate_default_team(session, project.id)
+
     await session.commit()
     await session.refresh(project)
     return project

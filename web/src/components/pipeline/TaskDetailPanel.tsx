@@ -171,12 +171,24 @@ export default function TaskDetailPanel({
                       data-testid="issue-log-entry"
                       className="text-sm text-gray-300 border-l-2 border-blue-600 pl-3"
                     >
-                      <span className="text-gray-400">
-                        {new Date(entry.created_at).toLocaleString()}
-                      </span>
-                      <span className="text-blue-400 ml-2">
-                        [{entry.agent_role}]
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {entry.agent_avatar_url && (
+                          <img
+                            src={entry.agent_avatar_url}
+                            alt={entry.agent_name ?? entry.agent_role}
+                            className="w-8 h-8 rounded-full"
+                            data-testid="agent-avatar"
+                          />
+                        )}
+                        <span className="text-gray-400">
+                          {new Date(entry.created_at).toLocaleString()}
+                        </span>
+                        <span className="text-blue-400">
+                          {entry.agent_name
+                            ? `${entry.agent_name} [${entry.agent_role}]`
+                            : `[${entry.agent_role}]`}
+                        </span>
+                      </div>
                       <p className="text-gray-300 mt-1 whitespace-pre-wrap">
                         {entry.content}
                       </p>

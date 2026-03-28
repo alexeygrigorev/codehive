@@ -23,7 +23,7 @@ from codehive.core.issues import create_issue_log_entry
 from codehive.core.session import create_session as create_db_session
 from codehive.core.task_queue import list_tasks, pipeline_transition
 from codehive.core.verdicts import get_verdict as get_structured_verdict
-from codehive.db.models import Issue, Project, Task
+from codehive.db.models import AgentProfile, Issue, Project, Task
 from codehive.db.models import Session as SessionModel
 from codehive.integrations.github.commenter import build_pipeline_message, post_pipeline_comment
 
@@ -495,6 +495,35 @@ class OrchestratorService:
                     )
             return None
 
+    async def _resolve_agent_profile(
+        self,
+        db: AsyncSession,
+        role: str,
+    ) -> AgentProfile | None:
+        """Find an agent profile for the given role from the project's team.
+
+        Uses round-robin selection based on the number of existing sessions
+        with that role. Returns None if no profile matches (graceful fallback).
+        """
+        result = await db.execute(
+            select(AgentProfile).where(
+                AgentProfile.project_id == self.project_id,
+                AgentProfile.role == role,
+            )
+        )
+        profiles = list(result.scalars().all())
+        if not profiles:
+            return None
+        # Simple round-robin: count sessions with this role to pick next
+        session_count_result = await db.execute(
+            select(SessionModel).where(
+                SessionModel.project_id == self.project_id,
+                SessionModel.role == role,
+            )
+        )
+        session_count = len(list(session_count_result.scalars().all()))
+        return profiles[session_count % len(profiles)]
+
     async def _run_pipeline_step(
         self,
         task_id: uuid.UUID,
@@ -529,6 +558,13 @@ class OrchestratorService:
         # Spawn the agent session
         role_config = STEP_ROLE_MAP.get(step, {"role": "swe", "mode": "execution"})
 
+        # Resolve agent profile for this role
+        agent_profile_id: uuid.UUID | None = None
+        async with self._db_session_factory() as db:
+            agent_profile = await self._resolve_agent_profile(db, role_config["role"])
+            if agent_profile is not None:
+                agent_profile_id = agent_profile.id
+
         if self._spawn_and_run:
             output = await self._spawn_and_run(
                 task_id=task_id,
@@ -544,6 +580,7 @@ class OrchestratorService:
                 role=role_config["role"],
                 mode=role_config["mode"],
                 instructions=instructions,
+                agent_profile_id=agent_profile_id,
             )
 
         # Log the agent output
@@ -558,6 +595,7 @@ class OrchestratorService:
                         issue_id=session.issue_id,
                         agent_role=role_config["role"],
                         content=output or "(no output)",
+                        agent_profile_id=agent_profile_id,
                     )
 
             # Find the most recent child session for this task+step
@@ -607,6 +645,7 @@ class OrchestratorService:
         role: str,
         mode: str,
         instructions: str,
+        agent_profile_id: uuid.UUID | None = None,
     ) -> str:
         """Default implementation: create a child session and send the message.
 
@@ -623,6 +662,11 @@ class OrchestratorService:
                 task_id=task_id,
                 pipeline_step=step,
             )
+            # Set agent_profile_id on the session directly
+            if agent_profile_id is not None:
+                child_session.agent_profile_id = agent_profile_id
+                await db.commit()
+                await db.refresh(child_session)
             self.state.active_sessions.append(child_session.id)
 
         # In a real implementation, we'd build the engine and send the message.

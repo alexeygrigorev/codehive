@@ -1,0 +1,25 @@
+import { apiClient } from "./client";
+
+export interface AgentProfileRead {
+  id: string;
+  project_id: string;
+  name: string;
+  role: string;
+  avatar_seed: string;
+  avatar_url: string;
+  personality: string | null;
+  system_prompt_modifier: string | null;
+  created_at: string;
+}
+
+export async function fetchTeam(
+  projectId: string,
+): Promise<AgentProfileRead[]> {
+  const response = await apiClient.get(
+    `/api/projects/${projectId}/team`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch team: ${response.status}`);
+  }
+  return response.json() as Promise<AgentProfileRead[]>;
+}

@@ -12,6 +12,9 @@ export interface SessionRead {
   role: string | null;
   config: Record<string, unknown> | null;
   created_at: string;
+  agent_profile_id: string | null;
+  agent_name: string | null;
+  agent_avatar_url: string | null;
 }
 
 export async function createSession(

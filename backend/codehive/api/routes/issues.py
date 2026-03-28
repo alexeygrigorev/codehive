@@ -30,6 +30,8 @@ from codehive.core.issues import (
     list_issues,
     update_issue,
 )
+from codehive.core.team import avatar_url_for_seed
+from codehive.db.models import IssueLogEntry
 
 # Project-scoped routes (create, list)
 project_issues_router = APIRouter(prefix="/api/projects/{project_id}/issues", tags=["issues"])
@@ -154,6 +156,15 @@ async def create_log_entry_endpoint(
     return IssueLogEntryRead.model_validate(entry)
 
 
+def _enrich_log_entry(entry: IssueLogEntry) -> IssueLogEntryRead:
+    """Convert an IssueLogEntry to IssueLogEntryRead with agent profile info resolved."""
+    data = IssueLogEntryRead.model_validate(entry)
+    if entry.agent_profile is not None:
+        data.agent_name = entry.agent_profile.name
+        data.agent_avatar_url = avatar_url_for_seed(entry.agent_profile.avatar_seed)
+    return data
+
+
 @issues_router.get("/{issue_id}/logs", response_model=list[IssueLogEntryRead])
 async def list_log_entries_endpoint(
     issue_id: uuid.UUID,
@@ -163,4 +174,8 @@ async def list_log_entries_endpoint(
         entries = await list_issue_log_entries(db, issue_id)
     except IssueNotFoundError:
         raise HTTPException(status_code=404, detail="Issue not found")
-    return [IssueLogEntryRead.model_validate(e) for e in entries]
+    # Eagerly load agent profiles for entries that have them
+    for entry in entries:
+        if entry.agent_profile_id is not None:
+            await db.refresh(entry, attribute_names=["agent_profile"])
+    return [_enrich_log_entry(e) for e in entries]

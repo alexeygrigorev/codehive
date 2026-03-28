@@ -8,12 +8,13 @@ import {
   type IssueRead,
   type IssueStatus,
 } from "@/api/issues";
+import { fetchTeam, type AgentProfileRead } from "@/api/team";
 import SessionList from "@/components/SessionList";
 import IssueList from "@/components/IssueList";
 import Breadcrumb from "@/components/Breadcrumb";
 import NewSessionDialog from "@/components/NewSessionDialog";
 
-type Tab = "sessions" | "issues";
+type Tab = "sessions" | "issues" | "team";
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -26,6 +27,9 @@ export default function ProjectPage() {
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
   const [creatingSession, setCreatingSession] = useState(false);
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
+
+  const [team, setTeam] = useState<AgentProfileRead[]>([]);
+  const [teamLoaded, setTeamLoaded] = useState(false);
 
   // Issues filter state
   const [issueFilter, setIssueFilter] = useState<IssueStatus | null>(null);
@@ -85,6 +89,19 @@ export default function ProjectPage() {
       loadIssues(issueFilter);
     }
   }, [activeTab, issuesLoaded, issueFilter, loadIssues]);
+
+  useEffect(() => {
+    if (activeTab === "team" && !teamLoaded && projectId) {
+      fetchTeam(projectId)
+        .then((t) => {
+          setTeam(t);
+          setTeamLoaded(true);
+        })
+        .catch((err) =>
+          setError(err instanceof Error ? err.message : "Failed to load team"),
+        );
+    }
+  }, [activeTab, teamLoaded, projectId]);
 
   function handleFilterChange(status: IssueStatus | null) {
     setIssueFilter(status);
@@ -200,6 +217,18 @@ export default function ProjectPage() {
           >
             Issues
           </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "team"}
+            onClick={() => setActiveTab("team")}
+            className={`pb-2 text-sm font-medium border-b-2 ${
+              activeTab === "team"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            }`}
+          >
+            Team
+          </button>
         </nav>
       </div>
 
@@ -235,6 +264,40 @@ export default function ProjectPage() {
             onFilterChange={handleFilterChange}
             onCreateIssue={handleCreateIssue}
           />
+        )}
+
+        {activeTab === "team" && (
+          <div>
+            <h2 className="text-lg font-semibold mb-3">Team</h2>
+            {team.length === 0 ? (
+              <p className="text-gray-500 dark:text-gray-400 text-sm">No team members.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {team.map((agent) => (
+                  <div
+                    key={agent.id}
+                    data-testid="team-member-card"
+                    className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
+                  >
+                    <img
+                      src={agent.avatar_url}
+                      alt={agent.name}
+                      className="w-8 h-8 rounded-full"
+                      data-testid="team-member-avatar"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                        {agent.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {agent.role.toUpperCase()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

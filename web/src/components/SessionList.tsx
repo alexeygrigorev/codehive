@@ -79,9 +79,21 @@ export default function SessionList({ sessions }: SessionListProps) {
               className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-900 dark:text-gray-100">
-                  {session.name}
-                </span>
+                <div className="flex items-center gap-2">
+                  {session.agent_avatar_url && (
+                    <img
+                      src={session.agent_avatar_url}
+                      alt={session.agent_name ?? session.name}
+                      className="w-8 h-8 rounded-full"
+                      data-testid="session-agent-avatar"
+                    />
+                  )}
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {session.agent_name
+                      ? `${session.agent_name} - ${session.name}`
+                      : session.name}
+                  </span>
+                </div>
                 <RoleBadge role={session.role} />
                 <div className="flex items-center gap-2">
                   {subCount > 0 && (

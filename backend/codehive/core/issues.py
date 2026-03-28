@@ -209,6 +209,7 @@ async def create_issue_log_entry(
     issue_id: uuid.UUID,
     agent_role: str,
     content: str,
+    agent_profile_id: uuid.UUID | None = None,
 ) -> IssueLogEntry:
     """Create a log entry for an issue. Raises IssueNotFoundError if issue doesn't exist."""
     issue = await db.get(Issue, issue_id)
@@ -218,6 +219,7 @@ async def create_issue_log_entry(
     entry = IssueLogEntry(
         issue_id=issue_id,
         agent_role=agent_role,
+        agent_profile_id=agent_profile_id,
         content=content,
         created_at=_now(),
     )

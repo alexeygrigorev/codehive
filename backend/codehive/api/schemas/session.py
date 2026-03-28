@@ -123,6 +123,9 @@ class SessionRead(BaseModel):
     status: str
     config: dict
     created_at: datetime
+    agent_profile_id: uuid.UUID | None = None
+    agent_name: str | None = None
+    agent_avatar_url: str | None = None
 
 
 class SubAgentReportStatus(str, Enum):

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
+from codehive.core.team import avatar_url_for_seed
 from codehive.core.usage import persist_usage_event
 from codehive.api.schemas.diff import DiffFileEntry, SessionDiffsResponse
 from codehive.api.schemas.session import (
@@ -47,6 +48,17 @@ project_sessions_router = APIRouter(prefix="/api/projects/{project_id}/sessions"
 
 # Flat routes (get, update, delete, pause, resume)
 sessions_router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+
+
+async def _enrich_session(db: AsyncSession, session: Any) -> SessionRead:
+    """Convert a Session ORM object to SessionRead with agent profile info resolved."""
+    if session.agent_profile_id is not None:
+        await db.refresh(session, attribute_names=["agent_profile"])
+    data = SessionRead.model_validate(session)
+    if session.agent_profile_id is not None and session.agent_profile is not None:
+        data.agent_name = session.agent_profile.name
+        data.agent_avatar_url = avatar_url_for_seed(session.agent_profile.avatar_seed)
+    return data
 
 
 async def _get_session_or_404(
@@ -92,7 +104,7 @@ async def create_session_endpoint(
         raise HTTPException(status_code=404, detail="Parent session not found")
     except TaskNotFoundError:
         raise HTTPException(status_code=404, detail="Task not found")
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @project_sessions_router.get("", response_model=list[SessionRead])
@@ -104,7 +116,7 @@ async def list_sessions_endpoint(
         sessions = await list_sessions(db, project_id)
     except ProjectNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    return [SessionRead.model_validate(s) for s in sessions]
+    return [await _enrich_session(db, s) for s in sessions]
 
 
 @sessions_router.get("", response_model=list[SessionRead])
@@ -114,7 +126,7 @@ async def list_sessions_by_task_endpoint(
 ) -> list[SessionRead]:
     """Return all sessions bound to a given task_id."""
     sessions = await list_sessions_by_task(db, task_id)
-    return [SessionRead.model_validate(s) for s in sessions]
+    return [await _enrich_session(db, s) for s in sessions]
 
 
 @sessions_router.get("/{session_id}", response_model=SessionRead)
@@ -123,7 +135,7 @@ async def get_session_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> SessionRead:
     session = await _get_session_or_404(db, session_id)
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @sessions_router.patch("/{session_id}", response_model=SessionRead)
@@ -138,7 +150,7 @@ async def update_session_endpoint(
         session = await update_session(db, session_id, **fields)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @sessions_router.delete("/{session_id}", status_code=204)
@@ -170,7 +182,7 @@ async def pause_session_endpoint(
         raise HTTPException(status_code=404, detail="Session not found")
     except InvalidStatusTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @sessions_router.post("/{session_id}/resume", response_model=SessionRead)
@@ -185,7 +197,7 @@ async def resume_session_endpoint(
         raise HTTPException(status_code=404, detail="Session not found")
     except InvalidStatusTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @sessions_router.post("/{session_id}/resume-interrupted", response_model=SessionRead)
@@ -203,7 +215,7 @@ async def resume_interrupted_endpoint(
         raise HTTPException(status_code=409, detail=str(exc))
     except NoUserMessageError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @sessions_router.post("/{session_id}/switch-mode", response_model=SessionRead)
@@ -218,7 +230,7 @@ async def switch_mode_endpoint(
         session = await update_session(db, session_id, mode=body.mode)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
-    return SessionRead.model_validate(session)
+    return await _enrich_session(db, session)
 
 
 @sessions_router.get("/{session_id}/subagents", response_model=list[SessionRead])
@@ -232,7 +244,7 @@ async def list_subagents_endpoint(
         children = await list_child_sessions(db, session_id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
-    return [SessionRead.model_validate(c) for c in children]
+    return [await _enrich_session(db, c) for c in children]
 
 
 def _count_additions_deletions(diff_text: str) -> tuple[int, int]:
