@@ -22,6 +22,41 @@ import BriefReview from "@/components/project-flow/BriefReview";
 
 type Step = "select" | "chat" | "review";
 
+/**
+ * Cross-platform path helpers.
+ * Supports Unix paths (/home/...), Windows drive paths (C:\...),
+ * and UNC paths (\\server\share or //server/share).
+ */
+
+/** Returns true if the path is an absolute path (Unix, Windows drive, or UNC). */
+export function isAbsolutePath(p: string): boolean {
+  if (!p) return false;
+  // Unix absolute
+  if (p.startsWith("/")) return true;
+  // Windows drive letter: e.g. C:\ or C:/
+  if (/^[A-Za-z]:[/\\]/.test(p)) return true;
+  // UNC path: \\server or //server
+  if (p.startsWith("\\\\") || p.startsWith("//")) return true;
+  return false;
+}
+
+/** Returns the last non-empty segment of a path (the basename), splitting on both / and \. */
+export function pathBasename(p: string): string {
+  // Strip trailing separators
+  const trimmed = p.replace(/[/\\]+$/, "");
+  // Split on either separator
+  const parts = trimmed.split(/[/\\]/);
+  return parts[parts.length - 1] || "";
+}
+
+/** Joins a base directory and a name using the separator style found in base. */
+export function pathJoin(base: string, name: string): string {
+  // Detect separator: if base contains backslash, use backslash; otherwise forward slash
+  const sep = base.includes("\\") ? "\\" : "/";
+  const trimmedBase = base.replace(/[/\\]+$/, "");
+  return trimmedBase ? `${trimmedBase}${sep}${name}` : name;
+}
+
 const FLOW_TYPES = [
   {
     type: "brainstorm",
@@ -127,9 +162,7 @@ export default function NewProjectPage() {
   // Auto-derive project name from path
   useEffect(() => {
     if (!userEditedName && directoryPath.trim()) {
-      const parts = directoryPath.replace(/\/+$/, "").split("/");
-      const basename = parts[parts.length - 1] || "";
-      setProjectName(basename);
+      setProjectName(pathBasename(directoryPath));
     }
   }, [directoryPath, userEditedName]);
 
@@ -140,7 +173,7 @@ export default function NewProjectPage() {
     }
     debounceRef.current = setTimeout(async () => {
       const trimmed = path.trim();
-      if (!trimmed || !trimmed.startsWith("/")) {
+      if (!trimmed || !isAbsolutePath(trimmed)) {
         setBrowseEntries([]);
         setBrowseParent(null);
         setBrowseError(null);
@@ -256,8 +289,7 @@ export default function NewProjectPage() {
   function handleSelectRepo(repo: RepoItem) {
     setSelectedRepo(repo);
     setCloneProjectName(repo.name);
-    const base = defaultDir.replace(/\/+$/, "");
-    setCloneDest(base ? `${base}/${repo.name}` : repo.name);
+    setCloneDest(pathJoin(defaultDir, repo.name));
     setCloneError(null);
   }
 
@@ -313,17 +345,13 @@ export default function NewProjectPage() {
       setPathError("Directory path is required");
       return;
     }
-    if (!trimmedPath.startsWith("/")) {
-      setPathError("Path must be absolute (start with /)");
+    if (!isAbsolutePath(trimmedPath)) {
+      setPathError(
+        "Path must be absolute (e.g. /home/user/... or C:\\Users\\...)",
+      );
       return;
     }
-    const name =
-      projectName.trim() ||
-      trimmedPath
-        .replace(/\/+$/, "")
-        .split("/")
-        .pop() ||
-      "project";
+    const name = projectName.trim() || pathBasename(trimmedPath) || "project";
 
     setLoading(true);
     setError(null);
@@ -439,7 +467,7 @@ export default function NewProjectPage() {
               id="dir-path"
               type="text"
               className="w-full border dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              placeholder="/home/user/projects/myapp"
+              placeholder="/home/user/projects/myapp or C:\Users\..."
               value={directoryPath}
               onChange={(e) => {
                 setDirectoryPath(e.target.value);

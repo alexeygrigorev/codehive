@@ -175,7 +175,9 @@ describe("NewProjectPage", () => {
       await user.click(screen.getByText("Create Project"));
 
       expect(
-        screen.getByText("Path must be absolute (start with /)"),
+        screen.getByText(
+          "Path must be absolute (e.g. /home/user/... or C:\\Users\\...)",
+        ),
       ).toBeInTheDocument();
     });
 
@@ -262,6 +264,79 @@ describe("NewProjectPage", () => {
           screen.getByText("Failed to create project: 500"),
         ).toBeInTheDocument();
       });
+    });
+
+    it("entering a Windows path auto-derives the project name from basename", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
+      await user.type(pathInput, "C:\\Users\\alexey\\git\\myapp");
+
+      const nameInput = screen.getByLabelText(
+        /Project Name/,
+      ) as HTMLInputElement;
+      expect(nameInput.value).toBe("myapp");
+    });
+
+    it("submitting with a Windows absolute path does NOT show path error", async () => {
+      const user = userEvent.setup();
+      mockCreateProject.mockResolvedValue({
+        id: "p1",
+        name: "myapp",
+        path: "C:\\Users\\alexey\\git\\myapp",
+        description: null,
+        archetype: null,
+        knowledge: null,
+        created_at: "2026-03-18T00:00:00Z",
+      });
+
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
+      await user.type(pathInput, "C:\\Users\\alexey\\git\\myapp");
+      await user.click(screen.getByText("Create Project"));
+
+      await waitFor(() => {
+        expect(mockCreateProject).toHaveBeenCalledWith({
+          name: "myapp",
+          path: "C:\\Users\\alexey\\git\\myapp",
+          git_init: true,
+        });
+      });
+    });
+
+    it("entering a UNC path auto-derives the project name", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
+      await user.type(pathInput, "\\\\fileserver\\shared\\webapp");
+
+      const nameInput = screen.getByLabelText(
+        /Project Name/,
+      ) as HTMLInputElement;
+      expect(nameInput.value).toBe("webapp");
+    });
+
+    it("entering a Windows path with trailing backslash derives correct name", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(screen.getByText("Empty Project"));
+      const pathInput = screen.getByLabelText(/Directory Path/);
+      await user.clear(pathInput);
+      await user.type(pathInput, "C:\\Users\\alexey\\git\\myapp\\");
+
+      const nameInput = screen.getByLabelText(
+        /Project Name/,
+      ) as HTMLInputElement;
+      expect(nameInput.value).toBe("myapp");
     });
   });
 
@@ -675,6 +750,42 @@ describe("NewProjectPage", () => {
 
       await user.click(screen.getByTestId("browse-toggle"));
       expect(screen.getByTestId("browse-panel")).toBeInTheDocument();
+    });
+
+    it("directory browser fetches directories when path is a Windows absolute path", async () => {
+      mockFetchDefaultDirectory.mockResolvedValue({
+        default_directory: "C:\\Users\\alexey\\codehive-projects\\",
+      });
+      mockFetchDirectories.mockResolvedValue({
+        path: "C:\\Users\\alexey\\codehive-projects",
+        parent: "C:\\Users\\alexey",
+        directories: [
+          {
+            name: "myproj",
+            path: "C:\\Users\\alexey\\codehive-projects\\myproj",
+            has_git: false,
+          },
+        ],
+      });
+
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByText("Empty Project"));
+
+      // Wait for the Windows default directory to be pre-filled
+      await waitFor(() => {
+        const pathInput = screen.getByLabelText(
+          /Directory Path/,
+        ) as HTMLInputElement;
+        expect(pathInput.value).toBe("C:\\Users\\alexey\\codehive-projects\\");
+      });
+
+      // The browse panel should have loaded directories (not blocked by startsWith("/") guard)
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("browse-entry-myproj"),
+        ).toBeInTheDocument();
+      });
     });
   });
 });

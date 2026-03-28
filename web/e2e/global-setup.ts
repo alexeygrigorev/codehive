@@ -10,8 +10,19 @@ export default function globalSetup(): void {
   for (const suffix of ["", "-wal", "-shm"]) {
     const p = TEST_DB_PATH + suffix;
     if (fs.existsSync(p)) {
-      fs.unlinkSync(p);
-      console.log(`[global-setup] Deleted ${p}`);
+      try {
+        fs.unlinkSync(p);
+        console.log(`[global-setup] Deleted ${p}`);
+      } catch (err: unknown) {
+        // On Windows the webServer may already hold the DB open (EBUSY).
+        // This is harmless -- the server was just started with a fresh DB.
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EBUSY" || code === "EPERM") {
+          console.log(`[global-setup] Skipped locked file ${p} (${code})`);
+        } else {
+          throw err;
+        }
+      }
     }
   }
 
