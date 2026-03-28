@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { fetchProjects, type ProjectRead } from "@/api/projects";
+import {
+  fetchProjects,
+  fetchArchivedProjects,
+  type ProjectRead,
+} from "@/api/projects";
 
 const SIDEBAR_COLLAPSED_KEY = "codehive-sidebar-collapsed";
 
@@ -69,6 +73,7 @@ export default function Sidebar() {
     }
   });
   const [projects, setProjects] = useState<ProjectRead[]>([]);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<TimeGroup>>(
     new Set(),
@@ -78,8 +83,14 @@ export default function Sidebar() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await fetchProjects();
-        if (!cancelled) setProjects(data);
+        const [data, archived] = await Promise.all([
+          fetchProjects(),
+          fetchArchivedProjects(),
+        ]);
+        if (!cancelled) {
+          setProjects(data);
+          setArchivedCount(archived.length);
+        }
       } catch {
         // Silently fail -- sidebar is supplementary navigation
       }
@@ -327,6 +338,18 @@ export default function Sidebar() {
               {project.name.charAt(0).toUpperCase()}
             </NavLink>
           ))}
+
+        {!collapsed && archivedCount > 0 && (
+          <div className="px-4 py-2 border-t border-gray-700">
+            <NavLink
+              to="/projects/archived"
+              className="text-sm text-gray-400 hover:text-white"
+              data-testid="sidebar-archived-link"
+            >
+              Archived ({archivedCount})
+            </NavLink>
+          </div>
+        )}
       </div>
     </aside>
   );

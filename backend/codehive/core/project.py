@@ -5,7 +5,7 @@ import subprocess
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.core.archetypes import (
@@ -24,7 +24,10 @@ class ProjectNotFoundError(Exception):
 
 
 class ProjectHasDependentsError(Exception):
-    """Raised when a project cannot be deleted because it has associated sessions or issues."""
+    """Raised when a project cannot be deleted because it has associated sessions or issues.
+
+    .. deprecated:: Kept for backward compatibility but no longer raised by delete_project.
+    """
 
 
 async def create_project(
@@ -98,21 +101,55 @@ async def update_project(
 
 
 async def delete_project(session: AsyncSession, project_id: uuid.UUID) -> None:
-    """Delete a project. Raises ProjectNotFoundError if not found.
+    """Delete a project and all related data via DB-level cascade.
 
-    Raises ProjectHasDependentsError if the project has associated sessions or issues.
+    Raises ProjectNotFoundError if not found.
+    Uses a raw DELETE statement to avoid ORM lazy-loading issues with
+    deep relationship cascades; the DB-level ON DELETE CASCADE handles cleanup.
     """
     project = await session.get(Project, project_id)
     if project is None:
         raise ProjectNotFoundError(f"Project {project_id} not found")
 
-    # Check for dependent sessions/issues (lazy-load them)
-    await session.refresh(project, attribute_names=["sessions", "issues"])
-    if project.sessions or project.issues:
-        raise ProjectHasDependentsError(f"Project {project_id} has associated sessions or issues")
-
-    await session.delete(project)
+    # Use raw DELETE so DB-level ON DELETE CASCADE handles all children
+    # without requiring ORM to eager-load entire relationship trees.
+    await session.execute(delete(Project).where(Project.id == project_id))
+    # Expunge the stale ORM object from the identity map
+    session.expunge(project)
     await session.commit()
+
+
+async def archive_project(session: AsyncSession, project_id: uuid.UUID) -> Project:
+    """Set archived_at on a project. Raises ProjectNotFoundError if not found."""
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise ProjectNotFoundError(f"Project {project_id} not found")
+
+    if project.archived_at is None:
+        project.archived_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+async def unarchive_project(session: AsyncSession, project_id: uuid.UUID) -> Project:
+    """Clear archived_at on a project. Raises ProjectNotFoundError if not found."""
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise ProjectNotFoundError(f"Project {project_id} not found")
+
+    project.archived_at = None
+
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+async def list_archived_projects(session: AsyncSession) -> list[Project]:
+    """Return only archived projects."""
+    result = await session.execute(select(Project).where(Project.archived_at.isnot(None)))
+    return list(result.scalars().all())
 
 
 def ensure_directory_with_git(path: str, *, git_init: bool = False) -> None:

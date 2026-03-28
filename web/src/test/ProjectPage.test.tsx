@@ -14,12 +14,14 @@ vi.mock("react-router-dom", async () => {
 
 vi.mock("@/api/projects", () => ({
   fetchProject: vi.fn(),
+  archiveProject: vi.fn(),
 }));
 
 vi.mock("@/api/sessions", () => ({
   fetchSessions: vi.fn(),
   createSession: vi.fn(),
   updateSession: vi.fn(),
+  deleteSession: vi.fn(),
 }));
 
 vi.mock("@/api/issues", () => ({
@@ -56,6 +58,7 @@ const project = {
   archetype: "web-app",
   knowledge: null,
   created_at: "2026-01-01T00:00:00Z",
+  archived_at: null,
 };
 
 const sessions = [

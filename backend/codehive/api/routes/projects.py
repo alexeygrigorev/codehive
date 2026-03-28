@@ -11,14 +11,16 @@ from codehive.api.deps import get_db
 from codehive.api.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 from codehive.core.project import (
     InvalidArchetypeError,
-    ProjectHasDependentsError,
     ProjectNotFoundError,
+    archive_project,
     create_project,
     delete_project,
     ensure_directory_with_git,
     get_or_create_project_by_path,
     get_project,
     get_project_by_path,
+    list_archived_projects,
+    unarchive_project,
     update_project,
 )
 from codehive.db.models import Project
@@ -80,10 +82,23 @@ async def create_project_by_path_endpoint(
 
 @router.get("", response_model=list[ProjectRead])
 async def list_projects_endpoint(
+    include_archived: bool = Query(False, description="Include archived projects"),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProjectRead]:
-    result = await db.execute(select(Project))
+    if include_archived:
+        result = await db.execute(select(Project))
+    else:
+        result = await db.execute(select(Project).where(Project.archived_at.is_(None)))
     projects = list(result.scalars().all())
+    return [ProjectRead.model_validate(p) for p in projects]
+
+
+@router.get("/archived", response_model=list[ProjectRead])
+async def list_archived_projects_endpoint(
+    db: AsyncSession = Depends(get_db),
+) -> list[ProjectRead]:
+    """Return only archived projects."""
+    projects = await list_archived_projects(db)
     return [ProjectRead.model_validate(p) for p in projects]
 
 
@@ -121,8 +136,27 @@ async def delete_project_endpoint(
         await delete_project(db, project_id)
     except ProjectNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    except ProjectHasDependentsError:
-        raise HTTPException(
-            status_code=409,
-            detail="Project has associated sessions or issues",
-        )
+
+
+@router.post("/{project_id}/archive", response_model=ProjectRead)
+async def archive_project_endpoint(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ProjectRead:
+    try:
+        project = await archive_project(db, project_id)
+    except ProjectNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ProjectRead.model_validate(project)
+
+
+@router.post("/{project_id}/unarchive", response_model=ProjectRead)
+async def unarchive_project_endpoint(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ProjectRead:
+    try:
+        project = await unarchive_project(db, project_id)
+    except ProjectNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ProjectRead.model_validate(project)

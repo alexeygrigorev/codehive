@@ -83,11 +83,16 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
+    archived_at: Mapped[datetime | None] = mapped_column(nullable=True, default=None)
 
-    issues: Mapped[list["Issue"]] = relationship(back_populates="project")
-    sessions: Mapped[list["Session"]] = relationship(back_populates="project")
+    issues: Mapped[list["Issue"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
+    )
+    sessions: Mapped[list["Session"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
+    )
     team: Mapped[list["AgentProfile"]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -119,7 +124,7 @@ class Issue(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("projects.id"), nullable=False
+        PortableUUID, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     title: Mapped[str] = mapped_column(Unicode(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -141,7 +146,10 @@ class Issue(Base):
     project: Mapped["Project"] = relationship(back_populates="issues")
     sessions: Mapped[list["Session"]] = relationship(back_populates="issue")
     logs: Mapped[list["IssueLogEntry"]] = relationship(
-        back_populates="issue", order_by="IssueLogEntry.created_at.asc()"
+        back_populates="issue",
+        order_by="IssueLogEntry.created_at.asc()",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -150,7 +158,7 @@ class IssueLogEntry(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     issue_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("issues.id"), nullable=False
+        PortableUUID, ForeignKey("issues.id", ondelete="CASCADE"), nullable=False
     )
     agent_role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
     agent_profile_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -172,10 +180,10 @@ class Session(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("projects.id"), nullable=False
+        PortableUUID, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     issue_id: Mapped[uuid.UUID | None] = mapped_column(
-        PortableUUID, ForeignKey("issues.id"), nullable=True
+        PortableUUID, ForeignKey("issues.id", ondelete="SET NULL"), nullable=True
     )
     parent_session_id: Mapped[uuid.UUID | None] = mapped_column(
         PortableUUID, ForeignKey("sessions.id"), nullable=True
@@ -209,13 +217,26 @@ class Session(Base):
         foreign_keys="Session.task_id", back_populates="agent_sessions"
     )
     tasks: Mapped[list["Task"]] = relationship(
-        foreign_keys="Task.session_id", back_populates="session"
+        foreign_keys="Task.session_id",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
-    messages: Mapped[list["Message"]] = relationship(back_populates="session")
-    events: Mapped[list["Event"]] = relationship(back_populates="session")
-    checkpoints: Mapped[list["Checkpoint"]] = relationship(back_populates="session")
-    pending_questions: Mapped[list["PendingQuestion"]] = relationship(back_populates="session")
-    usage_records: Mapped[list["UsageRecord"]] = relationship(back_populates="session")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
+    )
+    events: Mapped[list["Event"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
+    )
+    checkpoints: Mapped[list["Checkpoint"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
+    )
+    pending_questions: Mapped[list["PendingQuestion"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
+    )
+    usage_records: Mapped[list["UsageRecord"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Task(Base):
@@ -223,7 +244,7 @@ class Task(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("sessions.id"), nullable=False
+        PortableUUID, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     title: Mapped[str] = mapped_column(Unicode(500), nullable=False)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -247,14 +268,18 @@ class Task(Base):
     agent_sessions: Mapped[list["Session"]] = relationship(
         foreign_keys="Session.task_id", back_populates="bound_task"
     )
-    pipeline_logs: Mapped[list["TaskPipelineLog"]] = relationship(back_populates="task")
+    pipeline_logs: Mapped[list["TaskPipelineLog"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class TaskPipelineLog(Base):
     __tablename__ = "task_pipeline_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
-    task_id: Mapped[uuid.UUID] = mapped_column(PortableUUID, ForeignKey("tasks.id"), nullable=False)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        PortableUUID, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
     from_status: Mapped[str] = mapped_column(Unicode(50), nullable=False)
     to_status: Mapped[str] = mapped_column(Unicode(50), nullable=False)
     actor: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
@@ -270,7 +295,7 @@ class Message(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("sessions.id"), nullable=False
+        PortableUUID, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -289,7 +314,7 @@ class Event(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("sessions.id"), nullable=False
+        PortableUUID, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     type: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     data: Mapped[dict] = mapped_column(PortableJSON, nullable=False, server_default=text("'{}'"))
@@ -305,7 +330,7 @@ class Checkpoint(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("sessions.id"), nullable=False
+        PortableUUID, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     git_ref: Mapped[str] = mapped_column(Unicode(255), nullable=False)
     state: Mapped[dict] = mapped_column(PortableJSON, nullable=False, server_default=text("'{}'"))
@@ -321,7 +346,7 @@ class PendingQuestion(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("sessions.id"), nullable=False
+        PortableUUID, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     context: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -396,7 +421,7 @@ class UsageRecord(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        PortableUUID, ForeignKey("sessions.id"), nullable=False
+        PortableUUID, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     model: Mapped[str] = mapped_column(Unicode(255), nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))

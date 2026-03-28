@@ -5,11 +5,13 @@ import Sidebar from "@/components/Sidebar";
 
 vi.mock("@/api/projects", () => ({
   fetchProjects: vi.fn(),
+  fetchArchivedProjects: vi.fn(),
 }));
 
-import { fetchProjects } from "@/api/projects";
+import { fetchProjects, fetchArchivedProjects } from "@/api/projects";
 
 const mockFetchProjects = vi.mocked(fetchProjects);
+const mockFetchArchivedProjects = vi.mocked(fetchArchivedProjects);
 
 const now = new Date();
 const todayISO = now.toISOString();
@@ -35,6 +37,7 @@ const projects = [
     archetype: null,
     knowledge: null,
     created_at: todayISO,
+    archived_at: null,
   },
   {
     id: "p2",
@@ -44,6 +47,7 @@ const projects = [
     archetype: null,
     knowledge: null,
     created_at: yesterdayISO,
+    archived_at: null,
   },
   {
     id: "p3",
@@ -53,6 +57,7 @@ const projects = [
     archetype: null,
     knowledge: null,
     created_at: lastWeekISO,
+    archived_at: null,
   },
   {
     id: "p4",
@@ -62,6 +67,7 @@ const projects = [
     archetype: null,
     knowledge: null,
     created_at: lastMonthISO,
+    archived_at: null,
   },
   {
     id: "p5",
@@ -71,6 +77,7 @@ const projects = [
     archetype: null,
     knowledge: null,
     created_at: olderISO,
+    archived_at: null,
   },
 ];
 
@@ -87,6 +94,7 @@ describe("Sidebar", () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockFetchProjects.mockResolvedValue(projects);
+    mockFetchArchivedProjects.mockResolvedValue([]);
   });
 
   it("renders flat list of projects fetched from API", async () => {

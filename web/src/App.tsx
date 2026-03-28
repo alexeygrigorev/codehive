@@ -8,6 +8,7 @@ import QuestionsPage from "@/pages/QuestionsPage";
 import ReplayPage from "@/pages/ReplayPage";
 import RolesPage from "@/pages/RolesPage";
 import SearchPage from "@/pages/SearchPage";
+import ArchivedProjectsPage from "@/pages/ArchivedProjectsPage";
 import NewProjectPage from "@/pages/NewProjectPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import UsagePage from "@/pages/UsagePage";
@@ -25,6 +26,7 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/projects/new" element={<NewProjectPage />} />
+        <Route path="/projects/archived" element={<ArchivedProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectPage />} />
         <Route path="/sessions/:sessionId" element={<SessionPage />} />
         <Route

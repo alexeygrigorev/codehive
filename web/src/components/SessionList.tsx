@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { SessionRead } from "@/api/sessions";
+import { deleteSession } from "@/api/sessions";
 import { fetchSubAgents } from "@/api/subagents";
 import RoleBadge from "@/components/RoleBadge";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export interface SessionListProps {
   sessions: SessionRead[];
+  onSessionDeleted?: (sessionId: string) => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -33,10 +36,15 @@ function formatRelativeTime(dateStr: string): string {
   return `${diffDay}d ago`;
 }
 
-export default function SessionList({ sessions }: SessionListProps) {
+export default function SessionList({
+  sessions,
+  onSessionDeleted,
+}: SessionListProps) {
   const [subAgentCounts, setSubAgentCounts] = useState<Record<string, number>>(
     {},
   );
+  const [deleteTarget, setDeleteTarget] = useState<SessionRead | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +68,21 @@ export default function SessionList({ sessions }: SessionListProps) {
     };
   }, [sessions]);
 
+  async function handleDeleteSession() {
+    if (!deleteTarget) return;
+    try {
+      await deleteSession(deleteTarget.id);
+      setDeleteTarget(null);
+      setDeleteError(null);
+      onSessionDeleted?.(deleteTarget.id);
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete session",
+      );
+      setDeleteTarget(null);
+    }
+  }
+
   if (sessions.length === 0) {
     return (
       <p className="text-gray-500 dark:text-gray-400 text-sm">No sessions for this project.</p>
@@ -67,58 +90,90 @@ export default function SessionList({ sessions }: SessionListProps) {
   }
 
   return (
-    <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-      {sessions.map((session) => {
-        const colorClass =
-          statusColors[session.status] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
-        const subCount = subAgentCounts[session.id] ?? 0;
-        return (
-          <li key={session.id}>
-            <Link
-              to={`/sessions/${session.id}`}
-              className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {session.agent_avatar_url && (
-                    <img
-                      src={session.agent_avatar_url}
-                      alt={session.agent_name ?? session.name}
-                      className="w-8 h-8 rounded-full"
-                      data-testid="session-agent-avatar"
-                    />
-                  )}
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
-                    {session.agent_name
-                      ? `${session.agent_name} - ${session.name}`
-                      : session.name}
-                  </span>
-                </div>
-                <RoleBadge role={session.role} />
-                <div className="flex items-center gap-2">
-                  {subCount > 0 && (
-                    <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
-                      {subCount} sub-agent{subCount !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}
-                  >
-                    {session.status}
-                  </span>
-                </div>
+    <>
+      {deleteError && (
+        <p className="text-red-600 dark:text-red-400 text-sm mb-2">
+          {deleteError}
+        </p>
+      )}
+      <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+        {sessions.map((session) => {
+          const colorClass =
+            statusColors[session.status] ?? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
+          const subCount = subAgentCounts[session.id] ?? 0;
+          return (
+            <li key={session.id}>
+              <div className="flex items-center">
+                <Link
+                  to={`/sessions/${session.id}`}
+                  className="flex-1 block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {session.agent_avatar_url && (
+                        <img
+                          src={session.agent_avatar_url}
+                          alt={session.agent_name ?? session.name}
+                          className="w-8 h-8 rounded-full"
+                          data-testid="session-agent-avatar"
+                        />
+                      )}
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {session.agent_name
+                          ? `${session.agent_name} - ${session.name}`
+                          : session.name}
+                      </span>
+                    </div>
+                    <RoleBadge role={session.role} />
+                    <div className="flex items-center gap-2">
+                      {subCount > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+                          {subCount} sub-agent{subCount !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}
+                      >
+                        {session.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Mode: {session.mode}</span>
+                    <span className="mx-2">|</span>
+                    <span>Engine: {session.engine}</span>
+                    <span className="mx-2">|</span>
+                    <span>{formatRelativeTime(session.created_at)}</span>
+                  </div>
+                </Link>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(session);
+                  }}
+                  className="px-3 py-2 mr-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                  title="Delete session"
+                  data-testid="delete-session-btn"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                <span>Mode: {session.mode}</span>
-                <span className="mx-2">|</span>
-                <span>Engine: {session.engine}</span>
-                <span className="mx-2">|</span>
-                <span>{formatRelativeTime(session.created_at)}</span>
-              </div>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+            </li>
+          );
+        })}
+      </ul>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete session"
+        message={`Delete session '${deleteTarget?.name}'? This will permanently remove the session and all its messages. This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleDeleteSession}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   );
 }

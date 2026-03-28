@@ -37,3 +37,4 @@ class ProjectRead(BaseModel):
     archetype: str | None
     knowledge: dict
     created_at: datetime
+    archived_at: datetime | None = None

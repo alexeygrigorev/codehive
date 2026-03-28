@@ -63,3 +63,17 @@ export async function fetchSessions(
   }
   return response.json() as Promise<SessionRead[]>;
 }
+
+export async function deleteSession(
+  sessionId: string,
+): Promise<void> {
+  const response = await apiClient.delete(`/api/sessions/${sessionId}`);
+  if (!response.ok) {
+    if (response.status === 409) {
+      throw new Error(
+        "Cannot delete this session because it has sub-agent sessions. Delete those first.",
+      );
+    }
+    throw new Error(`Failed to delete session: ${response.status}`);
+  }
+}

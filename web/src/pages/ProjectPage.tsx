@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { fetchProject, type ProjectRead } from "@/api/projects";
+import {
+  fetchProject,
+  archiveProject,
+  type ProjectRead,
+} from "@/api/projects";
 import { createSession, fetchSessions, type SessionRead } from "@/api/sessions";
 import {
   fetchIssues,
@@ -13,6 +17,7 @@ import SessionList from "@/components/SessionList";
 import IssueList from "@/components/IssueList";
 import Breadcrumb from "@/components/Breadcrumb";
 import NewSessionDialog from "@/components/NewSessionDialog";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 type Tab = "sessions" | "issues" | "team";
 
@@ -27,6 +32,7 @@ export default function ProjectPage() {
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
   const [creatingSession, setCreatingSession] = useState(false);
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
 
   const [team, setTeam] = useState<AgentProfileRead[]>([]);
   const [teamLoaded, setTeamLoaded] = useState(false);
@@ -151,6 +157,20 @@ export default function ProjectPage() {
     }
   }
 
+  async function handleArchive() {
+    if (!projectId) return;
+    try {
+      await archiveProject(projectId);
+      setShowArchiveDialog(false);
+      navigate("/");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to archive project",
+      );
+      setShowArchiveDialog(false);
+    }
+  }
+
   async function handleCreateIssue(title: string, description?: string) {
     if (!projectId) return;
     const issue = await createIssue(projectId, { title, description });
@@ -199,6 +219,13 @@ export default function ProjectPage() {
               {project.archetype}
             </span>
           )}
+          <button
+            onClick={() => setShowArchiveDialog(true)}
+            className="ml-auto px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+            data-testid="archive-project-btn"
+          >
+            Archive
+          </button>
         </div>
         {project.description && (
           <p className="mt-1 text-gray-600 dark:text-gray-400">{project.description}</p>
@@ -265,7 +292,12 @@ export default function ProjectPage() {
               </button>
             </div>
 
-            <SessionList sessions={sessions} />
+            <SessionList
+              sessions={sessions}
+              onSessionDeleted={(id) =>
+                setSessions((prev) => prev.filter((s) => s.id !== id))
+              }
+            />
             <NewSessionDialog
               open={showNewSessionDialog}
               onClose={() => setShowNewSessionDialog(false)}
@@ -318,6 +350,15 @@ export default function ProjectPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={showArchiveDialog}
+        title="Archive project"
+        message={`Archive '${project.name}'? It will be hidden from the sidebar and dashboard. You can restore it later.`}
+        confirmLabel="Archive"
+        onConfirm={handleArchive}
+        onCancel={() => setShowArchiveDialog(false)}
+      />
     </div>
   );
 }
