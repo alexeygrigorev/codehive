@@ -43,6 +43,7 @@ from codehive.api.routes.transcript import transcript_router
 from codehive.api.routes.async_dispatch import async_dispatch_router
 from codehive.api.routes.providers import providers_router
 from codehive.api.routes.usage import session_usage_router, usage_router
+from codehive.api.routes.orchestrator import orchestrator_router
 from codehive.api.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,14 @@ def create_app() -> FastAPI:
             credentials = await seed_first_run(db)
             if credentials is not None:
                 print_credentials(credentials)
+
+        # Seed built-in pipeline roles (pm, swe, qa, oncall) into custom_roles table
+        from codehive.core.roles import seed_builtin_roles
+
+        async with session_maker() as db:
+            seeded = await seed_builtin_roles(db)
+            if seeded:
+                logger.info("Seeded %d built-in pipeline role(s)", seeded)
 
         # Startup recovery: mark any sessions stuck in 'executing' as 'interrupted'
         async with session_maker() as db:
@@ -158,5 +167,6 @@ def create_app() -> FastAPI:
     app.include_router(providers_router, dependencies=_auth)
     app.include_router(usage_router, dependencies=_auth)
     app.include_router(session_usage_router, dependencies=_auth)
+    app.include_router(orchestrator_router, dependencies=_auth)
 
     return app

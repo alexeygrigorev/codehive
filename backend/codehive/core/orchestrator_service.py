@@ -1,0 +1,526 @@
+"""Deterministic pipeline executor -- no LLM in the control loop.
+
+Polls the DB for tasks in actionable pipeline states, spawns the correct
+agent session for each step, waits for completion, parses the verdict,
+and transitions to the next pipeline step.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import enum
+import logging
+import re
+import uuid
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from codehive.core.issues import create_issue_log_entry
+from codehive.core.session import create_session as create_db_session
+from codehive.core.task_queue import list_tasks, pipeline_transition
+from codehive.db.models import Issue, Task
+from codehive.db.models import Session as SessionModel
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "batch_size": 2,
+    "poll_interval_seconds": 10,
+    "max_rejections_per_step": 3,
+    "engine": "claude_code",
+    "session_timeout_seconds": 600,
+}
+
+
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
+
+
+class Verdict(str, enum.Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    ACCEPT = "ACCEPT"
+    REJECT = "REJECT"
+    NONE = "NONE"
+
+
+@dataclass
+class StepResult:
+    verdict: Verdict
+    output: str = ""
+    session_id: uuid.UUID | None = None
+
+
+@dataclass
+class OrchestratorState:
+    """In-memory state for a running orchestrator."""
+
+    running: bool = False
+    project_id: uuid.UUID | None = None
+    current_batch: list[uuid.UUID] = field(default_factory=list)
+    active_sessions: list[uuid.UUID] = field(default_factory=list)
+    rejection_counts: dict[uuid.UUID, int] = field(default_factory=dict)
+    flagged_tasks: set[uuid.UUID] = field(default_factory=set)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline step -> agent role mapping
+# ---------------------------------------------------------------------------
+
+STEP_ROLE_MAP: dict[str, dict[str, str]] = {
+    "grooming": {"role": "pm", "mode": "planning"},
+    "implementing": {"role": "swe", "mode": "execution"},
+    "testing": {"role": "qa", "mode": "execution"},
+    "accepting": {"role": "pm", "mode": "execution"},
+}
+
+
+# ---------------------------------------------------------------------------
+# Verdict parsing
+# ---------------------------------------------------------------------------
+
+_VERDICT_PATTERNS = [
+    (re.compile(r"VERDICT:\s*PASS", re.IGNORECASE), Verdict.PASS),
+    (re.compile(r"VERDICT:\s*FAIL", re.IGNORECASE), Verdict.FAIL),
+    (re.compile(r"VERDICT:\s*ACCEPT", re.IGNORECASE), Verdict.ACCEPT),
+    (re.compile(r"VERDICT:\s*REJECT", re.IGNORECASE), Verdict.REJECT),
+]
+
+
+def parse_verdict(text: str) -> Verdict:
+    """Extract PASS/FAIL/ACCEPT/REJECT from agent output text.
+
+    Falls back to FAIL if ambiguous (safe default).
+    """
+    if not text:
+        return Verdict.FAIL
+
+    for pattern, verdict in _VERDICT_PATTERNS:
+        if pattern.search(text):
+            return verdict
+
+    # No clear verdict found -- safe default
+    return Verdict.FAIL
+
+
+# ---------------------------------------------------------------------------
+# Routing logic
+# ---------------------------------------------------------------------------
+
+
+def route_result(step: str, verdict: Verdict) -> str | None:
+    """Decide the next pipeline_status based on current step + verdict.
+
+    Returns the target status string, or None if the task should be flagged.
+    """
+    if step == "grooming":
+        return "groomed"
+
+    if step == "implementing":
+        return "testing"
+
+    if step == "testing":
+        if verdict in (Verdict.PASS, Verdict.ACCEPT, Verdict.NONE):
+            return "accepting"
+        # FAIL -> back to implementing
+        return "implementing"
+
+    if step == "accepting":
+        if verdict in (Verdict.ACCEPT, Verdict.PASS):
+            return "done"
+        # REJECT -> back to implementing
+        return "implementing"
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Instruction builders
+# ---------------------------------------------------------------------------
+
+
+def build_instructions(
+    step: str,
+    task_title: str,
+    task_instructions: str | None,
+    acceptance_criteria: str | None = None,
+    feedback: str | None = None,
+    agent_output: str | None = None,
+) -> str:
+    """Build the initial message/instructions for an agent session."""
+    parts: list[str] = []
+
+    if step == "grooming":
+        parts.append(f"## Task to Groom\n\nTitle: {task_title}")
+        if task_instructions:
+            parts.append(f"Description: {task_instructions}")
+        parts.append(
+            "\nPlease groom this task: define acceptance criteria, "
+            "user stories, and test scenarios."
+        )
+
+    elif step == "implementing":
+        parts.append(f"## Task to Implement\n\nTitle: {task_title}")
+        if acceptance_criteria:
+            parts.append(f"Acceptance Criteria:\n{acceptance_criteria}")
+        if task_instructions:
+            parts.append(f"Description: {task_instructions}")
+        if feedback:
+            parts.append(f"\n## Feedback from Previous Review\n\n{feedback}")
+        parts.append("\nImplement this task. Write code and tests.")
+
+    elif step == "testing":
+        parts.append(f"## Task to Test\n\nTitle: {task_title}")
+        if acceptance_criteria:
+            parts.append(f"Acceptance Criteria:\n{acceptance_criteria}")
+        if agent_output:
+            parts.append(f"\n## SWE Output\n\n{agent_output}")
+        parts.append(
+            "\nVerify the implementation. Run tests and check acceptance criteria. "
+            "End with VERDICT: PASS or VERDICT: FAIL."
+        )
+
+    elif step == "accepting":
+        parts.append(f"## Task to Accept\n\nTitle: {task_title}")
+        if acceptance_criteria:
+            parts.append(f"Acceptance Criteria:\n{acceptance_criteria}")
+        if agent_output:
+            parts.append(f"\n## QA Evidence\n\n{agent_output}")
+        parts.append(
+            "\nReview the QA evidence and decide. End with VERDICT: ACCEPT or VERDICT: REJECT."
+        )
+
+    return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# OrchestratorService
+# ---------------------------------------------------------------------------
+
+
+class OrchestratorService:
+    """Deterministic pipeline executor. No LLM in the control loop."""
+
+    def __init__(
+        self,
+        db_session_factory: Callable[..., Any],
+        project_id: uuid.UUID,
+        config: dict[str, Any] | None = None,
+    ) -> None:
+        self.project_id = project_id
+        self.config = {**DEFAULT_CONFIG, **(config or {})}
+        self.state = OrchestratorState(project_id=project_id)
+        self._db_session_factory = db_session_factory
+        self._task: asyncio.Task[None] | None = None
+
+        # Hook for spawning agent sessions -- can be replaced in tests.
+        self._spawn_and_run: Callable[..., Any] | None = None
+
+    @property
+    def running(self) -> bool:
+        return self.state.running
+
+    async def start(self) -> None:
+        """Start the main loop as a background asyncio task."""
+        if self.state.running:
+            return
+        self.state.running = True
+        self._task = asyncio.create_task(self._main_loop())
+
+    async def stop(self) -> None:
+        """Signal the loop to stop after current batch finishes."""
+        self.state.running = False
+        if self._task and not self._task.done():
+            # Let it finish gracefully -- don't cancel
+            pass
+
+    async def _main_loop(self) -> None:
+        """Poll -> pick batch -> execute pipeline steps -> repeat."""
+        while self.state.running:
+            try:
+                async with self._db_session_factory() as db:
+                    batch = await self._pick_batch(db)
+
+                if not batch:
+                    await asyncio.sleep(self.config["poll_interval_seconds"])
+                    continue
+
+                self.state.current_batch = [t.id for t in batch]
+
+                # Run all tasks in the batch in parallel
+                await asyncio.gather(
+                    *(self._run_task_pipeline(task) for task in batch),
+                    return_exceptions=True,
+                )
+
+                self.state.current_batch = []
+
+            except Exception:
+                logger.exception("Orchestrator loop error")
+                if self.state.running:
+                    await asyncio.sleep(self.config["poll_interval_seconds"])
+
+    async def _pick_batch(self, db: AsyncSession) -> list[Task]:
+        """Pick up to batch_size tasks with pipeline_status='backlog'."""
+        # Find the orchestrator session for this project
+        session_id = await self._get_or_create_session_id(db)
+        tasks = await list_tasks(db, session_id, pipeline_status="backlog")
+        return tasks[: self.config["batch_size"]]
+
+    async def _get_or_create_session_id(self, db: AsyncSession) -> uuid.UUID:
+        """Get the orchestrator session ID, creating one if needed."""
+        result = await db.execute(
+            select(SessionModel).where(
+                SessionModel.project_id == self.project_id,
+                SessionModel.name == f"orchestrator-{self.project_id}",
+            )
+        )
+        session = result.scalar_one_or_none()
+        if session:
+            return session.id
+
+        session = await create_db_session(
+            db,
+            project_id=self.project_id,
+            name=f"orchestrator-{self.project_id}",
+            engine=self.config["engine"],
+            mode="orchestrator",
+        )
+        return session.id
+
+    async def _run_task_pipeline(self, task: Task) -> None:
+        """Run the full pipeline for a single task.
+
+        Continues until the task reaches "done", is flagged, or the service
+        is stopped (checked between steps to allow graceful shutdown).
+        """
+        task_id = task.id
+        current_step = task.pipeline_status
+
+        # Pipeline order: backlog -> grooming -> groomed -> implementing -> testing -> accepting -> done
+        steps_from: dict[str, str] = {
+            "backlog": "grooming",
+            "grooming": "grooming",
+            "groomed": "implementing",
+            "implementing": "implementing",
+            "testing": "testing",
+            "accepting": "accepting",
+        }
+
+        last_output: str = ""
+        last_feedback: str = ""
+
+        while True:
+            if task_id in self.state.flagged_tasks:
+                break
+
+            # Get the next step to execute
+            next_step = steps_from.get(current_step)
+            if next_step is None or current_step == "done":
+                break
+
+            # Transition to the active step if needed
+            if current_step in ("backlog", "groomed"):
+                async with self._db_session_factory() as db:
+                    await pipeline_transition(db, task_id, next_step, actor="orchestrator")
+                current_step = next_step
+
+            # Run the step
+            result = await self._run_pipeline_step(
+                task_id, current_step, last_feedback, last_output
+            )
+
+            last_output = result.output
+
+            # Route the result
+            target = route_result(current_step, result.verdict)
+            if target is None:
+                break
+
+            # Check rejection limits
+            if target == "implementing" and current_step in ("testing", "accepting"):
+                count = self.state.rejection_counts.get(task_id, 0) + 1
+                self.state.rejection_counts[task_id] = count
+                last_feedback = result.output
+
+                if count >= self.config["max_rejections_per_step"]:
+                    self.state.flagged_tasks.add(task_id)
+                    # Log the flagging
+                    async with self._db_session_factory() as db:
+                        # Find issue_id from task's session
+                        refreshed_task = await db.get(Task, task_id)
+                        if refreshed_task:
+                            session = await db.get(SessionModel, refreshed_task.session_id)
+                            if session and session.issue_id:
+                                await create_issue_log_entry(
+                                    db,
+                                    issue_id=session.issue_id,
+                                    agent_role="orchestrator",
+                                    content=f"Task flagged for human review after "
+                                    f"{count} rejections.",
+                                )
+                    break
+
+                # Log the rejection feedback
+                async with self._db_session_factory() as db:
+                    refreshed_task = await db.get(Task, task_id)
+                    if refreshed_task:
+                        session = await db.get(SessionModel, refreshed_task.session_id)
+                        if session and session.issue_id:
+                            role = "qa" if current_step == "testing" else "pm"
+                            await create_issue_log_entry(
+                                db,
+                                issue_id=session.issue_id,
+                                agent_role=role,
+                                content=result.output or "Rejected",
+                            )
+
+            # Transition
+            async with self._db_session_factory() as db:
+                await pipeline_transition(db, task_id, target, actor="orchestrator")
+
+            current_step = target
+
+    async def _run_pipeline_step(
+        self,
+        task_id: uuid.UUID,
+        step: str,
+        feedback: str = "",
+        last_output: str = "",
+    ) -> StepResult:
+        """Spawn an agent session for the given step, wait for result."""
+        async with self._db_session_factory() as db:
+            task = await db.get(Task, task_id)
+            if task is None:
+                return StepResult(verdict=Verdict.FAIL, output="Task not found")
+
+            session = await db.get(SessionModel, task.session_id)
+            issue: Issue | None = None
+            if session and session.issue_id:
+                issue = await db.get(Issue, session.issue_id)
+
+            acceptance_criteria = issue.acceptance_criteria if issue else None
+            task_title = task.title
+            task_instructions = task.instructions
+
+        instructions = build_instructions(
+            step=step,
+            task_title=task_title,
+            task_instructions=task_instructions,
+            acceptance_criteria=acceptance_criteria,
+            feedback=feedback if feedback else None,
+            agent_output=last_output if last_output else None,
+        )
+
+        # Spawn the agent session
+        role_config = STEP_ROLE_MAP.get(step, {"role": "swe", "mode": "execution"})
+
+        if self._spawn_and_run:
+            output = await self._spawn_and_run(
+                task_id=task_id,
+                step=step,
+                role=role_config["role"],
+                mode=role_config["mode"],
+                instructions=instructions,
+            )
+        else:
+            output = await self._default_spawn_and_run(
+                task_id=task_id,
+                step=step,
+                role=role_config["role"],
+                mode=role_config["mode"],
+                instructions=instructions,
+            )
+
+        # Log the agent output
+        async with self._db_session_factory() as db:
+            task = await db.get(Task, task_id)
+            if task:
+                session = await db.get(SessionModel, task.session_id)
+                if session and session.issue_id:
+                    await create_issue_log_entry(
+                        db,
+                        issue_id=session.issue_id,
+                        agent_role=role_config["role"],
+                        content=output or "(no output)",
+                    )
+
+        verdict = parse_verdict(output)
+        return StepResult(verdict=verdict, output=output)
+
+    async def _default_spawn_and_run(
+        self,
+        task_id: uuid.UUID,
+        step: str,
+        role: str,
+        mode: str,
+        instructions: str,
+    ) -> str:
+        """Default implementation: create a child session and send the message.
+
+        In production this would use _build_engine and send_message.
+        For now returns empty string -- tests override via _spawn_and_run hook.
+        """
+        async with self._db_session_factory() as db:
+            child_session = await create_db_session(
+                db,
+                project_id=self.project_id,
+                name=f"{role}-{step}-{task_id}",
+                engine=self.config["engine"],
+                mode=mode,
+            )
+            self.state.active_sessions.append(child_session.id)
+
+        # In a real implementation, we'd build the engine and send the message.
+        # This is deferred to engine integration.
+        return ""
+
+    def get_status(self) -> dict[str, Any]:
+        """Return current orchestrator state as a dict."""
+        return {
+            "status": "running" if self.state.running else "stopped",
+            "project_id": str(self.project_id) if self.project_id else None,
+            "current_batch": [str(t) for t in self.state.current_batch],
+            "active_sessions": [str(s) for s in self.state.active_sessions],
+            "flagged_tasks": [str(t) for t in self.state.flagged_tasks],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Registry: ensure one orchestrator per project
+# ---------------------------------------------------------------------------
+
+_registry: dict[uuid.UUID, OrchestratorService] = {}
+
+
+def get_orchestrator(project_id: uuid.UUID) -> OrchestratorService | None:
+    """Get the running orchestrator for a project, if any."""
+    return _registry.get(project_id)
+
+
+def register_orchestrator(service: OrchestratorService) -> None:
+    """Register an orchestrator. Raises ValueError if one is already running."""
+    pid = service.project_id
+    existing = _registry.get(pid)
+    if existing and existing.running:
+        raise ValueError(f"Orchestrator already running for project {pid}")
+    _registry[pid] = service
+
+
+def unregister_orchestrator(project_id: uuid.UUID) -> None:
+    """Remove an orchestrator from the registry."""
+    _registry.pop(project_id, None)
+
+
+def clear_registry() -> None:
+    """Clear the orchestrator registry (for tests)."""
+    _registry.clear()
