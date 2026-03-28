@@ -50,7 +50,9 @@ from codehive.engine.tools.list_subsessions import LIST_SUBSESSIONS_TOOL
 from codehive.engine.tools.query_agent import QUERY_AGENT_TOOL
 from codehive.engine.tools.send_to_agent import SEND_TO_AGENT_TOOL
 from codehive.engine.tools.create_task import CREATE_TASK_TOOL
+from codehive.engine.tools.read_issue import READ_ISSUE_TOOL
 from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
+from codehive.engine.tools.write_issue_log import WRITE_ISSUE_LOG_TOOL
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
 from codehive.execution.git_ops import GitOps
@@ -135,6 +137,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     GET_SUBSESSION_RESULT_TOOL,
     LIST_SUBSESSIONS_TOOL,
     CREATE_TASK_TOOL,
+    READ_ISSUE_TOOL,
+    WRITE_ISSUE_LOG_TOOL,
 ]
 
 # Default model for the native engine
@@ -1002,6 +1006,73 @@ class ZaiEngine:
                     return {"content": str(exc), "is_error": True}
                 except Exception as exc:
                     return {"content": str(exc), "is_error": True}
+
+            elif tool_name == "read_issue":
+                if session_id is None or db is None:
+                    return {
+                        "content": "read_issue requires an active session with DB access",
+                        "is_error": True,
+                    }
+                from codehive.core.issues import get_issue
+
+                issue_uuid = uuid.UUID(tool_input["issue_id"])
+                issue = await get_issue(db, issue_uuid)
+                if issue is None:
+                    return {
+                        "content": f"Issue {tool_input['issue_id']} not found",
+                        "is_error": True,
+                    }
+                result_data = {
+                    "id": str(issue.id),
+                    "title": issue.title,
+                    "description": issue.description,
+                    "acceptance_criteria": issue.acceptance_criteria,
+                    "status": issue.status,
+                    "priority": issue.priority,
+                    "assigned_agent": issue.assigned_agent,
+                    "created_at": issue.created_at.isoformat(),
+                    "updated_at": issue.updated_at.isoformat(),
+                    "log_entries": [
+                        {
+                            "id": str(log.id),
+                            "agent_role": log.agent_role,
+                            "content": log.content,
+                            "created_at": log.created_at.isoformat(),
+                        }
+                        for log in issue.logs
+                    ],
+                }
+                return {"content": json.dumps(result_data)}
+
+            elif tool_name == "write_issue_log":
+                if session_id is None or db is None:
+                    return {
+                        "content": "write_issue_log requires an active session with DB access",
+                        "is_error": True,
+                    }
+                from codehive.core.issues import IssueNotFoundError, create_issue_log_entry
+
+                issue_uuid = uuid.UUID(tool_input["issue_id"])
+                try:
+                    entry = await create_issue_log_entry(
+                        db,
+                        issue_id=issue_uuid,
+                        agent_role=tool_input["agent_role"],
+                        content=tool_input["content"],
+                    )
+                except IssueNotFoundError:
+                    return {
+                        "content": f"Issue {tool_input['issue_id']} not found",
+                        "is_error": True,
+                    }
+                result_data = {
+                    "id": str(entry.id),
+                    "issue_id": str(entry.issue_id),
+                    "agent_role": entry.agent_role,
+                    "content": entry.content,
+                    "created_at": entry.created_at.isoformat(),
+                }
+                return {"content": json.dumps(result_data)}
 
             else:
                 return {"content": f"Unknown tool: {tool_name}", "is_error": True}

@@ -32,6 +32,8 @@ ORCHESTRATOR_ALLOWED_TOOLS: set[str] = {
     "get_subsession_result",
     "list_subsessions",
     "create_task",
+    "read_issue",
+    "write_issue_log",
 }
 
 

@@ -151,8 +151,8 @@ async def _collect_events(aiter: Any) -> list[dict]:
 
 
 class TestOrchestratorToolFiltering:
-    def test_filter_returns_exactly_seven_tools(self):
-        """filter_tools(TOOL_DEFINITIONS) returns exactly 7 allowed tools."""
+    def test_filter_returns_exactly_nine_tools(self):
+        """filter_tools(TOOL_DEFINITIONS) returns exactly 9 allowed tools."""
         filtered = filter_tools(TOOL_DEFINITIONS)
         names = {t["name"] for t in filtered}
         assert names == {
@@ -163,8 +163,10 @@ class TestOrchestratorToolFiltering:
             "get_subsession_result",
             "list_subsessions",
             "create_task",
+            "read_issue",
+            "write_issue_log",
         }
-        assert len(filtered) == 7
+        assert len(filtered) == 9
 
     def test_edit_file_not_in_filtered(self):
         """edit_file is NOT in the filtered list."""
@@ -321,8 +323,10 @@ class TestZaiEngineOrchestratorMode:
             "get_subsession_result",
             "list_subsessions",
             "create_task",
+            "read_issue",
+            "write_issue_log",
         }
-        assert len(tools_passed) == 7
+        assert len(tools_passed) == 9
 
         # System prompt included
         assert "system" in call_kwargs.kwargs
@@ -398,10 +402,10 @@ class TestZaiEngineOrchestratorMode:
         call_kwargs = mocks["client"].messages.stream.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["name"] for t in tools_passed}
-        # Full set: 11 tools (including query_agent, send_to_agent, get_subsession_result, list_subsessions, create_task)
+        # Full set: 13 tools (including query_agent, send_to_agent, get_subsession_result, list_subsessions, create_task, read_issue, write_issue_log)
         assert "edit_file" in tool_names
         assert "git_commit" in tool_names
-        assert len(tools_passed) == 11
+        assert len(tools_passed) == 13
 
         # No system prompt
         assert "system" not in call_kwargs.kwargs
