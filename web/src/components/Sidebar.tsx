@@ -160,7 +160,7 @@ export default function Sidebar() {
   return (
     <aside
       data-testid="sidebar"
-      className={`bg-gray-900 text-white flex-shrink-0 flex flex-col transition-all duration-200 ${
+      className={`bg-gray-900 text-white flex-shrink-0 flex flex-col min-h-0 overflow-hidden transition-all duration-200 ${
         collapsed ? "w-12" : "w-64"
       }`}
     >
@@ -243,7 +243,7 @@ export default function Sidebar() {
       )}
 
       {/* Project list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {!collapsed && projects.length === 0 && (
           <div className="px-4 py-4 text-sm text-gray-400">
             No projects yet
