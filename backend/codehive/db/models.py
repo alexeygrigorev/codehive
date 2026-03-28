@@ -97,14 +97,44 @@ class Issue(Base):
     )
     title: Mapped[str] = mapped_column(Unicode(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acceptance_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_agent: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
     status: Mapped[str] = mapped_column(Unicode(50), nullable=False, server_default="open")
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     github_issue_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
 
     project: Mapped["Project"] = relationship(back_populates="issues")
     sessions: Mapped[list["Session"]] = relationship(back_populates="issue")
+    logs: Mapped[list["IssueLogEntry"]] = relationship(
+        back_populates="issue", order_by="IssueLogEntry.created_at.asc()"
+    )
+
+
+class IssueLogEntry(Base):
+    __tablename__ = "issue_log_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
+    issue_id: Mapped[uuid.UUID] = mapped_column(
+        PortableUUID, ForeignKey("issues.id"), nullable=False
+    )
+    agent_role: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+
+    issue: Mapped["Issue"] = relationship(back_populates="logs")
 
 
 class Session(Base):
@@ -161,7 +191,27 @@ class Task(Base):
         nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
 
+    pipeline_status: Mapped[str] = mapped_column(
+        Unicode(50), nullable=False, server_default="backlog"
+    )
+
     session: Mapped["Session"] = relationship(back_populates="tasks")
+    pipeline_logs: Mapped[list["TaskPipelineLog"]] = relationship(back_populates="task")
+
+
+class TaskPipelineLog(Base):
+    __tablename__ = "task_pipeline_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(PortableUUID, primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(PortableUUID, ForeignKey("tasks.id"), nullable=False)
+    from_status: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    to_status: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    actor: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    task: Mapped["Task"] = relationship(back_populates="pipeline_logs")
 
 
 class Message(Base):

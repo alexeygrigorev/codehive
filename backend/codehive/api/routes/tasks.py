@@ -1,13 +1,15 @@
-"""CRUD + status transition + reorder endpoints for tasks."""
+"""CRUD + status transition + reorder + pipeline endpoints for tasks."""
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.api.deps import get_db
 from codehive.api.schemas.task import (
+    PipelineTransitionRequest,
     TaskCreate,
+    TaskPipelineLogRead,
     TaskRead,
     TaskReorderItem,
     TaskStatusTransition,
@@ -15,14 +17,17 @@ from codehive.api.schemas.task import (
 )
 from codehive.core.task_queue import (
     InvalidDependencyError,
+    InvalidPipelineTransitionError,
     InvalidStatusTransitionError,
     SessionNotFoundError,
     TaskNotFoundError,
     create_task,
     delete_task,
     get_next_task,
+    get_pipeline_log,
     get_task,
     list_tasks,
+    pipeline_transition,
     reorder_tasks,
     transition_task,
     update_task,
@@ -31,7 +36,7 @@ from codehive.core.task_queue import (
 # Session-scoped routes (create, list, next, reorder)
 session_tasks_router = APIRouter(prefix="/api/sessions/{session_id}/tasks", tags=["tasks"])
 
-# Flat routes (get, update, delete, transition)
+# Flat routes (get, update, delete, transition, pipeline)
 tasks_router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
@@ -51,6 +56,7 @@ async def create_task_endpoint(
             depends_on=body.depends_on,
             mode=body.mode,
             created_by=body.created_by,
+            pipeline_status=body.pipeline_status,
         )
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -64,10 +70,11 @@ async def create_task_endpoint(
 @session_tasks_router.get("", response_model=list[TaskRead])
 async def list_tasks_endpoint(
     session_id: uuid.UUID,
+    pipeline_status: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskRead]:
     try:
-        tasks = await list_tasks(db, session_id)
+        tasks = await list_tasks(db, session_id, pipeline_status=pipeline_status)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     return [TaskRead.model_validate(t) for t in tasks]
@@ -157,3 +164,30 @@ async def transition_task_endpoint(
     except InvalidStatusTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return TaskRead.model_validate(task)
+
+
+@tasks_router.post("/{task_id}/pipeline-transition", response_model=TaskRead)
+async def pipeline_transition_endpoint(
+    task_id: uuid.UUID,
+    body: PipelineTransitionRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TaskRead:
+    try:
+        task = await pipeline_transition(db, task_id, body.status, actor=body.actor)
+    except TaskNotFoundError:
+        raise HTTPException(status_code=404, detail="Task not found")
+    except InvalidPipelineTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return TaskRead.model_validate(task)
+
+
+@tasks_router.get("/{task_id}/pipeline-log", response_model=list[TaskPipelineLogRead])
+async def get_pipeline_log_endpoint(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[TaskPipelineLogRead]:
+    try:
+        logs = await get_pipeline_log(db, task_id)
+    except TaskNotFoundError:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return [TaskPipelineLogRead.model_validate(entry) for entry in logs]

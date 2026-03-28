@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codehive.db.models import Session as SessionModel
-from codehive.db.models import Task
+from codehive.db.models import Task, TaskPipelineLog
 
 
 class SessionNotFoundError(Exception):
@@ -24,6 +24,10 @@ class InvalidStatusTransitionError(Exception):
 
 class InvalidDependencyError(Exception):
     """Raised when depends_on references a task in a different session."""
+
+
+class InvalidPipelineTransitionError(Exception):
+    """Raised when a pipeline status transition is not allowed."""
 
 
 # Allowed status transitions: from_status -> set of to_statuses
@@ -54,6 +58,22 @@ async def _validate_depends_on(
         raise InvalidDependencyError(f"Dependency task {depends_on} belongs to a different session")
 
 
+# Pipeline status transitions: from_status -> set of valid to_statuses
+PIPELINE_TRANSITIONS: dict[str, set[str]] = {
+    "backlog": {"grooming"},
+    "grooming": {"groomed"},
+    "groomed": {"implementing"},
+    "implementing": {"testing"},
+    "testing": {"accepting", "implementing"},  # forward or QA reject
+    "accepting": {"done", "implementing"},  # forward or PM reject
+    # "done": {}  -- terminal, no transitions out
+}
+
+VALID_PIPELINE_STATUSES = frozenset(
+    {"backlog", "grooming", "groomed", "implementing", "testing", "accepting", "done"}
+)
+
+
 async def create_task(
     db: AsyncSession,
     *,
@@ -64,6 +84,7 @@ async def create_task(
     depends_on: uuid.UUID | None = None,
     mode: str = "auto",
     created_by: str = "user",
+    pipeline_status: str = "backlog",
 ) -> Task:
     """Create a new task in a session. Validates session exists and depends_on if provided."""
     await _verify_session_exists(db, session_id)
@@ -80,6 +101,7 @@ async def create_task(
         depends_on=depends_on,
         mode=mode,
         created_by=created_by,
+        pipeline_status=pipeline_status,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(task)
@@ -91,15 +113,18 @@ async def create_task(
 async def list_tasks(
     db: AsyncSession,
     session_id: uuid.UUID,
+    *,
+    pipeline_status: str | None = None,
 ) -> list[Task]:
     """Return all tasks for a session ordered by priority desc, created_at asc."""
     await _verify_session_exists(db, session_id)
 
-    result = await db.execute(
-        select(Task)
-        .where(Task.session_id == session_id)
-        .order_by(Task.priority.desc(), Task.created_at.asc())
-    )
+    stmt = select(Task).where(Task.session_id == session_id)
+    if pipeline_status is not None:
+        stmt = stmt.where(Task.pipeline_status == pipeline_status)
+    stmt = stmt.order_by(Task.priority.desc(), Task.created_at.asc())
+
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -220,3 +245,56 @@ async def reorder_tasks(
 
     # Return updated task list
     return await list_tasks(db, session_id)
+
+
+async def pipeline_transition(
+    db: AsyncSession,
+    task_id: uuid.UUID,
+    target_status: str,
+    actor: str | None = None,
+) -> Task:
+    """Transition a task's pipeline_status. Validates the transition is allowed."""
+    task = await db.get(Task, task_id)
+    if task is None:
+        raise TaskNotFoundError(f"Task {task_id} not found")
+
+    allowed = PIPELINE_TRANSITIONS.get(task.pipeline_status, set())
+    if target_status not in allowed:
+        valid_str = ", ".join(sorted(allowed)) if allowed else "(none — terminal state)"
+        raise InvalidPipelineTransitionError(
+            f"Cannot transition from '{task.pipeline_status}' to '{target_status}'. "
+            f"Valid transitions: {valid_str}"
+        )
+
+    from_status = task.pipeline_status
+    task.pipeline_status = target_status
+
+    log_entry = TaskPipelineLog(
+        task_id=task_id,
+        from_status=from_status,
+        to_status=target_status,
+        actor=actor,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db.add(log_entry)
+
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def get_pipeline_log(
+    db: AsyncSession,
+    task_id: uuid.UUID,
+) -> list[TaskPipelineLog]:
+    """Return all pipeline transition log entries for a task, ordered by created_at asc."""
+    task = await db.get(Task, task_id)
+    if task is None:
+        raise TaskNotFoundError(f"Task {task_id} not found")
+
+    result = await db.execute(
+        select(TaskPipelineLog)
+        .where(TaskPipelineLog.task_id == task_id)
+        .order_by(TaskPipelineLog.created_at.asc())
+    )
+    return list(result.scalars().all())
