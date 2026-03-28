@@ -14,6 +14,7 @@ function makeSession(overrides: Partial<SessionRead> = {}): SessionRead {
     engine: "claude",
     mode: "auto",
     status: "idle",
+    role: null,
     config: null,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -54,6 +55,45 @@ describe("SessionList", () => {
     );
     const link = screen.getByRole("link", { name: /linked session/i });
     expect(link).toHaveAttribute("href", "/sessions/xyz-789");
+  });
+
+  it("renders role badge with text 'PM' when session has role='pm'", () => {
+    const sessions = [makeSession({ id: "s1", name: "PM Session", role: "pm" })];
+    render(
+      <MemoryRouter>
+        <SessionList sessions={sessions} />
+      </MemoryRouter>,
+    );
+    const badge = screen.getByTestId("role-badge");
+    expect(badge).toHaveTextContent("PM");
+    expect(badge).toHaveAttribute("title", "Product Manager");
+  });
+
+  it("renders no role badge when session has role=null", () => {
+    const sessions = [makeSession({ id: "s1", name: "No Role Session", role: null })];
+    render(
+      <MemoryRouter>
+        <SessionList sessions={sessions} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("role-badge")).not.toBeInTheDocument();
+  });
+
+  it("renders correct role badges for multiple sessions with different roles", () => {
+    const sessions = [
+      makeSession({ id: "s1", name: "PM Session", role: "pm" }),
+      makeSession({ id: "s2", name: "SWE Session", role: "swe" }),
+      makeSession({ id: "s3", name: "No Role", role: null }),
+    ];
+    render(
+      <MemoryRouter>
+        <SessionList sessions={sessions} />
+      </MemoryRouter>,
+    );
+    const badges = screen.getAllByTestId("role-badge");
+    expect(badges).toHaveLength(2);
+    expect(badges[0]).toHaveTextContent("PM");
+    expect(badges[1]).toHaveTextContent("SWE");
   });
 
   it("displays status with appropriate visual differentiation", () => {

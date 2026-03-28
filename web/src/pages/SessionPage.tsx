@@ -12,6 +12,7 @@ import SessionModeIndicator from "@/components/SessionModeIndicator";
 import SessionModeSwitcher from "@/components/SessionModeSwitcher";
 import SessionApprovalBadge from "@/components/SessionApprovalBadge";
 import ContextProgressBar from "@/components/ContextProgressBar";
+import RoleBadge from "@/components/RoleBadge";
 import { useResponsive } from "@/hooks/useResponsive";
 
 const SIDEBAR_STORAGE_KEY = "session-sidebar-collapsed";
@@ -202,6 +203,7 @@ export default function SessionPage() {
               </>
             )}
             <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{session.name}</h1>
+            <RoleBadge role={session.role} />
             <span
               className={`session-status inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass}`}
             >

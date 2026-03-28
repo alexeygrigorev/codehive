@@ -76,6 +76,7 @@ const mockSession = {
   engine: "native",
   mode: "execution",
   status: "executing",
+  role: null,
   config: null,
   created_at: "2026-01-01T00:00:00Z",
 };
@@ -283,6 +284,43 @@ describe("SessionPage", () => {
       expect(screen.getByText("Test Session")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("provider-badge")).not.toBeInTheDocument();
+  });
+
+  it("renders role badge when session has role='swe'", async () => {
+    const sessionWithRole = { ...mockSession, role: "swe" };
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(sessionWithRole), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("role-badge")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("role-badge")).toHaveTextContent("SWE");
+    expect(screen.getByTestId("role-badge")).toHaveAttribute(
+      "title",
+      "Software Engineer",
+    );
+  });
+
+  it("renders no role badge when session has role=null", async () => {
+    mockGet.mockResolvedValue(
+      new Response(JSON.stringify(mockSession), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderSessionPage("sess-123");
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Session")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("role-badge")).not.toBeInTheDocument();
   });
 
   it("does not render SessionHistorySearch in main content flow", async () => {

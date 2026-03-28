@@ -9,6 +9,7 @@ export interface SessionRead {
   engine: string;
   mode: string;
   status: string;
+  role: string | null;
   config: Record<string, unknown> | null;
   created_at: string;
 }

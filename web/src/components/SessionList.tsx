@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { SessionRead } from "@/api/sessions";
 import { fetchSubAgents } from "@/api/subagents";
+import RoleBadge from "@/components/RoleBadge";
 
 export interface SessionListProps {
   sessions: SessionRead[];
@@ -81,6 +82,7 @@ export default function SessionList({ sessions }: SessionListProps) {
                 <span className="font-medium text-gray-900 dark:text-gray-100">
                   {session.name}
                 </span>
+                <RoleBadge role={session.role} />
                 <div className="flex items-center gap-2">
                   {subCount > 0 && (
                     <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
