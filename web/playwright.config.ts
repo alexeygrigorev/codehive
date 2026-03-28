@@ -5,6 +5,7 @@ export default defineConfig({
   timeout: 60_000,
   retries: 0,
   globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
   use: {
     baseURL: "http://localhost:5174",
     headless: true,
@@ -20,6 +21,7 @@ export default defineConfig({
       env: {
         CODEHIVE_DATABASE_URL:
           "sqlite+aiosqlite:////tmp/codehive-e2e-test.db",
+        CODEHIVE_PROJECTS_DIR: "/tmp/codehive-e2e",
         CODEHIVE_PORT: "7444",
         CODEHIVE_CORS_ORIGINS: "http://localhost:5174",
       },

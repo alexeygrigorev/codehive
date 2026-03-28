@@ -13,3 +13,10 @@ export const API_BASE =
  * Must match the CODEHIVE_DATABASE_URL configured in playwright.config.ts.
  */
 export const TEST_DB_PATH = "/tmp/codehive-e2e-test.db";
+
+/**
+ * Temporary base directory for e2e test project files.
+ * All e2e tests that create project directories should use this path
+ * instead of the user's home directory.  Cleaned up by global-teardown.ts.
+ */
+export const E2E_TEMP_DIR = "/tmp/codehive-e2e";

@@ -1,11 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { API_BASE } from "./e2e-constants";
+import { API_BASE, E2E_TEMP_DIR } from "./e2e-constants";
 import fs from "fs";
-import os from "os";
 import path from "path";
 
 const suffix = Date.now().toString(36);
-const homeDir = os.homedir();
 
 /**
  * Navigate to the New Project page.
@@ -190,7 +188,7 @@ test.describe("GitHub Repo Import E2E", () => {
 
     // Edit the clone destination to a unique dir under home
     const cloneDest = page.getByTestId("clone-dest-input");
-    const uniqueDir = path.join(homeDir, `.codehive-e2e-clone-${suffix}`);
+    const uniqueDir = path.join(E2E_TEMP_DIR, `e2e-clone-${suffix}`);
     await cloneDest.fill(uniqueDir);
 
     // Click clone button
@@ -222,7 +220,7 @@ test.describe("GitHub Repo Import E2E", () => {
   });
 
   test("E2E 5: Clone to existing directory shows error", async ({ page }) => {
-    const conflictDir = path.join(homeDir, `.codehive-e2e-conflict-${suffix}`);
+    const conflictDir = path.join(E2E_TEMP_DIR, `e2e-conflict-${suffix}`);
     fs.mkdirSync(conflictDir, { recursive: true });
 
     try {
