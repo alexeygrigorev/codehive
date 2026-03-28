@@ -50,12 +50,19 @@ class AddTaskRequest(BaseModel):
     acceptance_criteria: str | None = None
 
 
+class EngineStatusEntry(BaseModel):
+    available: bool
+    throttled_until: str | None = None
+    reason: str
+
+
 class OrchestratorResponse(BaseModel):
     status: str
     project_id: str | None = None
     current_batch: list[str] | None = None
     active_sessions: list[str] | None = None
     flagged_tasks: list[str] | None = None
+    engine_status: dict[str, EngineStatusEntry] | None = None
 
 
 class AddTaskResponse(BaseModel):
@@ -131,6 +138,7 @@ async def orchestrator_status(
             current_batch=info["current_batch"],
             active_sessions=info["active_sessions"],
             flagged_tasks=info["flagged_tasks"],
+            engine_status=info.get("engine_status"),
         )
 
     return OrchestratorResponse(

@@ -18,6 +18,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codehive.core.engine_throttle import EngineThrottleTracker
 from codehive.core.git_service import GitError, GitService
 from codehive.core.issues import create_issue_log_entry
 from codehive.core.session import create_session as create_db_session
@@ -238,6 +239,7 @@ class OrchestratorService:
         self.state = OrchestratorState(project_id=project_id)
         self._db_session_factory = db_session_factory
         self._task: asyncio.Task[None] | None = None
+        self._throttle_tracker = EngineThrottleTracker()
 
         # Hook for spawning agent sessions -- can be replaced in tests.
         self._spawn_and_run: Callable[..., Any] | None = None
@@ -639,15 +641,61 @@ class OrchestratorService:
         return StepResult(verdict=verdict, output=output)
 
     def _resolve_sub_agent_engine(self) -> str:
-        """Pick an engine for a sub-agent session.
+        """Pick a non-throttled engine for a sub-agent session.
 
-        If ``sub_agent_engines`` is set in the orchestrator config, use the
-        first entry.  Otherwise fall back to the orchestrator's own engine.
+        Consults the throttle tracker to skip rate-limited engines.  If all
+        candidate engines are throttled the first candidate is returned as a
+        best-effort fallback (the async retry wrapper handles the real
+        backoff logic).
         """
         engines: list[str] = self.config.get("sub_agent_engines", [])
-        if engines:
-            return engines[0]
-        return self.config["engine"]
+        if not engines:
+            engines = [self.config["engine"]]
+
+        available = self._throttle_tracker.get_available(engines)
+        if available:
+            return available
+
+        # Fallback: return first engine (caller should use the retry wrapper
+        # for proper backoff behaviour).
+        return engines[0]
+
+    async def _resolve_sub_agent_engine_with_retry(self) -> str:
+        """Pick a non-throttled engine, retrying with exponential backoff.
+
+        Raises :class:`RuntimeError` if all engines remain throttled after
+        *max_retries* attempts.
+        """
+        engines: list[str] = self.config.get("sub_agent_engines", [])
+        if not engines:
+            engines = [self.config["engine"]]
+
+        max_retries = 3
+        base_delay = 1.0
+        max_delay = 60.0
+
+        for attempt in range(max_retries + 1):
+            available = self._throttle_tracker.get_available(engines)
+            if available:
+                return available
+            if attempt < max_retries:
+                delay = min(base_delay * (2**attempt), max_delay)
+                await asyncio.sleep(delay)
+
+        raise RuntimeError("All engines throttled after retries exhausted")
+
+    def handle_rate_limit_event(self, engine: str, event: dict) -> None:
+        """Process a ``rate_limit.updated`` event and throttle if needed.
+
+        The throttle threshold defaults to 0.80 and can be overridden via
+        ``config["throttle_utilization_threshold"]``.
+        """
+        threshold = self.config.get("throttle_utilization_threshold", 0.80)
+        utilization = float(event.get("utilization", 0))
+        resets_at = int(event.get("resets_at", 0))
+
+        if utilization >= threshold and resets_at > 0:
+            self._throttle_tracker.mark_throttled(engine, resets_at)
 
     async def _default_spawn_and_run(
         self,
@@ -663,7 +711,14 @@ class OrchestratorService:
         In production this would use _build_engine and send_message.
         For now returns empty string -- tests override via _spawn_and_run hook.
         """
-        sub_engine = self._resolve_sub_agent_engine()
+        sub_engine = await self._resolve_sub_agent_engine_with_retry()
+
+        # Use the agent profile's preferred engine if set
+        if agent_profile_id is not None:
+            async with self._db_session_factory() as db:
+                profile = await db.get(AgentProfile, agent_profile_id)
+                if profile and profile.preferred_engine:
+                    sub_engine = profile.preferred_engine
 
         async with self._db_session_factory() as db:
             child_session = await create_db_session(
@@ -688,12 +743,30 @@ class OrchestratorService:
 
     def get_status(self) -> dict[str, Any]:
         """Return current orchestrator state as a dict."""
+        # Build engine_status: include throttle state for every configured engine
+        engines: list[str] = self.config.get("sub_agent_engines", [])
+        if not engines:
+            engines = [self.config["engine"]]
+
+        throttle_status = self._throttle_tracker.get_status()
+        engine_status: dict[str, dict[str, object]] = {}
+        for eng in engines:
+            if eng in throttle_status:
+                engine_status[eng] = throttle_status[eng]
+            else:
+                engine_status[eng] = {
+                    "available": True,
+                    "throttled_until": None,
+                    "reason": "not throttled",
+                }
+
         return {
             "status": "running" if self.state.running else "stopped",
             "project_id": str(self.project_id) if self.project_id else None,
             "current_batch": [str(t) for t in self.state.current_batch],
             "active_sessions": [str(s) for s in self.state.active_sessions],
             "flagged_tasks": [str(t) for t in self.state.flagged_tasks],
+            "engine_status": engine_status,
         }
 
 
