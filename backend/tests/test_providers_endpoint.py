@@ -302,7 +302,7 @@ class TestModelListsPerProvider:
             result = await list_providers()
 
         zai = next(p for p in result if p.name == "zai")
-        assert len(zai.models) == 4
+        assert len(zai.models) == 5
         default = next(m for m in zai.models if m.is_default)
         assert default.id == "glm-5"
 

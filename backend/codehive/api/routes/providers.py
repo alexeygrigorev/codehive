@@ -68,6 +68,7 @@ ZAI_MODELS: list[ModelInfo] = [
     ModelInfo(id="glm-5-turbo", name="GLM-5 Turbo"),
     ModelInfo(id="glm-4.7", name="GLM-4.7"),
     ModelInfo(id="glm-4.7-flash", name="GLM-4.7 Flash"),
+    ModelInfo(id="glm-4.6v", name="GLM-4.6V (Vision)"),
 ]
 
 
