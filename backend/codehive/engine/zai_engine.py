@@ -52,6 +52,7 @@ from codehive.engine.tools.send_to_agent import SEND_TO_AGENT_TOOL
 from codehive.engine.tools.create_task import CREATE_TASK_TOOL
 from codehive.engine.tools.read_issue import READ_ISSUE_TOOL
 from codehive.engine.tools.spawn_subagent import SPAWN_SUBAGENT_TOOL
+from codehive.engine.tools.spawn_team_agent import SPAWN_TEAM_AGENT_TOOL
 from codehive.engine.tools.write_issue_log import WRITE_ISSUE_LOG_TOOL
 from codehive.execution.diff import DiffService
 from codehive.execution.file_ops import FileOps
@@ -139,6 +140,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     CREATE_TASK_TOOL,
     READ_ISSUE_TOOL,
     WRITE_ISSUE_LOG_TOOL,
+    SPAWN_TEAM_AGENT_TOOL,
 ]
 
 # Default model for the native engine
@@ -1073,6 +1075,93 @@ class ZaiEngine:
                     "created_at": entry.created_at.isoformat(),
                 }
                 return {"content": json.dumps(result_data)}
+
+            elif tool_name == "spawn_team_agent":
+                if session_id is None or db is None:
+                    return {
+                        "content": "spawn_team_agent requires an active session with DB access",
+                        "is_error": True,
+                    }
+                try:
+                    from codehive.core.session import create_session as create_db_session
+                    from codehive.db.models import AgentProfile as AgentProfileModel
+                    from codehive.db.models import Session as SessionModelLocal
+                    from codehive.db.models import Task as TaskModel
+                    from codehive.engine.tools.spawn_team_agent import ROLE_DEFAULT_STEP
+
+                    # Look up agent profile
+                    profile_id = uuid.UUID(tool_input["agent_profile_id"])
+                    profile = await db.get(AgentProfileModel, profile_id)
+                    if profile is None:
+                        return {
+                            "content": "Agent profile not found",
+                            "is_error": True,
+                        }
+
+                    # Look up task
+                    task_uuid = uuid.UUID(tool_input["task_id"])
+                    task = await db.get(TaskModel, task_uuid)
+                    if task is None:
+                        return {
+                            "content": "Task not found",
+                            "is_error": True,
+                        }
+
+                    # Resolve parent session for project_id and fallback engine
+                    parent_session = await db.get(SessionModelLocal, session_id)
+                    if parent_session is None:
+                        return {
+                            "content": "Parent session not found",
+                            "is_error": True,
+                        }
+
+                    # Determine engine
+                    engine = profile.preferred_engine or parent_session.engine
+
+                    # Determine pipeline_step
+                    pipeline_step = tool_input.get("pipeline_step") or ROLE_DEFAULT_STEP.get(
+                        profile.role, "implementing"
+                    )
+
+                    # Build session name
+                    session_name = f"{profile.name}-{profile.role}-{pipeline_step}-{task_uuid}"
+
+                    # Build config with personality and system_prompt_modifier
+                    child_config: dict[str, Any] = {}
+                    if profile.personality:
+                        child_config["personality"] = profile.personality
+                    if profile.system_prompt_modifier:
+                        child_config["system_prompt_modifier"] = profile.system_prompt_modifier
+                    # Store instructions for later use
+                    child_config["instructions"] = tool_input["instructions"]
+
+                    # Create child session
+                    child_session = await create_db_session(
+                        db,
+                        project_id=parent_session.project_id,
+                        name=session_name,
+                        engine=engine,
+                        mode="execution",
+                        role=profile.role,
+                        parent_session_id=session_id,
+                        task_id=task_uuid,
+                        pipeline_step=pipeline_step,
+                        config=child_config,
+                    )
+                    # Set agent_profile_id on the session
+                    child_session.agent_profile_id = profile.id
+                    await db.commit()
+                    await db.refresh(child_session)
+
+                    result_data = {
+                        "session_id": str(child_session.id),
+                        "agent_name": profile.name,
+                        "role": profile.role,
+                        "engine": engine,
+                    }
+                    return {"content": json.dumps(result_data)}
+                except Exception as exc:
+                    return {"content": str(exc), "is_error": True}
 
             else:
                 return {"content": f"Unknown tool: {tool_name}", "is_error": True}

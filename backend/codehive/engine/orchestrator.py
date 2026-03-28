@@ -34,6 +34,7 @@ ORCHESTRATOR_ALLOWED_TOOLS: set[str] = {
     "create_task",
     "read_issue",
     "write_issue_log",
+    "spawn_team_agent",
 }
 
 
