@@ -30,19 +30,29 @@ async def import_issues(
     token: str,
     *,
     since: str | None = None,
+    sync_labels: list[str] | None = None,
     _list_issues=None,
 ) -> ImportResult:
     """Import GitHub issues into the internal tracker.
 
     Uses _list_issues for dependency injection (testing). Defaults to
     gh_client.list_issues.
+
+    When sync_labels is non-empty, only issues with at least one matching
+    label are imported.
     """
     list_fn = _list_issues or gh_client.list_issues
     result = ImportResult()
+    effective_labels = sync_labels if sync_labels is not None else []
 
     gh_issues = await list_fn(owner, repo, token, since=since)
 
     for gh_issue in gh_issues:
+        # Label filtering
+        if effective_labels:
+            issue_label_names = {lbl.get("name", "") for lbl in gh_issue.get("labels", [])}
+            if not (issue_label_names & set(effective_labels)):
+                continue
         try:
             mapped = map_github_issue(gh_issue)
 

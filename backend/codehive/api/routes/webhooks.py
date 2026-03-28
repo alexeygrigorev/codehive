@@ -77,7 +77,8 @@ async def github_webhook(
 
     # Handle the issue event
     trigger_mode = config.get("trigger_mode", "manual")
-    result = await handle_issue_event(db, project.id, event, trigger_mode)
+    sync_labels = config.get("sync_labels", [])
+    result = await handle_issue_event(db, project.id, event, trigger_mode, sync_labels=sync_labels)
 
     return _result_dict(result)
 

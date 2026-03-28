@@ -55,6 +55,7 @@ async def configure_github(
         "token": body.token,
         "last_import_at": None,
         "trigger_mode": body.trigger_mode,
+        "sync_labels": body.sync_labels,
     }
 
     if body.webhook_secret is not None:
@@ -92,6 +93,7 @@ async def github_status(
         token_masked=_mask_token(config["token"]),
         last_import_at=config.get("last_import_at"),
         trigger_mode=config.get("trigger_mode", "manual"),
+        sync_labels=config.get("sync_labels", []),
     )
 
 
@@ -121,6 +123,7 @@ async def trigger_import(
         repo=config["repo"],
         token=config["token"],
         since=since,
+        sync_labels=config.get("sync_labels", []),
     )
 
     # Update last_import_at

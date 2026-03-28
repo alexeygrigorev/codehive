@@ -78,6 +78,17 @@ def _session_name_from_issue(gh_issue: dict) -> str:
     return name
 
 
+def _issue_matches_labels(gh_issue: dict, sync_labels: list[str]) -> bool:
+    """Check if a GitHub issue has at least one label matching sync_labels.
+
+    If sync_labels is empty, all issues match (backward compatible).
+    """
+    if not sync_labels:
+        return True
+    issue_label_names = {lbl.get("name", "") for lbl in gh_issue.get("labels", [])}
+    return bool(issue_label_names & set(sync_labels))
+
+
 async def handle_issue_event(
     db: AsyncSession,
     project_id: uuid.UUID,
@@ -85,15 +96,27 @@ async def handle_issue_event(
     trigger_mode: str = "manual",
     *,
     solver_deps: dict[str, Any] | None = None,
+    sync_labels: list[str] | None = None,
 ) -> TriggerResult:
     """Handle an issue webhook event.
 
-    1. Import/upsert the issue from the event payload.
-    2. Based on trigger_mode, optionally create a session.
+    1. Check label filter -- if sync_labels is non-empty, only process
+       issues that have at least one matching label.
+    2. Import/upsert the issue from the event payload.
+    3. Based on trigger_mode, optionally create a session.
 
     Returns a TriggerResult indicating what was done.
     """
     gh_issue = event.payload.get("issue", {})
+
+    # Label filtering
+    effective_labels = sync_labels if sync_labels is not None else []
+    if not _issue_matches_labels(gh_issue, effective_labels):
+        return TriggerResult(
+            issue_id=None,
+            session_id=None,
+            action_taken="filtered",
+        )
 
     # Upsert the issue
     issue = await _upsert_issue(db, project_id, gh_issue)

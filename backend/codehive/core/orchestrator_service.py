@@ -25,6 +25,7 @@ from codehive.core.task_queue import list_tasks, pipeline_transition
 from codehive.core.verdicts import get_verdict as get_structured_verdict
 from codehive.db.models import Issue, Project, Task
 from codehive.db.models import Session as SessionModel
+from codehive.integrations.github.commenter import build_pipeline_message, post_pipeline_comment
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +350,8 @@ class OrchestratorService:
                 async with self._db_session_factory() as db:
                     await pipeline_transition(db, task_id, next_step, actor="orchestrator")
                 current_step = next_step
+                # Post GitHub comment for the step transition
+                await self._try_post_github_comment(task_id, current_step)
 
             # Run the step
             result = await self._run_pipeline_step(
@@ -406,20 +409,66 @@ class OrchestratorService:
                 await pipeline_transition(db, task_id, target, actor="orchestrator")
 
             # Git commit after transitioning to done
+            commit_sha: str | None = None
             if target == "done":
-                await self._try_git_commit(task_id)
+                commit_sha = await self._try_git_commit(task_id)
+
+            # Post GitHub comment for the transition
+            await self._try_post_github_comment(task_id, target, commit_sha=commit_sha)
 
             current_step = target
 
-    async def _try_git_commit(self, task_id: uuid.UUID) -> None:
-        """Attempt to git-commit after a task reaches done. Non-fatal on failure."""
+    async def _try_post_github_comment(
+        self, task_id: uuid.UUID, step: str, commit_sha: str | None = None
+    ) -> None:
+        """Post a pipeline progress comment on the linked GitHub issue, if any.
+
+        Non-fatal: errors are logged and swallowed so the pipeline continues.
+        """
+        try:
+            async with self._db_session_factory() as db:
+                task = await db.get(Task, task_id)
+                if task is None:
+                    return
+                session = await db.get(SessionModel, task.session_id)
+                if session is None or session.issue_id is None:
+                    return
+                issue = await db.get(Issue, session.issue_id)
+                if issue is None or issue.github_issue_id is None:
+                    return
+                project = await db.get(Project, issue.project_id)
+                if project is None:
+                    return
+                config = project.github_config or {}
+                owner = config.get("owner")
+                repo = config.get("repo")
+                token = config.get("token")
+                if not (owner and repo and token):
+                    return
+                gh_issue_number = issue.github_issue_id
+
+            message = build_pipeline_message(step, commit_sha=commit_sha)
+            await post_pipeline_comment(owner, repo, gh_issue_number, token, message)
+        except Exception:
+            logger.warning(
+                "Failed to post GitHub comment for task %s step %s",
+                task_id,
+                step,
+                exc_info=True,
+            )
+
+    async def _try_git_commit(self, task_id: uuid.UUID) -> str | None:
+        """Attempt to git-commit after a task reaches done. Non-fatal on failure.
+
+        Returns the commit SHA on success, or None on failure/skip.
+        """
         async with self._db_session_factory() as db:
             task = await db.get(Task, task_id)
             if task is None:
-                return
+                return None
             session = await db.get(SessionModel, task.session_id)
             if session is None:
-                return
+                return None
             project = await db.get(Project, session.project_id)
             issue_id = session.issue_id
 
@@ -433,6 +482,7 @@ class OrchestratorService:
                         agent_role="orchestrator",
                         content=f"Git commit: {sha}",
                     )
+            return sha
         except GitError as e:
             logger.warning("Git commit failed for task %s: %s", task_id, e)
             if issue_id:
@@ -443,6 +493,7 @@ class OrchestratorService:
                         agent_role="orchestrator",
                         content=f"Git commit failed: {e}",
                     )
+            return None
 
     async def _run_pipeline_step(
         self,

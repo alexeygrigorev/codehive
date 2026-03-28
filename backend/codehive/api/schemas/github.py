@@ -13,6 +13,7 @@ class GitHubConfigureRequest(BaseModel):
     token: str = Field(..., min_length=1)
     webhook_secret: str | None = None
     trigger_mode: str = "manual"
+    sync_labels: list[str] = Field(default_factory=list)
 
 
 class GitHubConfigureResponse(BaseModel):
@@ -46,3 +47,4 @@ class GitHubStatusResponse(BaseModel):
     token_masked: str | None = None
     last_import_at: str | None = None
     trigger_mode: str | None = None
+    sync_labels: list[str] = Field(default_factory=list)
