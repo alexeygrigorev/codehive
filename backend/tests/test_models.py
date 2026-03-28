@@ -177,6 +177,7 @@ class TestBaseMetadata:
             "usage_records",
             "rate_limit_snapshots",
             "model_usage_snapshots",
+            "agent_profiles",
         }
         assert expected == set(Base.metadata.tables.keys())
 
