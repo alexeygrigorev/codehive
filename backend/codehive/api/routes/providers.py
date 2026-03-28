@@ -64,8 +64,10 @@ COPILOT_MODELS: list[ModelInfo] = [
 ]
 
 ZAI_MODELS: list[ModelInfo] = [
-    ModelInfo(id="claude-sonnet-4-6", name="Claude Sonnet 4.6", is_default=True),
-    ModelInfo(id="claude-opus-4-6", name="Claude Opus 4.6"),
+    ModelInfo(id="glm-5", name="GLM-5", is_default=True),
+    ModelInfo(id="glm-5-turbo", name="GLM-5 Turbo"),
+    ModelInfo(id="glm-4.7", name="GLM-4.7"),
+    ModelInfo(id="glm-4.7-flash", name="GLM-4.7 Flash"),
 ]
 
 

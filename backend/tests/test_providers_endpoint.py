@@ -294,7 +294,7 @@ class TestModelListsPerProvider:
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_isolated_settings")
     async def test_zai_models(self):
-        """Z.ai has 2 models; default is claude-sonnet-4-6."""
+        """Z.ai has 4 models; default is glm-5."""
         from codehive.api.routes.providers import list_providers
 
         with patch("codehive.api.routes.providers.shutil") as mock_shutil:
@@ -302,9 +302,9 @@ class TestModelListsPerProvider:
             result = await list_providers()
 
         zai = next(p for p in result if p.name == "zai")
-        assert len(zai.models) == 2
+        assert len(zai.models) == 4
         default = next(m for m in zai.models if m.is_default)
-        assert default.id == "claude-sonnet-4-6"
+        assert default.id == "glm-5"
 
 
 class TestFullProviderList:
